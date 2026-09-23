@@ -25,16 +25,17 @@ SPDX-License-Identifier: CC-BY-4.0
 | `rich` | M0 | Terminal UI; `Console(record=True).save_svg()` for README screenshots | 15.0.0; `save_svg(path, *, title, theme, …)`; light themes `DEFAULT_TERMINAL_THEME` and `NIGHT_OWLISH`; the exported SVG references the Fira Code font from cdnjs (it falls back to monospace when that is blocked) |
 | `pydantic` | M0 | Frozen data models and JSON Schema generation | 2.13.5; `ConfigDict(frozen=True, extra="forbid")` makes `model_json_schema()` emit `additionalProperties: false` |
 | `platformdirs` | M0 | Cache and config locations | 4.11.x |
+| `markdown-it-py` | M1 | Code fences with line maps; the token `.map` is `[start, end)`, counted from 0 | 4.2.0, MIT |
+| `unidiff` | M1 | Parsing patches | 1.0.1, MIT |
+| `tree-sitter` | M2 | Parsing (SPEC §11.2). **`Language.query()` has been removed.** We use `Query(language, source)` with `QueryCursor(query).matches(node)`. `Language.name` is `None` for ABI-14 grammars, so languages are keyed by our own enum. **Two bugs in 0.26.0, both reproduced on this machine:** `progress_callback` segfaults on first use (exit 139 with `Parser.parse` and a read callback), so the parse time budget is enforced by a read callback that stops supplying input; and chained `node.start_point.row` returned wrong values in one of two identical runs, so the code only ever indexes `start_point[0]`. | 0.26.0, MIT |
+| `tree-sitter-{c,cpp,python,javascript,typescript,go,rust,java,php,ruby}` | M2 | Per-language grammar wheels (abi3, all platforms). **We do not use `tree-sitter-language-pack` ≥ 1.0**: its docs say it "downloads each parser on first use", which breaks offline operation (P3). TypeScript exposes `language_typescript()` and `language_tsx()`; PHP exposes `language_php()` and `language_php_only()` (we use `language_php`, which handles `<?php` tags). The cpp, typescript, java and ruby grammars have had no release since 2024. | c 0.24.2, cpp 0.23.4, python 0.25.0, javascript 0.25.0, typescript 0.23.2, go 0.25.0, rust 0.24.2, java 0.23.5, php 0.24.1, ruby 0.23.1; all MIT |
+| `rapidfuzz` | M2 | Levenshtein distance for the "did you mean" BK-tree (the tree itself is our own code). rapidfuzz needs Python ≥3.11, which sets our floor. | 3.14.6, MIT |
+| `pyyaml` | M2 | Reads the packaged `known_projects.yaml`, with `yaml.safe_load` only; YAML errors become `NikashaError`. | 6.0.3, MIT; `types-pyyaml` in the dev group for mypy |
 
 ## Planned (added in the milestone named; versions re-checked then)
 
 | Package | Milestone | Why / decision |
 |---|---|---|
-| `tree-sitter` ≥ 0.26 | M2 | Parsing. **`Language.query()` has been removed.** Use `Query(language, source)` with `QueryCursor(query).captures(node)`, which returns `dict[str, list[Node]]`, and `.matches(node)`. `Language.name` is `None` for ABI-14 grammars, so we key languages by our own enum. |
-| `tree-sitter-{c,cpp,python,javascript,typescript,go,rust,java,php,ruby}` | M2 | Per-language grammar wheels (abi3, all platforms). **We do not use `tree-sitter-language-pack` ≥ 1.0**: its docs say it "downloads each parser on first use", which breaks offline operation (P3). TypeScript exposes `language_typescript()` and `language_tsx()`; PHP exposes `language_php()` and `language_php_only()`. Note that the cpp, typescript, java and ruby grammars have had no release since 2024. |
-| `markdown-it-py` ≥ 4 | M1 | Code fences with line maps; the token `.map` is `[start, end)`, counted from 0 |
-| `unidiff` ≥ 1.0 | M1 | Parsing patches |
-| `rapidfuzz` | M2 | Edit-distance primitives. The BK-tree is our own code. rapidfuzz needs Python ≥3.11, which sets our floor. |
 | `pygments` | M4 | Pre-rendered highlighting in the HTML report (output escaped) |
 | `jinja2` | M3 | Templates with autoescape on |
 | `cvss` ≥ 3.6 | M3 | CVSS v3 and v4 (`CVSS3`, `CVSS4`). The spec's example vector `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H` computes to 7.5, confirmed. |
