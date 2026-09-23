@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+name: Feature request
+description: Suggest an improvement or a new capability.
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the triage situation you're in. Who are you (maintainer, triager, reporter, researcher)?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: textarea
+    id: principles
+    attributes:
+      label: Fit with the principles
+      description: How does this fit P1–P8 (deterministic, offline by default, conservative about "fabricated", no AI-writing detection)?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
