@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+name: New language
+description: Ask for symbol and call-graph support for another programming language.
+labels: ["language", "triage"]
+body:
+  - type: input
+    id: language
+    attributes:
+      label: Language
+    validations:
+      required: true
+  - type: input
+    id: grammar
+    attributes:
+      label: tree-sitter grammar on PyPI
+      description: The grammar must ship prebuilt wheels and must not download anything at runtime (Nikasha works offline).
+      placeholder: "tree-sitter-kotlin"
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Projects that would benefit
+      description: Which projects receive reports that cite code in this language?
