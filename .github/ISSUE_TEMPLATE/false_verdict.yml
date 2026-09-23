@@ -1,0 +1,56 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+name: False verdict
+description: Nikasha gave a verdict you believe is wrong (for example, a genuine report labelled UNGROUNDED).
+labels: ["false-verdict", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        False verdicts are the most important bugs we fix, especially **genuine reports labelled UNGROUNDED**.
+
+        **⚠️ Never paste an embargoed, private or unpublished vulnerability report into this form. Issues are public.**
+        Use a public, already-disclosed report, or build a synthetic report that shows the same behaviour.
+  - type: dropdown
+    id: got
+    attributes:
+      label: Verdict received
+      options: [REPRODUCED, GROUNDED, MIXED, UNGROUNDED, INSUFFICIENT, ERROR]
+    validations:
+      required: true
+  - type: dropdown
+    id: expected
+    attributes:
+      label: Verdict expected
+      options: [REPRODUCED, GROUNDED, MIXED, UNGROUNDED, INSUFFICIENT]
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Public report or target
+      description: A link to the public report or advisory, and the repository and version checked.
+      placeholder: "https://hackerone.com/reports/… · https://github.com/curl/curl @ curl-8_5_0"
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Which evidence is wrong, and why?
+      description: Paste the relevant lines of `nikasha explain RESULT.json`, and explain what the code at that version really shows.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Nikasha version
+      placeholder: "output of `nikasha version`"
+    validations:
+      required: true
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirmation
+      options:
+        - label: "**The report I reference is public, or synthetic.** This issue contains no embargoed content."
+          required: true
