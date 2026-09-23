@@ -1,0 +1,80 @@
+
+thread 'main' (1) panicked at /src/programs/rust/unwrap_none.rs:7:21:
+called `Option::unwrap()` on a `None` value
+stack backtrace:
+   0:     0x55d7d18a5541 - std[ccf7cd082f744cd2]::backtrace_rs::backtrace::libunwind::trace
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/../../backtrace/src/backtrace/libunwind.rs:117:9
+   1:     0x55d7d18a5541 - std[ccf7cd082f744cd2]::backtrace_rs::backtrace::trace_unsynchronized::<std[ccf7cd082f744cd2]::sys::backtrace::_print_fmt::{closure#1}>
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/../../backtrace/src/backtrace/mod.rs:66:14
+   2:     0x55d7d18a5541 - std[ccf7cd082f744cd2]::sys::backtrace::_print_fmt
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/sys/backtrace.rs:74:9
+   3:     0x55d7d18a5541 - <<std[ccf7cd082f744cd2]::sys::backtrace::BacktraceLock>::print::DisplayBacktrace as core[dc34d2c961210e2a]::fmt::Display>::fmt
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/sys/backtrace.rs:44:26
+   4:     0x55d7d18b5e3a - <core[dc34d2c961210e2a]::fmt::rt::Argument>::fmt
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/core/src/fmt/rt.rs:152:76
+   5:     0x55d7d18b5e3a - core[dc34d2c961210e2a]::fmt::write
+   6:     0x55d7d18a917c - std[ccf7cd082f744cd2]::io::default_write_fmt::<std[ccf7cd082f744cd2]::sys::stdio::unix::Stderr>
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/io/mod.rs:626:11
+   7:     0x55d7d18a917c - <std[ccf7cd082f744cd2]::sys::stdio::unix::Stderr as std[ccf7cd082f744cd2]::io::Write>::write_fmt
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/io/mod.rs:1730:13
+   8:     0x55d7d189174b - <std[ccf7cd082f744cd2]::sys::backtrace::BacktraceLock>::print
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/sys/backtrace.rs:47:9
+   9:     0x55d7d189174b - std[ccf7cd082f744cd2]::panicking::default_hook::{closure#0}
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/panicking.rs:292:27
+  10:     0x55d7d18a12df - std[ccf7cd082f744cd2]::panicking::default_hook
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/panicking.rs:319:9
+  11:     0x55d7d18a149b - std[ccf7cd082f744cd2]::panicking::panic_with_hook
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/panicking.rs:815:13
+  12:     0x55d7d1891834 - std[ccf7cd082f744cd2]::panicking::panic_handler::{closure#0}
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/panicking.rs:681:13
+  13:     0x55d7d1889809 - std[ccf7cd082f744cd2]::sys::backtrace::__rust_end_short_backtrace::<std[ccf7cd082f744cd2]::panicking::panic_handler::{closure#0}, !>
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/sys/backtrace.rs:182:18
+  14:     0x55d7d1891ead - __rustc[55a16907b21a66cb]::rust_begin_unwind
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/panicking.rs:679:5
+  15:     0x55d7d187975c - core[dc34d2c961210e2a]::panicking::panic_fmt
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/core/src/panicking.rs:80:14
+  16:     0x55d7d1879722 - core[dc34d2c961210e2a]::panicking::panic
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/core/src/panicking.rs:150:5
+  17:     0x55d7d18794d9 - core[dc34d2c961210e2a]::option::unwrap_failed
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/core/src/option.rs:2251:5
+  18:     0x55d7d187c5d5 - <core[dc34d2c961210e2a]::option::Option<&u32>>::unwrap
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/core/src/option.rs:1014:21
+  19:     0x55d7d187c5d5 - unwrap_none[1d7891cca4ec4e71]::lookup
+                               at /src/programs/rust/unwrap_none.rs:7:21
+  20:     0x55d7d187c60a - unwrap_none[1d7891cca4ec4e71]::timeout
+                               at /src/programs/rust/unwrap_none.rs:11:5
+  21:     0x55d7d187c502 - unwrap_none[1d7891cca4ec4e71]::main
+                               at /src/programs/rust/unwrap_none.rs:17:20
+  22:     0x55d7d187fc4b - <fn() as core[dc34d2c961210e2a]::ops::function::FnOnce<()>>::call_once
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/core/src/ops/function.rs:250:5
+  23:     0x55d7d187bbee - std[ccf7cd082f744cd2]::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/sys/backtrace.rs:166:18
+  24:     0x55d7d187c121 - std[ccf7cd082f744cd2]::rt::lang_start::<()>::{closure#0}
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/rt.rs:206:18
+  25:     0x55d7d18a0a67 - <&dyn core[dc34d2c961210e2a]::ops::function::Fn<(), Output = i32> + core[dc34d2c961210e2a]::marker::Sync + core[dc34d2c961210e2a]::panic::unwind_safe::RefUnwindSafe as core[dc34d2c961210e2a]::ops::function::FnOnce<()>>::call_once
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/core/src/ops/function.rs:287:21
+  26:     0x55d7d18a0a67 - std[ccf7cd082f744cd2]::panicking::catch_unwind::do_call::<&dyn core[dc34d2c961210e2a]::ops::function::Fn<(), Output = i32> + core[dc34d2c961210e2a]::marker::Sync + core[dc34d2c961210e2a]::panic::unwind_safe::RefUnwindSafe, i32>
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/panicking.rs:576:43
+  27:     0x55d7d18a0a67 - std[ccf7cd082f744cd2]::panicking::catch_unwind::<i32, &dyn core[dc34d2c961210e2a]::ops::function::Fn<(), Output = i32> + core[dc34d2c961210e2a]::marker::Sync + core[dc34d2c961210e2a]::panic::unwind_safe::RefUnwindSafe>
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/panicking.rs:544:19
+  28:     0x55d7d18a0a67 - std[ccf7cd082f744cd2]::panic::catch_unwind::<&dyn core[dc34d2c961210e2a]::ops::function::Fn<(), Output = i32> + core[dc34d2c961210e2a]::marker::Sync + core[dc34d2c961210e2a]::panic::unwind_safe::RefUnwindSafe, i32>
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/panic.rs:359:14
+  29:     0x55d7d18a0a67 - std[ccf7cd082f744cd2]::rt::lang_start_internal::{closure#0}
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/rt.rs:175:24
+  30:     0x55d7d18a0a67 - std[ccf7cd082f744cd2]::panicking::catch_unwind::do_call::<std[ccf7cd082f744cd2]::rt::lang_start_internal::{closure#0}, isize>
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/panicking.rs:576:43
+  31:     0x55d7d18a0a67 - std[ccf7cd082f744cd2]::panicking::catch_unwind::<isize, std[ccf7cd082f744cd2]::rt::lang_start_internal::{closure#0}>
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/panicking.rs:544:19
+  32:     0x55d7d18a0a67 - std[ccf7cd082f744cd2]::panic::catch_unwind::<std[ccf7cd082f744cd2]::rt::lang_start_internal::{closure#0}, isize>
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/panic.rs:359:14
+  33:     0x55d7d18a0a67 - std[ccf7cd082f744cd2]::rt::lang_start_internal
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/rt.rs:171:5
+  34:     0x55d7d187baa7 - std[ccf7cd082f744cd2]::rt::lang_start::<()>
+                               at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/rt.rs:205:5
+  35:     0x55d7d187fece - main
+  36:     0x7f42e3d40681 - __libc_start_call_main
+                               at /usr/src/debug/glibc-2.43-8.fc44.x86_64/csu/../sysdeps/nptl/libc_start_call_main.h:59:16
+  37:     0x7f42e3d40798 - __libc_start_main_impl
+                               at /usr/src/debug/glibc-2.43-8.fc44.x86_64/csu/../csu/libc-start.c:360:3
+  38:     0x55d7d1879945 - _start
+  39:                0x0 - <unknown>
