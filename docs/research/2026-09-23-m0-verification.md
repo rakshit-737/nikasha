@@ -75,8 +75,14 @@ See [ADR 0002](../adr/0002-dependencies.md). The key corrections to the spec:
   `safe.directory`, so Nikasha passes `-c safe.directory=<repo>` per command. That setting
   is honoured from the command scope.
 - `git archive` honours the tree's own `.gitattributes` (`export-ignore` and
-  `export-subst`). It runs commands only through configured `tar.<format>.command`, which
-  Nikasha never sets.
+  `export-subst`). It runs commands only through configured `tar.<format>.command`.
+  **Corrected in M2:** Nikasha never sets that key, but the *repository's own*
+  `.git/config` can, and a user may point Nikasha at a local repository they did not
+  create. The M2 canary test confirms that plain `git archive --format=tar` then runs the
+  command. Nikasha therefore does not use `git archive` at all (ADR 0006).
+- `GIT_NO_LAZY_FETCH` (git ≥2.44, checked in M2 against git 2.55's `git(1)`): when set,
+  git does not fetch missing objects from a promisor remote on demand. Nikasha sets it
+  unless `--online`, and uses full clones rather than `--filter=blob:none` (ADR 0006).
 
 ## 6. Container flags (SPEC §13.4)
 
