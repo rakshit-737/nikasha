@@ -1,0 +1,56 @@
+=================================================================
+==1==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x7bfda55e00c0 at pc 0x0000004a4432 bp 0x7ffc224c1800 sp 0x7ffc224c0fc0
+WRITE of size 96 at 0x7bfda55e00c0 thread T0
+    #0 0x0000004a4431 in __asan_memcpy (/work/libhdr/build/hdrcat+0x4a4431) (BuildId: 637d2b48cd4b910d95aa3547420edf7176c9274f)
+    #1 0x0000004ee78d in util_copy_value /work/libhdr/src/util.c:15:5
+    #2 0x0000004ecea0 in hdr_parse_line /work/libhdr/src/hdr.c:104:13
+    #3 0x0000004edcf6 in hdr_parse_block /work/libhdr/src/hdr.c:134:17
+    #4 0x0000004eb6b6 in main /work/libhdr/tools/hdrcat.c:122:5
+    #5 0x7f9da63af680 in __libc_start_call_main /usr/src/debug/glibc-2.43-8.fc44.x86_64/csu/../sysdeps/nptl/libc_start_call_main.h:59:16
+    #6 0x7f9da63af797 in __libc_start_main@GLIBC_2.2.5 /usr/src/debug/glibc-2.43-8.fc44.x86_64/csu/../csu/libc-start.c:360:3
+    #7 0x0000004006f4 in _start (/work/libhdr/build/hdrcat+0x4006f4) (BuildId: 637d2b48cd4b910d95aa3547420edf7176c9274f)
+
+0x7bfda55e00c0 is located 0 bytes after 64-byte region [0x7bfda55e0080,0x7bfda55e00c0)
+allocated by thread T0 here:
+    #0 0x0000004a67a8 in malloc (/work/libhdr/build/hdrcat+0x4a67a8) (BuildId: 637d2b48cd4b910d95aa3547420edf7176c9274f)
+    #1 0x0000004ee717 in util_copy_value /work/libhdr/src/util.c:11:17
+    #2 0x0000004ecea0 in hdr_parse_line /work/libhdr/src/hdr.c:104:13
+    #3 0x0000004edcf6 in hdr_parse_block /work/libhdr/src/hdr.c:134:17
+    #4 0x0000004eb6b6 in main /work/libhdr/tools/hdrcat.c:122:5
+    #5 0x7f9da63af680 in __libc_start_call_main /usr/src/debug/glibc-2.43-8.fc44.x86_64/csu/../sysdeps/nptl/libc_start_call_main.h:59:16
+    #6 0x7f9da63af797 in __libc_start_main@GLIBC_2.2.5 /usr/src/debug/glibc-2.43-8.fc44.x86_64/csu/../csu/libc-start.c:360:3
+    #7 0x0000004006f4 in _start (/work/libhdr/build/hdrcat+0x4006f4) (BuildId: 637d2b48cd4b910d95aa3547420edf7176c9274f)
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow (/work/libhdr/build/hdrcat+0x4a4431) (BuildId: 637d2b48cd4b910d95aa3547420edf7176c9274f) in __asan_memcpy
+Shadow bytes around the buggy address:
+  0x7bfda55dfe00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7bfda55dfe80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7bfda55dff00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7bfda55dff80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7bfda55e0000: fa fa fa fa 00 00 00 00 00 00 00 00 fa fa fa fa
+=>0x7bfda55e0080: 00 00 00 00 00 00 00 00[fa]fa fa fa fa fa fa fa
+  0x7bfda55e0100: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7bfda55e0180: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7bfda55e0200: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7bfda55e0280: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7bfda55e0300: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==1==ABORTING
