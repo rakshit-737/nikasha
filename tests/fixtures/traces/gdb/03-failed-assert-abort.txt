@@ -1,0 +1,38 @@
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib64/libthread_db.so.1".
+
+Program received signal SIGABRT, Aborted.
+__pthread_kill_implementation (threadid=<optimized out>, signo=signo@entry=6, no_tid=no_tid@entry=0) at pthread_kill.c:44
+#0  __pthread_kill_implementation (threadid=<optimized out>, signo=signo@entry=6, no_tid=no_tid@entry=0) at pthread_kill.c:44
+        tid = <optimized out>
+        ret = 0
+        pd = <optimized out>
+        old_mask = {__val = {0}}
+        ret = <optimized out>
+#1  0x00007f3bfbfe2d93 in __pthread_kill_internal (threadid=<optimized out>, signo=6) at pthread_kill.c:89
+No locals.
+#2  0x00007f3bfbf87e8e in __GI_raise (sig=sig@entry=6) at ../sysdeps/posix/raise.c:26
+        ret = <optimized out>
+#3  0x00007f3bfbf6f7b3 in __GI_abort () at abort.c:77
+        act = {__sigaction_handler = {sa_handler = 0x0, sa_sigaction = 0x0}, sa_mask = {__val = {0, 0, 139895608057032, 3399988123389603631, 448921600, 140735320291376, 139895607583846, 140735320291488, 139895607587993, 0, 139895608069968, 0, 15599912507765934336, 140735320291472, 139895608070063, 0}}, sa_flags = 2126903680, sa_restorer = 0x1000}
+#4  0x00007f3bfbf70804 in __libc_message_impl (vma_name=vma_name@entry=0x7f3bfc121ea3 "glibc: assert", fmt=<optimized out>) at ../sysdeps/posix/libc_fatal.c:138
+        ap = {{gp_offset = 48, fp_offset = 32571, overflow_arg_area = 0x7fff7ec5fa58, reg_save_area = 0x7fff7ec5f9d0}}
+        fd = 2
+        iov = {{iov_base = 0x7fff7ec60ef1, iov_len = 4}, {iov_base = 0x7f3bfc121f82, iov_len = 2}, {iov_base = 0x4011ff, iov_len = 33}, {iov_base = 0x7f3bfc1265ae, iov_len = 1}, {iov_base = 0x7fff7ec5fa86, iov_len = 1}, {iov_base = 0x7f3bfc1265b1, iov_len = 2}, {iov_base = 0x401221, iov_len = 22}, {iov_base = 0x7f3bfc121f82, iov_len = 2}, {iov_base = 0x7f3bfc1265b7, iov_len = 11}, {iov_base = 0x4011d6, iov_len = 40}, {iov_base = 0x7f3bfc1265c4, iov_len = 10}, {iov_base = 0x40, iov_len = 4}, {iov_base = 0x0, iov_len = 0}, {iov_base = 0x5, iov_len = 10485760}, {iov_base = 0x7f3bfc12b280 <_nl_default_dirname>, iov_len = 448921616}}
+        iovcnt = <optimized out>
+        total = <optimized out>
+        cp = <optimized out>
+#5  0x00007f3bfbf7fd45 in __libc_message_wrapper (vmaname=0x7f3bfc121ea3 "glibc: assert", fmt=<optimized out>) at ../include/stdio.h:203
+No locals.
+#6  __assert_fail (assertion=0x4011d6 "version >= 2 && \"config version too old\"", file=0x4011ff "/src/programs/gdb/failed_assert.c", line=<optimized out>, function=<optimized out>) at assert.c:37
+        linebuf = "\177\000\000\000\000\000\000\000\0009"
+        linestr = 0x7fff7ec5fa86 "9"
+#7  0x0000000000400523 in check_config (version=1) at /src/programs/gdb/failed_assert.c:9
+No locals.
+#8  0x00000000004004c3 in load_config (version=1) at /src/programs/gdb/failed_assert.c:14
+No locals.
+#9  0x000000000040049e in main (argc=1, argv=0x7fff7ec5fc58) at /src/programs/gdb/failed_assert.c:21
+No locals.
+warning: Error disabling address space randomization: Function not implemented
+prog: /src/programs/gdb/failed_assert.c:9: void check_config(int): Assertion `version >= 2 && "config version too old"' failed.
+warning: 44	pthread_kill.c: No such file or directory
