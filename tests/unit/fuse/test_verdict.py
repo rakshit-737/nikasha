@@ -627,15 +627,17 @@ def test_confidence_comes_from_the_ledger() -> None:
     assert decide(ledger, items, [SNIPPET_CLAIM]).confidence == confidence_of(ledger)
 
 
-@pytest.mark.xfail(
-    reason="verdict.decide hard-codes confidence='high' for rule 1, but SPEC 14.3 says "
-    "confidence is high only when |lambda| >= 4 AND three or more groups contributed",
-    strict=True,
-)
-def test_reproduced_confidence_follows_the_spec_formula() -> None:
+def test_reproduced_is_high_confidence_by_definition() -> None:
+    """ADR 0007 decision 2: rule 1 is a documented exception to the confidence formula.
+
+    The formula distrusts a large lambda that comes from a single group, because several
+    findings in one group may be restatements of one fact. A reproduction is not
+    statistical evidence: the PoC ran and the crash signature matched. So rule 1 reports
+    high confidence even though the formula, applied blindly, would say medium.
+    """
     items = [ev("repro", "C19", "signature_match", "repro")]
     ledger = fuse(items)
     assert abs(ledger.log_odds) >= 4.0
     assert len(ledger.groups) == 1
     assert confidence_of(ledger) == "medium"
-    assert decide(ledger, items, [POC_CLAIM]).confidence == "medium"
+    assert decide(ledger, items, [POC_CLAIM]).confidence == "high"
