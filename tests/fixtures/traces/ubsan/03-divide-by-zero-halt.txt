@@ -1,0 +1,9 @@
+/src/programs/ubsan/divide_by_zero.c:8:18: runtime error: division by zero
+    #0 0x00000042e40b in divide /src/programs/ubsan/divide_by_zero.c:8:18
+    #1 0x00000042e39b in average /src/programs/ubsan/divide_by_zero.c:16:12
+    #2 0x00000042e22a in main /src/programs/ubsan/divide_by_zero.c:23:20
+    #3 0x7fcf23f1b680 in __libc_start_call_main /usr/src/debug/glibc-2.43-8.fc44.x86_64/csu/../sysdeps/nptl/libc_start_call_main.h:59:16
+    #4 0x7fcf23f1b797 in __libc_start_main@GLIBC_2.2.5 /usr/src/debug/glibc-2.43-8.fc44.x86_64/csu/../csu/libc-start.c:360:3
+    #5 0x000000400764 in _start (/work/prog+0x400764) (BuildId: 3d985bc158e6226bc5c45c13a495173d258b6dd5)
+
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior /src/programs/ubsan/divide_by_zero.c:8:18 
