@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Local hooks run the exact tool versions pinned in uv.lock, so hook and CI results agree.
+default_install_hook_types: [pre-commit, commit-msg]
+default_stages: [pre-commit]
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format
+        language: system
+        types_or: [python, pyi]
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check --fix
+        language: system
+        types_or: [python, pyi]
+      - id: codespell
+        name: codespell
+        entry: uv run codespell
+        language: system
+        types: [text]
+      - id: mypy
+        name: mypy --strict
+        entry: uv run mypy
+        language: system
+        pass_filenames: false
+        files: ^src/
+      - id: commit-msg
+        name: conventional commit + DCO sign-off
+        entry: uv run python scripts/check_commit_msg.py
+        language: system
+        stages: [commit-msg]
