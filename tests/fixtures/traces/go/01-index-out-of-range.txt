@@ -1,0 +1,10 @@
+panic: runtime error: index out of range [3] with length 3
+
+goroutine 1 [running]:
+main.pick(...)
+	/src/programs/go/index_out_of_range.go:10
+main.last(...)
+	/src/programs/go/index_out_of_range.go:14
+main.main()
+	/src/programs/go/index_out_of_range.go:18 +0xb
+exit status 2
