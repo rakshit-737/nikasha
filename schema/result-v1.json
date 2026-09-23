@@ -1,0 +1,2753 @@
+{
+  "$defs": {
+    "Attachment": {
+      "additionalProperties": false,
+      "description": "A sanitized attachment. ``stored_path`` is run-specific and excluded from output.",
+      "properties": {
+        "media_type": {
+          "title": "Media Type",
+          "type": "string"
+        },
+        "name_sanitized": {
+          "title": "Name Sanitized",
+          "type": "string"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size": {
+          "minimum": 0,
+          "title": "Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name_sanitized",
+        "sha256",
+        "size",
+        "media_type"
+      ],
+      "title": "Attachment",
+      "type": "object"
+    },
+    "BehaviorClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "extractor": {
+          "title": "Extractor",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "behavior",
+          "default": "behavior",
+          "title": "Kind",
+          "type": "string"
+        },
+        "negated": {
+          "default": false,
+          "title": "Negated",
+          "type": "boolean"
+        },
+        "object": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Object"
+        },
+        "predicate": {
+          "enum": [
+            "calls_api",
+            "missing_bounds_check",
+            "missing_null_check",
+            "uses_freed",
+            "integer_overflow"
+          ],
+          "title": "Predicate",
+          "type": "string"
+        },
+        "provenance": {
+          "default": "unscoped",
+          "enum": [
+            "project_attributed",
+            "reporter_artifact",
+            "third_party",
+            "unscoped"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        },
+        "role": {
+          "default": "supporting",
+          "enum": [
+            "core",
+            "supporting",
+            "peripheral"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "spans": {
+          "items": {
+            "$ref": "#/$defs/Span"
+          },
+          "minItems": 1,
+          "title": "Spans",
+          "type": "array"
+        },
+        "subject_symbol": {
+          "title": "Subject Symbol",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "spans",
+        "extractor",
+        "confidence",
+        "subject_symbol",
+        "predicate"
+      ],
+      "title": "BehaviorClaim",
+      "type": "object"
+    },
+    "CodeBlock": {
+      "additionalProperties": false,
+      "description": "A fenced, indented or ``<pre>`` code block.\n\n``span`` covers the block's raw lines in the body (without fence lines);\n``content`` is the block text as the parser saw it (indentation of enclosing lists or\nblockquotes removed), which usually equals ``span.text``.",
+      "properties": {
+        "content": {
+          "title": "Content",
+          "type": "string"
+        },
+        "lang_hint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lang Hint"
+        },
+        "role_guess": {
+          "enum": [
+            "trace",
+            "patch",
+            "poc",
+            "snippet",
+            "log"
+          ],
+          "title": "Role Guess",
+          "type": "string"
+        },
+        "span": {
+          "$ref": "#/$defs/Span"
+        }
+      },
+      "required": [
+        "span",
+        "content",
+        "role_guess"
+      ],
+      "title": "CodeBlock",
+      "type": "object"
+    },
+    "CodeLocation": {
+      "additionalProperties": false,
+      "description": "A location in the repository at an exact commit, with an upstream permalink.",
+      "properties": {
+        "commit": {
+          "title": "Commit",
+          "type": "string"
+        },
+        "end_line": {
+          "minimum": 1,
+          "title": "End Line",
+          "type": "integer"
+        },
+        "excerpt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Excerpt"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "permalink": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Permalink"
+        },
+        "ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ref"
+        },
+        "repo": {
+          "title": "Repo",
+          "type": "string"
+        },
+        "start_line": {
+          "minimum": 1,
+          "title": "Start Line",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "repo",
+        "commit",
+        "path",
+        "start_line",
+        "end_line"
+      ],
+      "title": "CodeLocation",
+      "type": "object"
+    },
+    "CommandRecord": {
+      "additionalProperties": false,
+      "description": "An external command a check ran, recorded so anyone can re-run it (P6).",
+      "properties": {
+        "argv": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Argv",
+          "type": "array"
+        },
+        "duration_ms": {
+          "minimum": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "exit_code": {
+          "title": "Exit Code",
+          "type": "integer"
+        },
+        "stderr_sha256": {
+          "title": "Stderr Sha256",
+          "type": "string"
+        },
+        "stdout_sha256": {
+          "title": "Stdout Sha256",
+          "type": "string"
+        },
+        "truncated": {
+          "default": false,
+          "title": "Truncated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "argv",
+        "exit_code",
+        "stdout_sha256",
+        "stderr_sha256",
+        "duration_ms"
+      ],
+      "title": "CommandRecord",
+      "type": "object"
+    },
+    "DeclaredTarget": {
+      "additionalProperties": false,
+      "description": "Target metadata supplied by the intake (not extracted from prose).",
+      "properties": {
+        "product": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Product"
+        },
+        "repo_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Repo Url"
+        },
+        "versions": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Versions",
+          "type": "array"
+        }
+      },
+      "title": "DeclaredTarget",
+      "type": "object"
+    },
+    "Environment": {
+      "additionalProperties": false,
+      "properties": {
+        "fetched_urls": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Fetched Urls",
+          "type": "array"
+        },
+        "llm": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Llm"
+        },
+        "mode": {
+          "default": "offline",
+          "enum": [
+            "offline",
+            "online"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "sandbox_engine": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sandbox Engine"
+        }
+      },
+      "title": "Environment",
+      "type": "object"
+    },
+    "Evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "check_id": {
+          "title": "Check Id",
+          "type": "string"
+        },
+        "claim_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Claim Ids",
+          "type": "array"
+        },
+        "commands": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CommandRecord"
+          },
+          "title": "Commands",
+          "type": "array"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "group": {
+          "title": "Group",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "locations": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CodeLocation"
+          },
+          "title": "Locations",
+          "type": "array"
+        },
+        "outcome": {
+          "enum": [
+            "SUPPORTS",
+            "REFUTES",
+            "NEUTRAL",
+            "ERROR"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "produced_by": {
+          "default": "deterministic",
+          "enum": [
+            "deterministic",
+            "llm"
+          ],
+          "title": "Produced By",
+          "type": "string"
+        },
+        "strength": {
+          "title": "Strength",
+          "type": "number"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "check_id",
+        "claim_ids",
+        "outcome",
+        "strength",
+        "group",
+        "summary"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    },
+    "FileClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "extractor": {
+          "title": "Extractor",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "file",
+          "default": "file",
+          "title": "Kind",
+          "type": "string"
+        },
+        "negated": {
+          "default": false,
+          "title": "Negated",
+          "type": "boolean"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "provenance": {
+          "default": "unscoped",
+          "enum": [
+            "project_attributed",
+            "reporter_artifact",
+            "third_party",
+            "unscoped"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        },
+        "role": {
+          "default": "supporting",
+          "enum": [
+            "core",
+            "supporting",
+            "peripheral"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "spans": {
+          "items": {
+            "$ref": "#/$defs/Span"
+          },
+          "minItems": 1,
+          "title": "Spans",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "spans",
+        "extractor",
+        "confidence",
+        "path"
+      ],
+      "title": "FileClaim",
+      "type": "object"
+    },
+    "Frame": {
+      "additionalProperties": false,
+      "description": "One stack frame, normalized across formats (SPEC §9.5).",
+      "properties": {
+        "col": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Col"
+        },
+        "function": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Function"
+        },
+        "index": {
+          "title": "Index",
+          "type": "integer"
+        },
+        "is_runtime": {
+          "default": false,
+          "title": "Is Runtime",
+          "type": "boolean"
+        },
+        "line": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Line"
+        },
+        "module": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Module"
+        },
+        "original_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Original Path"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path"
+        },
+        "raw": {
+          "title": "Raw",
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "raw"
+      ],
+      "title": "Frame",
+      "type": "object"
+    },
+    "ImpactClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "cvss_score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cvss Score"
+        },
+        "cvss_vector": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cvss Vector"
+        },
+        "cvss_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cvss Version"
+        },
+        "cwe": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cwe"
+        },
+        "extractor": {
+          "title": "Extractor",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "impact",
+          "default": "impact",
+          "title": "Kind",
+          "type": "string"
+        },
+        "negated": {
+          "default": false,
+          "title": "Negated",
+          "type": "boolean"
+        },
+        "provenance": {
+          "default": "unscoped",
+          "enum": [
+            "project_attributed",
+            "reporter_artifact",
+            "third_party",
+            "unscoped"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        },
+        "role": {
+          "default": "supporting",
+          "enum": [
+            "core",
+            "supporting",
+            "peripheral"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "severity_word": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Severity Word"
+        },
+        "spans": {
+          "items": {
+            "$ref": "#/$defs/Span"
+          },
+          "minItems": 1,
+          "title": "Spans",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "spans",
+        "extractor",
+        "confidence"
+      ],
+      "title": "ImpactClaim",
+      "type": "object"
+    },
+    "LineClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "col": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Col"
+        },
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "end_line": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End Line"
+        },
+        "extractor": {
+          "title": "Extractor",
+          "type": "string"
+        },
+        "function_hint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Function Hint"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "line",
+          "default": "line",
+          "title": "Kind",
+          "type": "string"
+        },
+        "line": {
+          "minimum": 0,
+          "title": "Line",
+          "type": "integer"
+        },
+        "negated": {
+          "default": false,
+          "title": "Negated",
+          "type": "boolean"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Path"
+        },
+        "permalink": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Permalink"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "provenance": {
+          "default": "unscoped",
+          "enum": [
+            "project_attributed",
+            "reporter_artifact",
+            "third_party",
+            "unscoped"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        },
+        "quoted_line": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quoted Line"
+        },
+        "role": {
+          "default": "supporting",
+          "enum": [
+            "core",
+            "supporting",
+            "peripheral"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "spans": {
+          "items": {
+            "$ref": "#/$defs/Span"
+          },
+          "minItems": 1,
+          "title": "Spans",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "spans",
+        "extractor",
+        "confidence",
+        "path",
+        "line"
+      ],
+      "title": "LineClaim",
+      "type": "object"
+    },
+    "MemoryAccess": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "READ",
+            "WRITE"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Size"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "MemoryAccess",
+      "type": "object"
+    },
+    "MemoryRegion": {
+      "additionalProperties": false,
+      "description": "ASan's ``0x… is located N bytes to the right of M-byte region [start,end)``.",
+      "properties": {
+        "distance": {
+          "title": "Distance",
+          "type": "integer"
+        },
+        "end": {
+          "title": "End",
+          "type": "integer"
+        },
+        "relation": {
+          "enum": [
+            "right",
+            "left",
+            "inside"
+          ],
+          "title": "Relation",
+          "type": "string"
+        },
+        "size": {
+          "title": "Size",
+          "type": "integer"
+        },
+        "start": {
+          "title": "Start",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start",
+        "end",
+        "size",
+        "relation",
+        "distance"
+      ],
+      "title": "MemoryRegion",
+      "type": "object"
+    },
+    "OptionClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "extractor": {
+          "title": "Extractor",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "option",
+          "default": "option",
+          "title": "Kind",
+          "type": "string"
+        },
+        "negated": {
+          "default": false,
+          "title": "Negated",
+          "type": "boolean"
+        },
+        "option_kind": {
+          "enum": [
+            "cli_flag",
+            "constant",
+            "config_key"
+          ],
+          "title": "Option Kind",
+          "type": "string"
+        },
+        "provenance": {
+          "default": "unscoped",
+          "enum": [
+            "project_attributed",
+            "reporter_artifact",
+            "third_party",
+            "unscoped"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        },
+        "role": {
+          "default": "supporting",
+          "enum": [
+            "core",
+            "supporting",
+            "peripheral"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "spans": {
+          "items": {
+            "$ref": "#/$defs/Span"
+          },
+          "minItems": 1,
+          "title": "Spans",
+          "type": "array"
+        },
+        "token": {
+          "title": "Token",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "spans",
+        "extractor",
+        "confidence",
+        "token",
+        "option_kind"
+      ],
+      "title": "OptionClaim",
+      "type": "object"
+    },
+    "PatchClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "diff": {
+          "title": "Diff",
+          "type": "string"
+        },
+        "extractor": {
+          "title": "Extractor",
+          "type": "string"
+        },
+        "files": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Files",
+          "type": "array"
+        },
+        "hunks": {
+          "items": {
+            "$ref": "#/$defs/PatchHunk"
+          },
+          "title": "Hunks",
+          "type": "array"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "patch",
+          "default": "patch",
+          "title": "Kind",
+          "type": "string"
+        },
+        "negated": {
+          "default": false,
+          "title": "Negated",
+          "type": "boolean"
+        },
+        "provenance": {
+          "default": "unscoped",
+          "enum": [
+            "project_attributed",
+            "reporter_artifact",
+            "third_party",
+            "unscoped"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        },
+        "role": {
+          "default": "supporting",
+          "enum": [
+            "core",
+            "supporting",
+            "peripheral"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "spans": {
+          "items": {
+            "$ref": "#/$defs/Span"
+          },
+          "minItems": 1,
+          "title": "Spans",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "spans",
+        "extractor",
+        "confidence",
+        "diff",
+        "files",
+        "hunks"
+      ],
+      "title": "PatchClaim",
+      "type": "object"
+    },
+    "PatchHunk": {
+      "additionalProperties": false,
+      "properties": {
+        "lines": {
+          "items": {
+            "$ref": "#/$defs/PatchLine"
+          },
+          "title": "Lines",
+          "type": "array"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "section_header": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Section Header"
+        },
+        "source_length": {
+          "title": "Source Length",
+          "type": "integer"
+        },
+        "source_start": {
+          "title": "Source Start",
+          "type": "integer"
+        },
+        "target_length": {
+          "title": "Target Length",
+          "type": "integer"
+        },
+        "target_start": {
+          "title": "Target Start",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "source_start",
+        "source_length",
+        "target_start",
+        "target_length",
+        "lines"
+      ],
+      "title": "PatchHunk",
+      "type": "object"
+    },
+    "PatchLine": {
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "enum": [
+            " ",
+            "+",
+            "-"
+          ],
+          "title": "Op",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "op",
+        "text"
+      ],
+      "title": "PatchLine",
+      "type": "object"
+    },
+    "Permalink": {
+      "additionalProperties": false,
+      "description": "A GitHub or GitLab blob URL, which pins repo, ref, path and lines.",
+      "properties": {
+        "end_line": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End Line"
+        },
+        "host": {
+          "title": "Host",
+          "type": "string"
+        },
+        "owner": {
+          "title": "Owner",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "ref": {
+          "title": "Ref",
+          "type": "string"
+        },
+        "repo": {
+          "title": "Repo",
+          "type": "string"
+        },
+        "start_line": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start Line"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "host",
+        "owner",
+        "repo",
+        "ref",
+        "path",
+        "url"
+      ],
+      "title": "Permalink",
+      "type": "object"
+    },
+    "PocClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "attachment_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attachment Ref"
+        },
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "content": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content"
+        },
+        "entry": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Entry"
+        },
+        "extractor": {
+          "title": "Extractor",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "poc",
+          "default": "poc",
+          "title": "Kind",
+          "type": "string"
+        },
+        "negated": {
+          "default": false,
+          "title": "Negated",
+          "type": "boolean"
+        },
+        "poc_kind": {
+          "enum": [
+            "cli",
+            "file_input",
+            "c_harness",
+            "python",
+            "shell",
+            "libfuzzer_input",
+            "http_sidecar"
+          ],
+          "title": "Poc Kind",
+          "type": "string"
+        },
+        "provenance": {
+          "default": "unscoped",
+          "enum": [
+            "project_attributed",
+            "reporter_artifact",
+            "third_party",
+            "unscoped"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        },
+        "role": {
+          "default": "supporting",
+          "enum": [
+            "core",
+            "supporting",
+            "peripheral"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "spans": {
+          "items": {
+            "$ref": "#/$defs/Span"
+          },
+          "minItems": 1,
+          "title": "Spans",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "spans",
+        "extractor",
+        "confidence",
+        "poc_kind"
+      ],
+      "title": "PocClaim",
+      "type": "object"
+    },
+    "Question": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "rationale": {
+          "title": "Rationale",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "rationale"
+      ],
+      "title": "Question",
+      "type": "object"
+    },
+    "ReferenceClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "extractor": {
+          "title": "Extractor",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "reference",
+          "default": "reference",
+          "title": "Kind",
+          "type": "string"
+        },
+        "negated": {
+          "default": false,
+          "title": "Negated",
+          "type": "boolean"
+        },
+        "provenance": {
+          "default": "unscoped",
+          "enum": [
+            "project_attributed",
+            "reporter_artifact",
+            "third_party",
+            "unscoped"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        },
+        "ref_kind": {
+          "enum": [
+            "url",
+            "commit",
+            "cve",
+            "cwe",
+            "ghsa",
+            "issue",
+            "pr",
+            "blob",
+            "compare",
+            "advisory"
+          ],
+          "title": "Ref Kind",
+          "type": "string"
+        },
+        "repo_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Repo Url"
+        },
+        "role": {
+          "default": "supporting",
+          "enum": [
+            "core",
+            "supporting",
+            "peripheral"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "spans": {
+          "items": {
+            "$ref": "#/$defs/Span"
+          },
+          "minItems": 1,
+          "title": "Spans",
+          "type": "array"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "spans",
+        "extractor",
+        "confidence",
+        "ref_kind",
+        "value"
+      ],
+      "title": "ReferenceClaim",
+      "type": "object"
+    },
+    "Report": {
+      "additionalProperties": false,
+      "description": "A normalized vulnerability report. The reporter's identity is never stored.",
+      "properties": {
+        "attachments": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Attachment"
+          },
+          "title": "Attachments",
+          "type": "array"
+        },
+        "body": {
+          "title": "Body",
+          "type": "string"
+        },
+        "code_blocks": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CodeBlock"
+          },
+          "title": "Code Blocks",
+          "type": "array"
+        },
+        "declared_target": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DeclaredTarget"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "reported_at": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reported At"
+        },
+        "source": {
+          "$ref": "#/$defs/ReportSource"
+        },
+        "source_map": {
+          "$ref": "#/$defs/SourceMap"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "warnings": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "body",
+        "source_map"
+      ],
+      "title": "Report",
+      "type": "object"
+    },
+    "ReportSource": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "text",
+            "markdown",
+            "html",
+            "eml",
+            "hackerone",
+            "gh_advisory",
+            "cve_json"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "uri": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uri"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "ReportSource",
+      "type": "object"
+    },
+    "ResolvedTarget": {
+      "additionalProperties": false,
+      "description": "The repository and exact commit a report was checked against (SPEC §10).",
+      "properties": {
+        "alternatives": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Alternatives",
+          "type": "array"
+        },
+        "commit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Commit"
+        },
+        "confidence": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Confidence",
+          "type": "string"
+        },
+        "method": {
+          "title": "Method",
+          "type": "string"
+        },
+        "ref_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ref Name"
+        },
+        "repo_url": {
+          "title": "Repo Url",
+          "type": "string"
+        },
+        "warnings": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "repo_url",
+        "method",
+        "confidence"
+      ],
+      "title": "ResolvedTarget",
+      "type": "object"
+    },
+    "SnippetClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "attributed_function": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attributed Function"
+        },
+        "attributed_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attributed Path"
+        },
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "extractor": {
+          "title": "Extractor",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "snippet",
+          "default": "snippet",
+          "title": "Kind",
+          "type": "string"
+        },
+        "lang_hint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lang Hint"
+        },
+        "n_lines": {
+          "minimum": 0,
+          "title": "N Lines",
+          "type": "integer"
+        },
+        "negated": {
+          "default": false,
+          "title": "Negated",
+          "type": "boolean"
+        },
+        "provenance": {
+          "default": "unscoped",
+          "enum": [
+            "project_attributed",
+            "reporter_artifact",
+            "third_party",
+            "unscoped"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        },
+        "role": {
+          "default": "supporting",
+          "enum": [
+            "core",
+            "supporting",
+            "peripheral"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "spans": {
+          "items": {
+            "$ref": "#/$defs/Span"
+          },
+          "minItems": 1,
+          "title": "Spans",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "spans",
+        "extractor",
+        "confidence",
+        "code",
+        "n_lines"
+      ],
+      "title": "SnippetClaim",
+      "type": "object"
+    },
+    "SourceMap": {
+      "additionalProperties": false,
+      "description": "Maps offsets in the normalized body back to offsets in the original input.\n\nSegments are sorted and non-overlapping. Offsets that fall into text the normalizer\ninserted (e.g. a newline standing in for ``<br>``) map to the start of the next\nverbatim segment, or to the end of the input.",
+      "properties": {
+        "original_length": {
+          "minimum": 0,
+          "title": "Original Length",
+          "type": "integer"
+        },
+        "segments": {
+          "items": {
+            "$ref": "#/$defs/SourceSegment"
+          },
+          "title": "Segments",
+          "type": "array"
+        }
+      },
+      "required": [
+        "segments",
+        "original_length"
+      ],
+      "title": "SourceMap",
+      "type": "object"
+    },
+    "SourceSegment": {
+      "additionalProperties": false,
+      "description": "``length`` characters copied verbatim from ``orig_start`` in the original input to\n``norm_start`` in the normalized body.",
+      "properties": {
+        "length": {
+          "minimum": 0,
+          "title": "Length",
+          "type": "integer"
+        },
+        "norm_start": {
+          "minimum": 0,
+          "title": "Norm Start",
+          "type": "integer"
+        },
+        "orig_start": {
+          "minimum": 0,
+          "title": "Orig Start",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "norm_start",
+        "orig_start",
+        "length"
+      ],
+      "title": "SourceSegment",
+      "type": "object"
+    },
+    "Span": {
+      "additionalProperties": false,
+      "description": "A half-open character range ``[start, end)`` of :attr:`Report.body`, with its text.\n\nInvariant (checked by :class:`Report`): ``report.body[start:end] == text``.",
+      "properties": {
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "integer"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "integer"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end",
+        "text"
+      ],
+      "title": "Span",
+      "type": "object"
+    },
+    "Stack": {
+      "additionalProperties": false,
+      "description": "A labelled stack other than the primary one (e.g. TSan's \"previous write\").",
+      "properties": {
+        "frames": {
+          "items": {
+            "$ref": "#/$defs/Frame"
+          },
+          "title": "Frames",
+          "type": "array"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "frames"
+      ],
+      "title": "Stack",
+      "type": "object"
+    },
+    "SymbolClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "context_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Context Path"
+        },
+        "external": {
+          "default": false,
+          "title": "External",
+          "type": "boolean"
+        },
+        "extractor": {
+          "title": "Extractor",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "symbol",
+          "default": "symbol",
+          "title": "Kind",
+          "type": "string"
+        },
+        "lang_hint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lang Hint"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "negated": {
+          "default": false,
+          "title": "Negated",
+          "type": "boolean"
+        },
+        "provenance": {
+          "default": "unscoped",
+          "enum": [
+            "project_attributed",
+            "reporter_artifact",
+            "third_party",
+            "unscoped"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        },
+        "role": {
+          "default": "supporting",
+          "enum": [
+            "core",
+            "supporting",
+            "peripheral"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "spans": {
+          "items": {
+            "$ref": "#/$defs/Span"
+          },
+          "minItems": 1,
+          "title": "Spans",
+          "type": "array"
+        },
+        "symbol_kind_hint": {
+          "default": "unknown",
+          "enum": [
+            "function",
+            "macro",
+            "type",
+            "field",
+            "method",
+            "class",
+            "constant",
+            "unknown"
+          ],
+          "title": "Symbol Kind Hint",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "spans",
+        "extractor",
+        "confidence",
+        "name"
+      ],
+      "title": "SymbolClaim",
+      "type": "object"
+    },
+    "TraceClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "access": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MemoryAccess"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "access_address": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Access Address"
+        },
+        "address": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Address"
+        },
+        "alloc_frames": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Frame"
+          },
+          "title": "Alloc Frames",
+          "type": "array"
+        },
+        "bug_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bug Type"
+        },
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "extractor": {
+          "title": "Extractor",
+          "type": "string"
+        },
+        "format": {
+          "enum": [
+            "asan",
+            "ubsan",
+            "lsan",
+            "msan",
+            "tsan",
+            "valgrind",
+            "gdb",
+            "python",
+            "java",
+            "go",
+            "rust",
+            "node"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "frames": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Frame"
+          },
+          "title": "Frames",
+          "type": "array"
+        },
+        "free_frames": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Frame"
+          },
+          "title": "Free Frames",
+          "type": "array"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "trace",
+          "default": "trace",
+          "title": "Kind",
+          "type": "string"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message"
+        },
+        "negated": {
+          "default": false,
+          "title": "Negated",
+          "type": "boolean"
+        },
+        "other_stacks": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Stack"
+          },
+          "title": "Other Stacks",
+          "type": "array"
+        },
+        "pid": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pid"
+        },
+        "pids_seen": {
+          "default": [],
+          "items": {
+            "type": "integer"
+          },
+          "title": "Pids Seen",
+          "type": "array"
+        },
+        "provenance": {
+          "default": "unscoped",
+          "enum": [
+            "project_attributed",
+            "reporter_artifact",
+            "third_party",
+            "unscoped"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        },
+        "region": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MemoryRegion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "region_address": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Region Address"
+        },
+        "role": {
+          "default": "supporting",
+          "enum": [
+            "core",
+            "supporting",
+            "peripheral"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "spans": {
+          "items": {
+            "$ref": "#/$defs/Span"
+          },
+          "minItems": 1,
+          "title": "Spans",
+          "type": "array"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Summary"
+        },
+        "summary_function": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Summary Function"
+        },
+        "summary_line": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Summary Line"
+        },
+        "summary_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Summary Path"
+        },
+        "thread": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Thread"
+        }
+      },
+      "required": [
+        "format",
+        "id",
+        "spans",
+        "extractor",
+        "confidence"
+      ],
+      "title": "TraceClaim",
+      "type": "object"
+    },
+    "Verdict": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Confidence",
+          "type": "string"
+        },
+        "key_evidence": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Key Evidence",
+          "type": "array"
+        },
+        "label": {
+          "enum": [
+            "REPRODUCED",
+            "GROUNDED",
+            "MIXED",
+            "UNGROUNDED",
+            "INSUFFICIENT",
+            "ERROR"
+          ],
+          "title": "Label",
+          "type": "string"
+        },
+        "notes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Notes",
+          "type": "array"
+        },
+        "questions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Question"
+          },
+          "title": "Questions",
+          "type": "array"
+        },
+        "rule": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rule"
+        },
+        "score": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Score",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "label",
+        "score",
+        "confidence"
+      ],
+      "title": "Verdict",
+      "type": "object"
+    },
+    "VersionClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "as_of": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "As Of"
+        },
+        "commit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Commit"
+        },
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "extractor": {
+          "title": "Extractor",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "version",
+          "default": "version",
+          "title": "Kind",
+          "type": "string"
+        },
+        "lower": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VersionSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "lower_inclusive": {
+          "default": true,
+          "title": "Lower Inclusive",
+          "type": "boolean"
+        },
+        "negated": {
+          "default": false,
+          "title": "Negated",
+          "type": "boolean"
+        },
+        "parsed": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VersionSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "product": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Product"
+        },
+        "provenance": {
+          "default": "unscoped",
+          "enum": [
+            "project_attributed",
+            "reporter_artifact",
+            "third_party",
+            "unscoped"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        },
+        "raw": {
+          "title": "Raw",
+          "type": "string"
+        },
+        "relation": {
+          "enum": [
+            "tested_on",
+            "affected_range",
+            "fixed_in",
+            "latest",
+            "unspecified"
+          ],
+          "title": "Relation",
+          "type": "string"
+        },
+        "role": {
+          "default": "supporting",
+          "enum": [
+            "core",
+            "supporting",
+            "peripheral"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "spans": {
+          "items": {
+            "$ref": "#/$defs/Span"
+          },
+          "minItems": 1,
+          "title": "Spans",
+          "type": "array"
+        },
+        "special_ref": {
+          "anyOf": [
+            {
+              "enum": [
+                "latest",
+                "master",
+                "main",
+                "HEAD",
+                "trunk"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Special Ref"
+        },
+        "upper": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VersionSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "upper_inclusive": {
+          "default": false,
+          "title": "Upper Inclusive",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "spans",
+        "extractor",
+        "confidence",
+        "raw",
+        "relation"
+      ],
+      "title": "VersionClaim",
+      "type": "object"
+    },
+    "VersionSpec": {
+      "additionalProperties": false,
+      "description": "A parsed version: numeric components, an optional qualifier, and the raw text.",
+      "properties": {
+        "numbers": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Numbers",
+          "type": "array"
+        },
+        "qualifier": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Qualifier"
+        },
+        "raw": {
+          "title": "Raw",
+          "type": "string"
+        }
+      },
+      "required": [
+        "numbers",
+        "raw"
+      ],
+      "title": "VersionSpec",
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/rakshit-737/nikasha/blob/main/schema/result-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Everything Nikasha concluded about one report.\n\n``timings`` is the only field allowed to differ between two runs on the same input.",
+  "properties": {
+    "claims": {
+      "default": [],
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "behavior": "#/$defs/BehaviorClaim",
+            "file": "#/$defs/FileClaim",
+            "impact": "#/$defs/ImpactClaim",
+            "line": "#/$defs/LineClaim",
+            "option": "#/$defs/OptionClaim",
+            "patch": "#/$defs/PatchClaim",
+            "poc": "#/$defs/PocClaim",
+            "reference": "#/$defs/ReferenceClaim",
+            "snippet": "#/$defs/SnippetClaim",
+            "symbol": "#/$defs/SymbolClaim",
+            "trace": "#/$defs/TraceClaim",
+            "version": "#/$defs/VersionClaim"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/VersionClaim"
+          },
+          {
+            "$ref": "#/$defs/SymbolClaim"
+          },
+          {
+            "$ref": "#/$defs/FileClaim"
+          },
+          {
+            "$ref": "#/$defs/LineClaim"
+          },
+          {
+            "$ref": "#/$defs/TraceClaim"
+          },
+          {
+            "$ref": "#/$defs/SnippetClaim"
+          },
+          {
+            "$ref": "#/$defs/PatchClaim"
+          },
+          {
+            "$ref": "#/$defs/PocClaim"
+          },
+          {
+            "$ref": "#/$defs/ReferenceClaim"
+          },
+          {
+            "$ref": "#/$defs/OptionClaim"
+          },
+          {
+            "$ref": "#/$defs/ImpactClaim"
+          },
+          {
+            "$ref": "#/$defs/BehaviorClaim"
+          }
+        ]
+      },
+      "title": "Claims",
+      "type": "array"
+    },
+    "environment": {
+      "$ref": "#/$defs/Environment"
+    },
+    "evidence": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Evidence"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "report": {
+      "$ref": "#/$defs/Report"
+    },
+    "schema": {
+      "default": "https://github.com/rakshit-737/nikasha/blob/main/schema/result-v1.json",
+      "title": "Schema",
+      "type": "string"
+    },
+    "target": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ResolvedTarget"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "timings": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "title": "Timings",
+      "type": "object"
+    },
+    "tool_version": {
+      "title": "Tool Version",
+      "type": "string"
+    },
+    "verdict": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Verdict"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "tool_version",
+    "report"
+  ],
+  "title": "Result",
+  "type": "object"
+}
