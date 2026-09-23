@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+* text=auto eol=lf
+*.png binary
+*.gif binary
+*.ico binary
+uv.lock linguist-generated=true
+schema/*.json linguist-generated=true
