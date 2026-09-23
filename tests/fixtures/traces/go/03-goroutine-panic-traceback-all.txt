@@ -1,0 +1,24 @@
+panic: job 3 has no owner
+
+goroutine 8 [running]:
+main.worker(0x0?, 0x0?)
+	/src/programs/go/goroutine_panic.go:22 +0x9b
+created by main.main in goroutine 1
+	/src/programs/go/goroutine_panic.go:30 +0x33
+
+goroutine 1 [sync.WaitGroup.Wait]:
+sync.runtime_SemacquireWaitGroup(0x1b9caa6d4048?, 0xe0?)
+	/usr/lib/golang/src/runtime/sema.go:114 +0x2e
+sync.(*WaitGroup).Wait(0x1b9caa6d60a0)
+	/usr/lib/golang/src/sync/waitgroup.go:206 +0x85
+main.main()
+	/src/programs/go/goroutine_panic.go:32 +0x9d
+
+goroutine 7 [runnable]:
+main.main.gowrap1()
+	/src/programs/go/goroutine_panic.go:30
+runtime.goexit({})
+	/usr/lib/golang/src/runtime/asm_amd64.s:1771 +0x1
+created by main.main in goroutine 1
+	/src/programs/go/goroutine_panic.go:30 +0x33
+exit status 2
