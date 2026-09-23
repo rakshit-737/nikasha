@@ -154,7 +154,7 @@ show_missing = true
 skip_covered = true
 
 [tool.codespell]
-skip = "*.lock,*.svg,LICENSES/*,.git,.venv,SPEC.md,./tests/fixtures/tags"
+skip = "*.lock,*.svg,LICENSES/*,.git,.venv,SPEC.md,*/fixtures/tags/*"
 ignore-words-list = "nd"
 
 [dependency-groups]
