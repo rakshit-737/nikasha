@@ -54,8 +54,8 @@ bench: ## NikashaBench (arrives in M3.5/M6)
 docs: ## Documentation site (arrives in M8)
 	@echo "docs: not yet implemented (M8)"; exit 1
 
-screenshots: ## Regenerate terminal and HTML screenshots (arrives in M4)
-	@echo "screenshots: not yet implemented (M4)"; exit 1
+screenshots: ## Regenerate every README/docs image from real runs (SPEC §21.5)
+	$(UV) run python scripts/make_screenshots.py
 
 demo: ## Record the demo GIF with VHS (arrives in M8)
 	@echo "demo: not yet implemented (M8)"; exit 1

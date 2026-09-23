@@ -146,7 +146,7 @@ def extract(
     console = Console(record=bool(svg_path))
     render_extract(console, loaded, extraction.claims, extraction.warnings)
     if svg_path:
-        console.save_svg(svg_path, title=f"nikasha extract {report}")
+        _save_svg(console, svg_path, f"nikasha extract {report}")
 
 
 RepoOption = Annotated[str, typer.Option("--repo", help="Repository URL (https) or local path.")]
@@ -431,7 +431,7 @@ def check(  # noqa: PLR0917 - a CLI command's options are its signature
                 console, checked.ledger, checked.verdict, {e.id: e for e in checked.evidence}
             )
         if svg_path:
-            console.save_svg(svg_path, title=f"nikasha check {report}")
+            _save_svg(console, svg_path, f"nikasha check {report}")
     else:
         _write_out(_format_check(checked, output_format, str(report)), out)
 
@@ -512,6 +512,29 @@ def explain(
         raise typer.Exit(code=1)
     ledger = fuse(result.evidence)
     render_explain(Console(), ledger, result.verdict, {e.id: e for e in result.evidence})
+
+
+def _svg_theme() -> object | None:
+    """The rich theme for `--record-svg`, from ``NIKASHA_RECORD_SVG_THEME``.
+
+    The README needs a light and a dark capture of the same real command, so the theme is
+    an environment variable rather than a flag: `make screenshots` sets it, and nothing
+    about the recorded run changes otherwise.
+    """
+    name = os.environ.get("NIKASHA_RECORD_SVG_THEME", "").strip().lower()
+    if not name:
+        return None
+    from rich.terminal_theme import DIMMED_MONOKAI, MONOKAI, NIGHT_OWLISH  # noqa: PLC0415
+
+    return {"dark": MONOKAI, "dimmed": DIMMED_MONOKAI, "light": NIGHT_OWLISH}.get(name)
+
+
+def _save_svg(console: Console, path: str, title: str) -> None:
+    theme = _svg_theme()
+    if theme is None:
+        console.save_svg(path, title=title)
+    else:
+        console.save_svg(path, title=title, theme=theme)  # type: ignore[arg-type]
 
 
 def _resolve_repo(
