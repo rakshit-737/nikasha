@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+name: New reproduction recipe
+description: Propose a sandbox build-and-run recipe for another project.
+labels: ["recipe", "triage"]
+body:
+  - type: input
+    id: project
+    attributes:
+      label: Project and repository URL
+      placeholder: "libpng · https://github.com/pnggroup/libpng"
+    validations:
+      required: true
+  - type: textarea
+    id: build
+    attributes:
+      label: Sanitizer build steps
+      description: The commands that build the project with ASan/UBSan from a clean tree, and which tag range they work for.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: run
+    attributes:
+      label: How a proof of concept is run
+      description: CLI arguments, an input file, or a C harness linked against the library.
+    validations:
+      required: true
+  - type: input
+    id: known_bug
+    attributes:
+      label: A public, already-fixed bug for the recipe's test
+      placeholder: "CVE-… reproducible at tag …"
