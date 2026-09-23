@@ -41,10 +41,12 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
+    "markdown-it-py>=4.2",
     "platformdirs>=4.11.12",
     "pydantic>=2.13.5",
     "rich>=15.0.0",
     "typer>=0.27.2",
+    "unidiff>=1.0.1",
 ]
 
 [project.optional-dependencies]
@@ -85,6 +87,8 @@ include = [
 line-length = 100
 target-version = "py311"
 src = ["src", "tests"]
+# Fixture programs deliberately misbehave (their tracebacks are the fixtures).
+extend-exclude = ["tests/fixtures"]
 
 [tool.ruff.lint]
 select = [
@@ -92,11 +96,16 @@ select = [
 ]
 ignore = [
   "PLR0913", # CLI entry points legitimately take many options
+  "SIM905",  # "a b c".split() keeps long word lists readable
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "ANN", "PLR2004"]
-"scripts/**" = ["T20"]
+# The subprocess ban (TID251) guards the product code in src/; dev scripts and tests drive
+# git and podman directly. S108: /tmp paths in tests are test data.
+"tests/**" = ["S101", "S105", "S108", "ANN", "PLR2004", "TID251", "S603", "S607"]
+"scripts/**" = ["T20", "TID251", "S603", "S607"]
+# The capture table is data (one fixture per row); /tmp there is a path inside the container.
+"scripts/capture_trace_fixtures.py" = ["E501", "S108"]
 # The only two modules allowed to spawn processes (enforced again by tests/unit/test_process_boundary.py).
 "src/nikasha/code/gitio.py" = ["TID251", "S603"]
 "src/nikasha/repro/sandbox.py" = ["TID251", "S603"]
