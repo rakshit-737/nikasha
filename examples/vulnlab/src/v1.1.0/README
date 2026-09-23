@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+
+libhdr - a tiny HTTP-header parser (fictional demo library)
+===========================================================
+
+libhdr is a small C99 library that parses HTTP-style header lines of the form
+"Name: value" into a list you can query by name. It ships with hdrcat, a command
+line tool that prints each parsed header as "name=value".
+
+This is a FICTIONAL demo library created for the Nikasha project. It exists only
+to exercise Nikasha's vulnerability fact-checking pipeline against a repository
+with a known, deterministic git history. Later versions deliberately contain a
+memory-safety bug. Do not use libhdr for anything real.
+
+Public API (include/hdr.h)
+--------------------------
+  hdr_list_init / hdr_list_free   manage a header list
+  hdr_parse_line                  parse one "Name: value" line
+  hdr_parse_block                 parse a buffer of many header lines
+  hdr_get                         look up a value by name (case-insensitive)
+
+Building
+--------
+  make                 builds build/libhdr.a and build/hdrcat
+  make clean           removes the build directory
+
+The compiler and flags are overridable, e.g.
+  make CC=clang CFLAGS='-std=c99 -Wall -Wextra -Werror'
+
+hdrcat
+------
+  hdrcat [--fold] [--max-lines N] FILE
+
+  --fold          join obs-fold continuation lines onto the previous header
+  --max-lines N   read at most N lines
