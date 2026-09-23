@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+name: New trace format
+description: Ask Nikasha to parse another kind of crash trace or backtrace.
+labels: ["trace-format", "triage"]
+body:
+  - type: input
+    id: tool
+    attributes:
+      label: Tool that produces the trace
+      placeholder: "e.g. Windows ASan, lldb bt, .NET exception"
+    validations:
+      required: true
+  - type: textarea
+    id: samples
+    attributes:
+      label: Real sample traces
+      description: At least one trace from actually running the tool on public code. Say how it was produced.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Format notes
+      description: Runtime frames to ignore, path conventions, and any metadata lines worth checking.
