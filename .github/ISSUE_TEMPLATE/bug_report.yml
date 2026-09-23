@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+name: Bug report
+description: Nikasha crashed, errored, or behaved differently from its documentation.
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! If the problem is a **verdict** you disagree with, use the "False verdict" form instead.
+        **Never paste an embargoed or private vulnerability report here.** Issues are public.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you run, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Exact command
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output or traceback
+      description: Remove anything confidential first.
+      render: text
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `nikasha doctor`
+      render: text
+    validations:
+      required: true
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirmation
+      options:
+        - label: This issue contains no embargoed, private or third-party-confidential report content.
+          required: true
