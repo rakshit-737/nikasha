@@ -6,6 +6,8 @@ UV ?= uv
 UVX ?= uvx
 REUSE_VERSION ?= 6.2.0
 PLACEHOLDER_RE := TODO|TBD|lorem ipsum
+# The cache and a checkout may sit on different filesystems (e.g. NTFS); copy instead of hardlink.
+export UV_LINK_MODE ?= copy
 
 .PHONY: help setup lint fmt type test test-all bench docs screenshots demo release-check placeholders
 
@@ -31,8 +33,12 @@ fmt: ## Auto-format and apply safe fixes
 type: ## mypy --strict on src/
 	$(UV) run mypy
 
-test: ## Fast test suite with coverage
+CORE_PACKAGES := src/nikasha/extract/*,src/nikasha/code/*,src/nikasha/ingest/*,src/nikasha/model/*
+CORE_COVERAGE := 85
+
+test: ## Fast test suite with coverage, and the >=85% gate on the core packages (SPEC §20.3)
 	$(UV) run pytest --cov --cov-report=term
+	$(UV) run coverage report --include="$(CORE_PACKAGES)" --fail-under=$(CORE_COVERAGE) --skip-covered
 
 test-all: ## Every test, including the sandbox, network and slow suites
 	$(UV) run pytest -m "" --cov --cov-report=term
