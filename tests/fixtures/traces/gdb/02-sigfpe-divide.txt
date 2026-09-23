@@ -1,0 +1,10 @@
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib64/libthread_db.so.1".
+
+Program received signal SIGFPE, Arithmetic exception.
+0x00000000004004ee in ratio (a=700, b=0) at /src/programs/gdb/divide_sigfpe.c:8
+8	    return a / b;
+#0  0x00000000004004ee in ratio (a=700, b=0) at /src/programs/gdb/divide_sigfpe.c:8
+#1  0x00000000004004da in report (hits=7, total=0) at /src/programs/gdb/divide_sigfpe.c:13
+#2  0x0000000000400496 in main (argc=1, argv=0x7ffdfbdf58f8) at /src/programs/gdb/divide_sigfpe.c:19
+warning: Error disabling address space randomization: Function not implemented
