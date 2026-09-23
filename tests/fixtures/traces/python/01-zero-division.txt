@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "/src/programs/python/zero_division.py", line 19, in <module>
+    main()
+    ~~~~^^
+  File "/src/programs/python/zero_division.py", line 15, in main
+    print(success_rate({"ok": 3, "total": 0}))
+          ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/src/programs/python/zero_division.py", line 11, in success_rate
+    return divide(stats["ok"], stats["total"])
+  File "/src/programs/python/zero_division.py", line 7, in divide
+    return numerator / denominator
+           ~~~~~~~~~~^~~~~~~~~~~~~
+ZeroDivisionError: division by zero
