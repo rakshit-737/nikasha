@@ -55,10 +55,15 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: uv sync --locked --all-groups
       - run: uv run pytest --cov --cov-report=term
+      - name: Coverage gate on the core packages (SPEC §20.3)
+        run: >-
+          uv run coverage report --skip-covered --fail-under=85
+          --include="src/nikasha/extract/*,src/nikasha/code/*,src/nikasha/ingest/*,src/nikasha/model/*"
       - name: CLI smoke test
         run: |
           uv run nikasha version
           uv run nikasha doctor
+          uv run nikasha extract examples/reports/fabricated_hdr_overflow.md --json
 
   secrets:
     name: Secret scan (gitleaks)
