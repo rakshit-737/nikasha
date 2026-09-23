@@ -166,9 +166,14 @@ def csp(script: str) -> str:
 def build_page(*, title: str, fragments: Iterable[Fragment], description: str = "") -> str:
     """Assemble the one stylesheet, the one script and the body into a single file.
 
-    ``title`` and ``description`` must already be escaped by the caller, which is the one
-    place in this package where that is true — everything else escapes at the point of use.
+    ``title`` is escaped here as character data and ``description`` as an attribute value:
+    they are different sinks, and passing a text-escaped string into an attribute is the
+    "wrong escaper for the sink" mistake the escaping module's docstring warns about.
     """
+    from nikasha.render.html.escaping import attr, text  # noqa: PLC0415 - avoids a cycle
+
+    title = text(title)
+    description = attr(description)
     parts = list(fragments)
     css = BASE_CSS + "".join(f.css for f in parts if f.css)
     script = BASE_JS + "".join(f.js for f in parts if f.js)

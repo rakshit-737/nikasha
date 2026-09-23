@@ -10,6 +10,12 @@ scanning the source tree. Repositories are attacker-controlled input, so the wra
 * disables external diff drivers and textconv on commands that could invoke them;
 * scrubs inherited ``GIT_*`` variables and ignores system and global config by default.
 
+Because this is the only module that composes a git argv, it is also the only one that can
+strip the local clone path back out of it: :func:`command_record` turns a :class:`GitResult`
+into the :class:`~nikasha.model.evidence.CommandRecord` that evidence carries (ADR 0007
+decision 4), and the ``record`` argument on :class:`GitRepo`'s search methods collects one
+per invocation.
+
 Verified against git 2.55 docs and source on 2026-09-23 (see
 ``docs/research/2026-09-23-m0-verification.md``). ``-c diff.external=`` is deliberately
 *not* used: an empty value does not disable external diff, ``--no-ext-diff`` does.
@@ -17,15 +23,17 @@ Verified against git 2.55 docs and source on 2026-09-23 (see
 
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import subprocess
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping, MutableSequence, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from nikasha.errors import ExternalToolError, ForbiddenCommandError
+from nikasha.model.evidence import CommandRecord
 
 #: Subcommands production code may run.
 ALLOWED_SUBCOMMANDS: frozenset[str] = frozenset(
@@ -100,9 +108,115 @@ class GitResult:
     duration_ms: int
 
 
+#: Where a caller collects one :class:`CommandRecord` per git invocation it made. A plain
+#: ``list`` is the usual sink; a check builds one per evidence item.
+CommandSink = MutableSequence[CommandRecord]
+
+#: What replaces an argument that named an absolute location on this machine.
+REDACTED_PATH = "<path>"
+
+#: Global options that point git at one particular clone. Dropped **with their value**.
+_LOCAL_PATH_OPTIONS: frozenset[str] = frozenset({"-C", "--git-dir", "--work-tree", "--exec-path"})
+_LOCAL_PATH_PREFIXES: tuple[str, ...] = ("--git-dir=", "--work-tree=", "--exec-path=")
+
+#: sha256 of no bytes: the stdout hash of every command that printed nothing.
+EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
+
+_DRIVE_LETTER_LEN = 3
+
+
 def git_executable() -> str | None:
     """Return the path of the git executable on ``PATH``, or ``None``."""
     return shutil.which("git")
+
+
+def _is_absolute_path(arg: str) -> bool:
+    """Whether a whole argument is an absolute path (POSIX, UNC or ``C:\\``)."""
+    if arg.startswith(("/", "\\\\")):
+        return True
+    drive = arg[:_DRIVE_LETTER_LEN]
+    return len(drive) == _DRIVE_LETTER_LEN and drive[0].isalpha() and drive[1:] in (":/", ":\\")
+
+
+def redact_argv(argv: Sequence[str]) -> tuple[str, ...]:
+    """Rewrite a git argv into the machine-independent form that goes into evidence.
+
+    :func:`build_argv` composes ``<abs path to git> --no-pager -c <hardening> ...
+    -c safe.directory=<clone> --git-dir=<clone> <subcommand> <guards> <args>``. Three parts
+    of that are properties of *this* machine, not of the report, so they are removed:
+
+    * **argv[0]**, the absolute path of the git executable, becomes plain ``git``;
+    * **every ``-c <setting>`` pair**, including ``safe.directory=<clone cache>``. The
+      hardening settings say how Nikasha protected itself from a hostile repository; they
+      do not change what git reports, and one of them names the local clone (P3);
+    * **``--git-dir=``, ``--work-tree=``, ``--exec-path=`` and ``-C <dir>``**, which all
+      name the clone cache directory, and ``--no-pager``, which only affects a terminal.
+
+    Any remaining argument that is *entirely* an absolute path becomes
+    :data:`REDACTED_PATH`. That is deliberately conservative: it can blunt a search term
+    that happens to be nothing but a path, but it guarantees that a record forwarded with a
+    report carries no filesystem layout, and that two machines checking the same report
+    produce the same bytes (P2, P3).
+
+    What survives is the subcommand, its guards (``--no-ext-diff``, ``--no-textconv``) and
+    its arguments — revisions, ``--format``, the ``-e`` pattern, pathspecs — which is what a
+    reader needs to re-run the command inside their own clone of the repository (P6).
+    """
+    if not argv:
+        return ()
+    out: list[str] = ["git"]
+    rest = list(argv[1:])
+    index = 0
+    while index < len(rest):  # the global option area, up to the subcommand
+        arg = rest[index]
+        if arg == "-c" or arg in _LOCAL_PATH_OPTIONS:
+            index += 2  # the option and the value it consumes
+            continue
+        if arg == "--no-pager" or arg.startswith(_LOCAL_PATH_PREFIXES):
+            index += 1
+            continue
+        if not arg.startswith("-"):
+            break
+        out.append(arg)
+        index += 1
+    out += [REDACTED_PATH if _is_absolute_path(arg) else arg for arg in rest[index:]]
+    return tuple(out)
+
+
+def command_record(
+    result: GitResult, *, truncated: bool = False, include_duration: bool = False
+) -> CommandRecord:
+    """Turn one git invocation into the :class:`CommandRecord` evidence carries (P6).
+
+    The argv is redacted by :func:`redact_argv`, and stdout and stderr are hashed with
+    sha256 rather than stored: the bytes may be megabytes of a hostile repository's
+    contents, while the hash is enough to prove that a re-run produced the same output.
+
+    ``duration_ms`` is **0 unless ``include_duration`` is asked for**. Wall-clock time
+    differs between two runs on the same input, and a record lives inside ``Evidence``,
+    which ``Result.to_json`` must serialize byte-identically (P2); ``Result.timings`` is
+    where a duration belongs. It is not part of the evidence identity either — see
+    ``checks/base.make_evidence``, which hashes claims, outcome, strength, summary, details
+    and locations, and never ``commands`` — so recording a command can never move an
+    evidence ID.
+
+    ``truncated`` says that the caller stopped reading before the search was exhausted (a
+    hit cap), not that the hashed bytes are partial.
+    """
+    return CommandRecord(
+        argv=redact_argv(result.argv),
+        exit_code=result.returncode,
+        stdout_sha256=hashlib.sha256(result.stdout).hexdigest(),
+        stderr_sha256=hashlib.sha256(result.stderr).hexdigest(),
+        duration_ms=result.duration_ms if include_duration else 0,
+        truncated=truncated,
+    )
+
+
+def record_command(sink: CommandSink | None, result: GitResult, *, truncated: bool = False) -> None:
+    """Append ``result`` to ``sink`` as a redacted record, doing nothing without a sink."""
+    if sink is not None:
+        sink.append(command_record(result, truncated=truncated))
 
 
 def hardened_env(*, use_user_config: bool = False, online: bool = False) -> dict[str, str]:
@@ -356,14 +470,23 @@ class GitRepo:
         self._batch: CatFileBatch | None = None
 
     # -- plumbing ---------------------------------------------------------------------
-    def run(self, args: Sequence[str], *, timeout: float = DEFAULT_TIMEOUT_S) -> GitResult:
-        return run_git(
+    def run(
+        self,
+        args: Sequence[str],
+        *,
+        timeout: float = DEFAULT_TIMEOUT_S,
+        record: CommandSink | None = None,
+    ) -> GitResult:
+        """Run one plumbing command; ``record`` collects it (see :func:`command_record`)."""
+        result = run_git(
             args,
             git_dir=self.git_dir,
             timeout=timeout,
             online=self.online,
             use_user_config=self.use_user_config,
         )
+        record_command(record, result)
+        return result
 
     def close(self) -> None:
         if self._batch is not None:
@@ -377,11 +500,14 @@ class GitRepo:
         self.close()
 
     # -- refs -------------------------------------------------------------------------
-    def rev_parse(self, rev: str, *, kind: str = "commit") -> str | None:
+    def rev_parse(
+        self, rev: str, *, kind: str = "commit", record: CommandSink | None = None
+    ) -> str | None:
         """Full SHA of ``rev`` peeled to ``kind`` (``commit`` or ``tree``), or ``None``."""
         safe_rev(rev)
         result = self.run(
-            ["rev-parse", "--verify", "--quiet", "--end-of-options", f"{rev}^{{{kind}}}"]
+            ["rev-parse", "--verify", "--quiet", "--end-of-options", f"{rev}^{{{kind}}}"],
+            record=record,
         )
         out = result.stdout.decode("ascii", "replace").strip()
         return out if result.returncode == 0 and out else None
@@ -482,8 +608,13 @@ class GitRepo:
         files_only: bool = False,
         max_hits: int = 1000,
         timeout: float = 60.0,
+        record: CommandSink | None = None,
     ) -> list[GrepHit]:
-        """Fixed-string search across one or more trees, batched to keep argv short."""
+        """Fixed-string search across one or more trees, batched to keep argv short.
+
+        ``record`` collects one :class:`CommandRecord` per batch, the last one marked
+        ``truncated`` when the hit cap stopped the search early.
+        """
         if not pattern or "\n" in pattern:
             return []
         flags = (
@@ -496,18 +627,31 @@ class GitRepo:
             argv = ["grep", *flags, "-e", pattern, *batch, "--", *pathspecs]
             result = self.run(argv, timeout=timeout)
             hits += _parse_grep(result.stdout, batch, files_only=files_only)
-            if len(hits) >= max_hits:
+            capped = len(hits) >= max_hits
+            record_command(record, result, truncated=capped)
+            if capped:
                 return hits[:max_hits]
         return hits
 
-    def pickaxe_first(self, text: str, *, timeout: float = _PICKAXE_TIMEOUT_S) -> str | None:
+    def pickaxe_first(
+        self,
+        text: str,
+        *,
+        timeout: float = _PICKAXE_TIMEOUT_S,
+        record: CommandSink | None = None,
+    ) -> str | None:
         """A commit on any ref whose diff adds or removes ``text`` (``log --all -S``), or
         ``None`` if history never contained it. Raises :class:`HistoryTimeoutError` when
-        the budget runs out, so callers can report incomplete history (SPEC §12 C03)."""
+        the budget runs out, so callers can report incomplete history (SPEC §12 C03).
+
+        Nothing is appended to ``record`` when the search times out: there is no exit code
+        and no output to hash, and inventing either would be a lie about what ran (P6)."""
         if not text or any(ord(ch) < _PRINTABLE for ch in text):
             return None
         try:
-            result = self.run(["log", "--all", "-1", "--format=%H", f"-S{text}"], timeout=timeout)
+            result = self.run(
+                ["log", "--all", "-1", "--format=%H", f"-S{text}"], timeout=timeout, record=record
+            )
         except ExternalToolError as exc:
             raise HistoryTimeoutError(str(exc)) from exc
         sha = result.stdout.decode("ascii", "replace").strip()

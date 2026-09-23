@@ -72,7 +72,7 @@ def _ring(score: int, klass: str) -> str:
     filled = _CIRCUMFERENCE * max(0, min(100, score)) / 100
     return (
         '<svg class="ring" width="128" height="128" viewBox="0 0 110 110" role="img" '
-        f'aria-label="Grounding score {esc(score)} out of 100">'
+        f'aria-label="Grounding score {attr(score)} out of 100">'
         f'<circle class="track" cx="55" cy="55" r="{_RADIUS}" fill="none" stroke-width="9"/>'
         f'<circle cx="55" cy="55" r="{_RADIUS}" fill="none" stroke-width="9" '
         f'stroke="currentColor" stroke-linecap="round" '

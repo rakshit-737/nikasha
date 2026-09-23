@@ -26,7 +26,7 @@ from nikasha.checks.strengths import Strengths, default_strengths
 from nikasha.code.gitio import HistoryTimeoutError
 from nikasha.code.pathtrie import normalize_components
 from nikasha.model.claims import Claim, ClaimKind, FileClaim, Frame, LineClaim, TraceClaim
-from nikasha.model.evidence import Evidence
+from nikasha.model.evidence import CommandRecord, Evidence
 
 CHECK_ID = "C02"
 GROUP = "locus"
@@ -86,6 +86,9 @@ class _History:
     complete: bool
     first_commit: str | None = None
     reason: str | None = None
+    #: The pickaxe that answered, when one ran. A search that was refused or timed out
+    #: records nothing: there is no exit code or output to hash (P6).
+    commands: tuple[CommandRecord, ...] = ()
 
     @property
     def never_seen(self) -> bool:
@@ -148,13 +151,16 @@ class _Trees:
             self._shallow = ctx.resolution.repo.is_shallow()
         if self._shallow:
             return _History(False, reason="the clone is shallow")
+        records: list[CommandRecord] = []
         try:
-            first = ctx.resolution.repo.pickaxe_first(name, timeout=ctx.history_timeout)
+            first = ctx.resolution.repo.pickaxe_first(
+                name, timeout=ctx.history_timeout, record=records
+            )
         except HistoryTimeoutError:
             return _History(
                 False, reason=f"the history search timed out after {ctx.history_timeout:g}s"
             )
-        return _History(True, first_commit=first)
+        return _History(True, first_commit=first, commands=tuple(records))
 
 
 @register
@@ -273,6 +279,7 @@ class FileExists(BaseCheck):
                     "never_in_history": True,
                     "core_claim": core,
                 },
+                commands=history.commands,
             )
 
         # P4: absence is not established, so the strong outcome is withheld and the reason
@@ -296,6 +303,7 @@ class FileExists(BaseCheck):
             strength=self.strengths.get(CHECK_ID, "missing_here_present_elsewhere"),
             summary=f"{missing}, but absence is not established: {note}",
             details=details,
+            commands=history.commands,
         )
 
     def _elsewhere(self, ctx: CheckContext, claim: Claim, path: str, scan: _Scan) -> Evidence:

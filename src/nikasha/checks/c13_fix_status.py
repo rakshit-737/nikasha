@@ -28,7 +28,7 @@ from nikasha.checks.strengths import Strengths, default_strengths
 from nikasha.code.gitio import safe_rev
 from nikasha.errors import ExternalToolError
 from nikasha.model.claims import Claim, ClaimKind, FileClaim, LineClaim, SymbolClaim
-from nikasha.model.evidence import Evidence
+from nikasha.model.evidence import CommandRecord, Evidence
 
 CHECK_ID = "C13"
 GROUP = "info"
@@ -68,9 +68,11 @@ class FixStatus(BaseCheck):
         for path in sorted(loci):
             if ctx.expired():
                 break
-            commits = self._later_commits(ctx, branch, path, ref_epoch)
+            # One sink per path: the evidence for a file carries the log that produced it.
+            records: list[CommandRecord] = []
+            commits = self._later_commits(ctx, branch, path, ref_epoch, records)
             if commits:
-                out.append(self._evidence(ctx, path, branch, loci[path], commits))
+                out.append(self._evidence(ctx, path, branch, loci[path], commits, commands=records))
         return out
 
     # --- finding the locus --------------------------------------------------------------
@@ -98,9 +100,18 @@ class FixStatus(BaseCheck):
     # --- the path log ---------------------------------------------------------------------
 
     def _later_commits(
-        self, ctx: CheckContext, branch: str, path: str, ref_epoch: int
+        self,
+        ctx: CheckContext,
+        branch: str,
+        path: str,
+        ref_epoch: int,
+        records: list[CommandRecord],
     ) -> list[tuple[str, int]]:
-        """``(sha, committer epoch)`` for post-ref commits on ``branch`` touching ``path``."""
+        """``(sha, committer epoch)`` for post-ref commits on ``branch`` touching ``path``.
+
+        The log is appended to ``records`` when it ran at all, so the evidence can show the
+        exact query and the hash of what it printed (P6).
+        """
         argv = [
             "log",
             "--format=%H %ct",
@@ -112,7 +123,7 @@ class FixStatus(BaseCheck):
             f":(literal){path}",
         ]
         try:
-            result = ctx.resolution.repo.run(argv, timeout=LOG_TIMEOUT_S)
+            result = ctx.resolution.repo.run(argv, timeout=LOG_TIMEOUT_S, record=records)
         except ExternalToolError:
             # A history query that runs out of time yields no information, never a finding.
             return []
@@ -134,6 +145,8 @@ class FixStatus(BaseCheck):
         branch: str,
         claims: Sequence[Claim],
         commits: Sequence[tuple[str, int]],
+        *,
+        commands: Sequence[CommandRecord] = (),
     ) -> Evidence:
         listed = list(commits[:MAX_COMMITS])
         truncated = len(commits) > MAX_COMMITS
@@ -162,6 +175,7 @@ class FixStatus(BaseCheck):
             # The finding is about the file's history, so the location just pins the file
             # as it stood at the version the report names.
             locations=[ctx.location(path, 1)],
+            commands=commands,
         )
 
 

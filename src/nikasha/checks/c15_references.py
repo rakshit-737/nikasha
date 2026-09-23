@@ -46,7 +46,7 @@ import yaml
 
 from nikasha.checks.base import BaseCheck, CheckContext, CheckError, make_evidence, register
 from nikasha.checks.strengths import Strengths, default_strengths
-from nikasha.code.gitio import GitRepo, safe_rev
+from nikasha.code.gitio import CommandSink, GitRepo, safe_rev
 from nikasha.errors import NikashaError
 from nikasha.model.claims import (
     Claim,
@@ -59,7 +59,7 @@ from nikasha.model.claims import (
     ReferenceClaim,
     TraceClaim,
 )
-from nikasha.model.evidence import Evidence
+from nikasha.model.evidence import CommandRecord, Evidence
 from nikasha.version import __version__
 
 CHECK_ID = "C15"
@@ -353,12 +353,19 @@ def _touched_matches(
     return sorted(hits)
 
 
-def _touched_paths(repo: GitRepo, commit: str) -> tuple[str, ...]:
-    """The paths one commit changed (empty for a merge, or when git could not tell us)."""
+def _touched_paths(
+    repo: GitRepo, commit: str, record: CommandSink | None = None
+) -> tuple[str, ...]:
+    """The paths one commit changed (empty for a merge, or when git could not tell us).
+
+    ``record`` collects the log for the evidence; a timeout adds nothing to it, because a
+    command that never returned has no exit code or output to record honestly (P6).
+    """
     try:
         result = repo.run(
             ["log", "-1", "--format=", "--name-only", "-z", "--end-of-options", safe_rev(commit)],
             timeout=_GIT_TIMEOUT_S,
+            record=record,
         )
     except NikashaError:
         return ()  # a timeout tells us nothing about the commit, so we claim nothing (P4)
@@ -421,21 +428,34 @@ class References(BaseCheck):
         for sha, group in cited:
             if ctx.expired():
                 break
-            resolved = repo.rev_parse(sha)
+            # One sink per cited SHA: the rev-parse that looked for it, then the log
+            # that listed what it touched.
+            records: list[CommandRecord] = []
+            resolved = repo.rev_parse(sha, record=records)
             if resolved is None:
-                out.append(self._commit_missing(ctx, sha, group))
+                out.append(self._commit_missing(ctx, sha, group, records))
                 continue
-            touched = _touched_paths(repo, resolved)
+            touched = _touched_paths(repo, resolved, records)
             hits = _touched_matches(ctx, touched, claimed)
             out.append(
-                self._commit_found(ctx, sha, resolved, touched=touched, hits=hits, claims=group)
+                self._commit_found(
+                    ctx, sha, resolved, touched=touched, hits=hits, claims=group, commands=records
+                )
             )
         return out
 
     def _commit_missing(
-        self, ctx: CheckContext, sha: str, claims: Sequence[ReferenceClaim]
+        self,
+        ctx: CheckContext,
+        sha: str,
+        claims: Sequence[ReferenceClaim],
+        commands: Sequence[CommandRecord] = (),
     ) -> Evidence:
-        """SPEC §10: a SHA we cannot resolve is unresolved, not fabricated."""
+        """SPEC §10: a SHA we cannot resolve is unresolved, not fabricated.
+
+        ``commands`` carries the failed ``rev-parse``, which is the whole of the finding:
+        exit 1 and no output is what "not in this repository" means here.
+        """
         return make_evidence(
             check_id=CHECK_ID,
             group=GROUP,
@@ -452,6 +472,7 @@ class References(BaseCheck):
                     "mirror? A link to the commit would let us confirm this quickly."
                 ),
             },
+            commands=commands,
         )
 
     def _commit_found(
@@ -463,6 +484,7 @@ class References(BaseCheck):
         touched: Sequence[str],
         hits: Sequence[str],
         claims: Sequence[ReferenceClaim],
+        commands: Sequence[CommandRecord] = (),
     ) -> Evidence:
         key = "commit_touches_file" if hits else "commit_exists"
         details: dict[str, Any] = {
@@ -487,6 +509,7 @@ class References(BaseCheck):
             summary=summary,
             details=details,
             locations=[ctx.location(path, 1) for path in located],
+            commands=commands,
         )
 
     # --- repository links ---------------------------------------------------------------

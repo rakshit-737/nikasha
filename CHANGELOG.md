@@ -14,6 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- M4 HTML report and media:
+  - `nikasha check --format html`: one self-contained file that makes no network request
+    at all, enforced by a Content-Security-Policy that pins the single inline script by
+    hash. Eleven views: hero with score ring, claims table, the report text with every
+    claim underlined in its outcome colour, evidence cards with source excerpts, the symbol
+    timeline strip, the trace alignment table, the version-fit chart, the patch view, the
+    reporter questions with "Copy as reply", the scoring ledger, and a JSON download.
+  - Light and dark themes, a print stylesheet, keyboard navigation and WCAG 2.1 AA contrast.
+  - `make screenshots`: every README image regenerated from a real run.
+  - A security suite that runs over whatever components exist, so a view added later is
+    covered without editing it. Mutation-tested against 22 deliberate vulnerabilities.
+
 - M3 checks, fusion and CLI outputs:
   - `nikasha check`: a report in, an evidence-backed verdict out (REPRODUCED / GROUNDED /
     MIXED / UNGROUNDED / INSUFFICIENT), entirely offline. Exit codes 0/10/20/30 let CI

@@ -5,6 +5,7 @@
 A component is a module in :mod:`nikasha.render.html.components` exposing::
 
     ORDER: int                       # where it sits on the page, low first
+    COLUMN: str                      # optional: "left" or "right" (see below)
     def render(ctx: HtmlContext) -> Fragment | None
 
 Components are discovered, so adding one is adding a file — no shared registry to edit.
@@ -78,6 +79,8 @@ def render_html_result(
         tool_version=tool_version or result.tool_version,
     )
     fragments: list[Fragment] = []
+    columns: dict[str, list[Fragment]] = {"left": [], "right": []}
+    column_slot: int | None = None
     failed: list[str] = []
     for _order, name, module in component_modules():
         try:
@@ -85,8 +88,18 @@ def render_html_result(
         except Exception as exc:  # one broken view must not cost the whole report
             failed.append(f"{name}: {type(exc).__name__}: {exc}")
             continue
-        if fragment is not None:
+        if fragment is None:
+            continue
+        side = getattr(module, "COLUMN", None)
+        if side in columns:
+            if column_slot is None:
+                column_slot = len(fragments)
+                fragments.append(Fragment(html=""))  # reserved; filled in below
+            columns[str(side)].append(fragment)
+        else:
             fragments.append(fragment)
+    if column_slot is not None:
+        fragments[column_slot] = _columns(columns)
     if failed:
         # Say so on the page rather than quietly shipping a report with a hole in it.
         notes = "".join(f"<li>{esc(note)}</li>" for note in failed)
@@ -98,12 +111,32 @@ def render_html_result(
         )
     label = result.verdict.label if result.verdict is not None else "report"
     return build_page(
-        title=esc(f"Nikasha: {label}"),
-        description=esc(
+        title=f"Nikasha: {label}",
+        description=(
             f"Evidence-backed check of a vulnerability report against the code at the "
             f"version it names. Verdict: {label}."
         ),
         fragments=fragments,
+    )
+
+
+def _columns(columns: dict[str, list[Fragment]]) -> Fragment:
+    """Fold the ``COLUMN`` components into one side-by-side band.
+
+    The CSS collapses to a single column under 1000px, so the markup order is also the
+    reading order on a phone: the report first, then the evidence about it.
+    """
+    left = chr(10).join(f.html for f in columns["left"])
+    right = chr(10).join(f.html for f in columns["right"])
+    css = "".join(f.css for side in columns.values() for f in side if f.css)
+    js = "".join(f.js for side in columns.values() for f in side if f.js)
+    if not left or not right:
+        # Only one side has anything to show; a grid with an empty half wastes the width.
+        return Fragment(html=left + right, css=css, js=js)
+    return Fragment(
+        html=f'<div class="columns"><div>{left}</div><div>{right}</div></div>',
+        css=css,
+        js=js,
     )
 
 

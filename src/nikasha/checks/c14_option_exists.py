@@ -32,7 +32,7 @@ from nikasha.checks.strengths import Strengths, default_strengths
 from nikasha.code.gitio import HistoryTimeoutError
 from nikasha.code.literal import LiteralResult, literal_search
 from nikasha.model.claims import Claim, ClaimKind, OptionClaim
-from nikasha.model.evidence import Evidence
+from nikasha.model.evidence import CommandRecord, Evidence
 from nikasha.resolve.refs import Release
 
 CHECK_ID = "C14"
@@ -158,6 +158,10 @@ class OptionExists(BaseCheck):
     # --- the option is not there ---------------------------------------------------------
 
     def _absent(self, ctx: CheckContext, claim: OptionClaim, at_ref: LiteralResult) -> Evidence:
+        # ``literal_search`` surfaces only a command *string*, so the search at the ref
+        # stays in ``details['commands']``; the release sweep and the pickaxe below run
+        # through ``GitRepo``, which hands back real records (P6).
+        records: list[CommandRecord] = []
         others = [r for r in ctx.resolution.releases.finals() if r.commit != ctx.commit]
         if ctx.expired():
             # Nothing was searched beyond the ref, so there is no refutation to withhold.
@@ -168,15 +172,20 @@ class OptionExists(BaseCheck):
                 [at_ref.command],
                 "the check's time budget ran out before the other releases",
                 withheld=0.0,
+                records=records,
             )
-        found, command = self._sweep(ctx, at_ref.literal, others)
+        found, command = self._sweep(ctx, at_ref.literal, others, records)
         commands = [at_ref.command, command]
         if found:
-            return self._other_release_only(ctx, claim, at_ref, found, commands)
-        return self._never(ctx, claim, at_ref, others, commands)
+            return self._other_release_only(ctx, claim, at_ref, found, commands, records=records)
+        return self._never(ctx, claim, at_ref, others, commands, records=records)
 
     def _sweep(
-        self, ctx: CheckContext, token: str, others: Sequence[Release]
+        self,
+        ctx: CheckContext,
+        token: str,
+        others: Sequence[Release],
+        records: list[CommandRecord],
     ) -> tuple[list[tuple[str, tuple[str, ...]]], str]:
         """Which of ``others`` contain ``token``, and the git command that asked.
 
@@ -193,6 +202,7 @@ class OptionExists(BaseCheck):
             word=True,
             files_only=True,
             max_hits=MAX_SWEEP_FILES,
+            record=records,
         )
         by_commit: dict[str, set[str]] = {}
         for hit in hits:
@@ -211,6 +221,8 @@ class OptionExists(BaseCheck):
         at_ref: LiteralResult,
         found: Sequence[tuple[str, tuple[str, ...]]],
         commands: Sequence[str],
+        *,
+        records: Sequence[CommandRecord] = (),
     ) -> Evidence:
         names = [name for name, _ in found]
         paths = sorted({path for _, release_paths in found for path in release_paths})
@@ -232,6 +244,7 @@ class OptionExists(BaseCheck):
                 summary=f"{at_ref.literal} is absent at {_where(ctx)} and appears in"
                 f" {_listed(names)} only in generated files, which are not judged",
                 details=details,
+                commands=records,
             )
         return make_evidence(
             check_id=CHECK_ID,
@@ -242,6 +255,7 @@ class OptionExists(BaseCheck):
             summary=f"{at_ref.literal} does not appear at {_where(ctx)};"
             f" it appears in {_listed(names)} ({_listed(paths)})",
             details=details | {"outcome": "other_release_only"},
+            commands=records,
         )
 
     def _never(
@@ -251,6 +265,8 @@ class OptionExists(BaseCheck):
         at_ref: LiteralResult,
         others: Sequence[Release],
         commands: Sequence[str],
+        *,
+        records: list[CommandRecord],
     ) -> Evidence:
         """Nothing in any release: only a completed history search may call that fabricated."""
         repo = ctx.resolution.repo
@@ -258,12 +274,16 @@ class OptionExists(BaseCheck):
         never = self.strengths.get(CHECK_ID, "never_in_history")
         blocked = self._history_blocked(ctx, at_ref.literal)
         if blocked is not None:
-            return self._incomplete(ctx, claim, at_ref, commands, blocked, withheld=never)
+            return self._incomplete(
+                ctx, claim, at_ref, commands, blocked, withheld=never, records=records
+            )
         try:
-            first = repo.pickaxe_first(at_ref.literal, timeout=ctx.history_timeout)
+            first = repo.pickaxe_first(at_ref.literal, timeout=ctx.history_timeout, record=records)
         except HistoryTimeoutError as exc:
             reason = f"the history search did not finish ({exc})"
-            return self._incomplete(ctx, claim, at_ref, commands, reason, withheld=never)
+            return self._incomplete(
+                ctx, claim, at_ref, commands, reason, withheld=never, records=records
+            )
         pickaxe = shlex.join(["git", "log", "--all", "-1", f"-S{at_ref.literal}"])
         details = self._common(claim, at_ref, [*commands, pickaxe])
         details |= {"releases_searched": searched, "history_complete": True}
@@ -280,6 +300,7 @@ class OptionExists(BaseCheck):
                 summary=f"{at_ref.literal} is in no release of the {searched} searched,"
                 f" though commit {first[:12]} contains it",
                 details=details,
+                commands=records,
             )
         return make_evidence(
             check_id=CHECK_ID,
@@ -290,6 +311,7 @@ class OptionExists(BaseCheck):
             summary=f"{at_ref.literal} appears in none of the {searched} releases searched"
             " and in no commit in the repository's history",
             details=details | {"outcome": "never_in_history"},
+            commands=records,
         )
 
     def _history_blocked(self, ctx: CheckContext, token: str) -> str | None:
@@ -311,6 +333,7 @@ class OptionExists(BaseCheck):
         reason: str,
         *,
         withheld: float,
+        records: Sequence[CommandRecord] = (),
     ) -> Evidence:
         """P4: an unfinished search is not absence. Record the refutation we did not make.
 
@@ -328,6 +351,7 @@ class OptionExists(BaseCheck):
             summary=f"{at_ref.literal} is not in the tree at {_where(ctx)}, but {reason},"
             " so its absence is not evidence",
             details=details,
+            commands=records,
         )
 
     def _common(

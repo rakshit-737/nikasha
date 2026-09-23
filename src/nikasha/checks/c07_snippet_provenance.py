@@ -53,7 +53,7 @@ from nikasha.code.gitio import HistoryTimeoutError
 from nikasha.code.languages import detect_language
 from nikasha.code.literal import literal_search, searchable
 from nikasha.model.claims import Claim, ClaimKind, SnippetClaim
-from nikasha.model.evidence import CodeLocation, Evidence, Outcome
+from nikasha.model.evidence import CodeLocation, CommandRecord, Evidence, Outcome
 from nikasha.resolve.refs import Release
 
 CHECK_ID = "C07"
@@ -241,7 +241,11 @@ class _Scan:
     _hits: dict[tuple[str, str], int] = field(default_factory=dict, repr=False)
     #: The greps and pickaxes run for the *current* snippet, so each evidence item records
     #: only the commands behind it (P6). File tokens stay cached across snippets.
+    #: ``commands`` holds the re-runnable command *strings* (``literal_search`` surfaces
+    #: nothing else); ``records`` holds the full :class:`CommandRecord` for the
+    #: invocations made through :class:`~nikasha.code.gitio.GitRepo` itself.
     commands: list[str] = field(default_factory=list)
+    records: list[CommandRecord] = field(default_factory=list)
 
     def file(self, commit: str, path: str) -> tuple[tuple[Token, ...], tuple[Fingerprint, ...]]:
         """The tokens and fingerprints of ``path`` at ``commit`` (empty when unreadable)."""
@@ -336,9 +340,13 @@ class _Scan:
         )
 
     def never_in_history(self, term: str) -> bool | None:
-        """Whether ``git log --all -S<term>`` finds nothing; ``None`` when it could not run."""
+        """Whether ``git log --all -S<term>`` finds nothing; ``None`` when it could not run.
+
+        A pickaxe that timed out leaves no record behind: there is no exit code and no
+        output to hash, and a fabricated one would be worse than none (P6).
+        """
         try:
-            first = self.ctx.resolution.repo.pickaxe_first(term)
+            first = self.ctx.resolution.repo.pickaxe_first(term, record=self.records)
         except HistoryTimeoutError:
             return None
         command = shlex.join(["git", "log", "--all", "-1", "--format=%H", f"-S{term}"])
@@ -429,6 +437,7 @@ class SnippetProvenance(BaseCheck):
     def _one(self, scan: _Scan, claim: SnippetClaim) -> Evidence | None:
         ctx = scan.ctx
         scan.commands.clear()
+        scan.records.clear()
         snippet = _prepare(claim)
         if snippet is None:
             return None  # comments and prose only: there is nothing to look for
@@ -635,6 +644,7 @@ class SnippetProvenance(BaseCheck):
             summary=summary + note,
             details=payload,
             locations=[location] if location is not None else [],
+            commands=tuple(scan.records),
         )
 
 

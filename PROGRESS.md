@@ -14,7 +14,7 @@ The living build log. Milestones follow SPEC §22, plus **M3.5** from ADR 0003.
 | M2 Resolution and code intelligence | **done** (numbers in ADR 0004) |
 | M3 Checks, fusion, CLI outputs | **done** (numbers below) |
 | M3.5 Early real-world gate (curl corpus vs. slopcheck) | not started |
-| M4 HTML report and media v1 | not started |
+| M4 HTML report and media v1 | **done** (PNG captures need Playwright; CI is the source of truth) |
 | M5 Sandbox reproduction | not started |
 | M6 NikashaBench | not started |
 | M7 Integrations | not started |
@@ -252,6 +252,35 @@ The living build log. Milestones follow SPEC §22, plus **M3.5** from ADR 0003.
    paths (a P3 leak into rendered reports) and `duration_ms` would break byte-identical
    JSON. It needs one shared helper with a redacted argv and the duration kept out of the
    identity payload.
+
+## M4: HTML report and media (2026-09-24)
+
+### Done
+- The self-contained report (SPEC §15.2): CSP `default-src 'none'` with the one script pinned
+  by sha256, an escaping contract with no "mark safe" helper, excerpts read at render time,
+  eleven discovered components, a two-column band, light/dark/print themes.
+- `make screenshots`: ten terminal SVGs from real runs; HTML PNGs skip with instructions
+  when Playwright is absent (it needs a browser download).
+- pygments added (planned in ADR 0002); `cvss` deliberately not adopted (ADR 0002).
+
+### Numbers
+- **Tests: 4,143 passing** (3,493 at M3). Core coverage unchanged at 95%.
+- Pages: fabricated 238 KB, genuine 265 KB, vague 19 KB; a 300-claim stress result 945 KB
+  against the 1.5 MB budget. Deterministic, CSP hash verified from the rendered document.
+- The security suite mutation-tested 22 injected vulnerabilities: all caught, 0 false positives.
+
+### Found and fixed
+- Two "wrong escaper for the sink" cases (meta description, an SVG aria-label), both
+  unreachable today, both fixed.
+- The `data:` download link was verified in headless Chrome under the real CSP: the file
+  downloads byte-identical to the embedded JSON.
+
+### Open
+- C08 records frame findings as prose; the trace table classifies sentences back. It should
+  emit booleans (`checks: {file, function, line}`). C03's `uncertain` branch omits `defined_in`.
+- `Result.to_json` sorts keys, so C10's release-ordered `ratios` loses order on a JSON round
+  trip. Record an ordered list alongside.
+- PNG captures and the web-UI capture need Playwright (network); `screenshots.yml` owns them.
 
 ## Carry-overs to later milestones
 

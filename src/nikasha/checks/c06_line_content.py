@@ -38,7 +38,7 @@ from nikasha.checks.strengths import Strengths, default_strengths
 from nikasha.code.gitio import GrepHit, HistoryTimeoutError
 from nikasha.code.literal import literal_search, searchable
 from nikasha.model.claims import Claim, ClaimKind, LineClaim
-from nikasha.model.evidence import CodeLocation, Evidence, Outcome
+from nikasha.model.evidence import CodeLocation, CommandRecord, Evidence, Outcome
 
 CHECK_ID = "C06"
 GROUP = "code_quotes"
@@ -243,11 +243,15 @@ class LineContent(BaseCheck):
         base: dict[str, Any] = {"path": path, "line": claim.line, "quote": _clip(quote)}
         where = ctx.ref_name or ctx.commit[:12]
 
+        # ``literal_search`` hands back the equivalent command as a *string* only, so the
+        # ref-level search stays in ``details['command']``; the release sweep and the
+        # pickaxe below go through ``GitRepo`` directly and yield real records (P6).
         at_ref = literal_search(ctx.resolution.repo, text, ctx.commit)
         if at_ref is not None and at_ref.hits:
             return self._at_ref(ctx, claim, path, at_ref.hits, {**base, "command": at_ref.command})
 
-        found_in = self._other_releases(ctx, text)
+        records: list[CommandRecord] = []
+        found_in = self._other_releases(ctx, text, records)
         if found_in:
             return self._evidence(
                 claim,
@@ -256,8 +260,9 @@ class LineContent(BaseCheck):
                 summary=f"the quoted line is not in the tree at {where};"
                 f" it is in {', '.join(found_in[:MAX_REPORTED_HITS])}",
                 details={**base, "outcome": "other_release_only", "found_in_releases": found_in},
+                commands=records,
             )
-        return self._history(ctx, claim, path, text, base)
+        return self._history(ctx, claim, path, text, base, records=records)
 
     def _at_ref(
         self,
@@ -333,7 +338,9 @@ class LineContent(BaseCheck):
             locations=[ctx.location(first.path, first.line, excerpt=first.text.strip() or None)],
         )
 
-    def _other_releases(self, ctx: CheckContext, text: str) -> list[str]:
+    def _other_releases(
+        self, ctx: CheckContext, text: str, records: list[CommandRecord]
+    ) -> list[str]:
         """Release names whose tree holds ``text``, sorted; empty when the budget is spent."""
         by_commit = {
             release.commit: release.name
@@ -342,7 +349,7 @@ class LineContent(BaseCheck):
         }
         if not by_commit or ctx.expired():
             return []
-        hits = ctx.resolution.repo.grep(text, sorted(by_commit), files_only=True)
+        hits = ctx.resolution.repo.grep(text, sorted(by_commit), files_only=True, record=records)
         return sorted({by_commit[hit.rev] for hit in hits if hit.rev in by_commit})
 
     def _history(
@@ -352,17 +359,21 @@ class LineContent(BaseCheck):
         path: str | None,
         text: str,
         base: dict[str, Any],
+        *,
+        records: list[CommandRecord],
     ) -> Evidence:
         """The last rung: only a search that truly finished may say "nowhere" (P4)."""
         where = ctx.ref_name or ctx.commit[:12]
         reason = self._history_blocker(ctx, path, text)
         if reason is None:
             try:
-                first = ctx.resolution.repo.pickaxe_first(text, timeout=self._budget(ctx))
+                first = ctx.resolution.repo.pickaxe_first(
+                    text, timeout=self._budget(ctx), record=records
+                )
             except HistoryTimeoutError:
                 reason = "the history search timed out"
             else:
-                return self._searched_history(ctx, claim, first, base)
+                return self._searched_history(ctx, claim, first, base, records)
         # P4: an inconclusive search is not evidence of invention. Say what was and was not
         # searched; the fuser sees the withheld strength without being able to count it.
         return self._evidence(
@@ -377,10 +388,16 @@ class LineContent(BaseCheck):
                 "history_complete": False,
                 "incomplete": reason,
             },
+            commands=records,
         )
 
     def _searched_history(
-        self, ctx: CheckContext, claim: LineClaim, first: str | None, base: dict[str, Any]
+        self,
+        ctx: CheckContext,
+        claim: LineClaim,
+        first: str | None,
+        base: dict[str, Any],
+        records: list[CommandRecord],
     ) -> Evidence:
         where = ctx.ref_name or ctx.commit[:12]
         if first is not None:
@@ -398,6 +415,7 @@ class LineContent(BaseCheck):
                     "found_in_releases": [],
                     "first_commit_with_text": first,
                 },
+                commands=records,
             )
         return self._evidence(
             claim,
@@ -411,6 +429,7 @@ class LineContent(BaseCheck):
                 "history_complete": True,
                 "never_in_history": True,
             },
+            commands=records,
         )
 
     @staticmethod
@@ -446,6 +465,7 @@ class LineContent(BaseCheck):
         summary: str,
         details: dict[str, Any],
         locations: Sequence[CodeLocation] = (),
+        commands: Sequence[CommandRecord] = (),
     ) -> Evidence:
         return make_evidence(
             check_id=CHECK_ID,
@@ -456,6 +476,7 @@ class LineContent(BaseCheck):
             summary=summary,
             details=details,
             locations=locations,
+            commands=commands,
         )
 
 
