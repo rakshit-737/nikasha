@@ -7,13 +7,16 @@ from __future__ import annotations
 import json
 import os
 import sys
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from nikasha.doctor import run_doctor
+
+if TYPE_CHECKING:
+    from nikasha.resolve.target import Resolution
 from nikasha.errors import NikashaError
 from nikasha.version import __version__
 
@@ -142,6 +145,229 @@ def extract(
     render_extract(console, loaded, extraction.claims, extraction.warnings)
     if svg_path:
         console.save_svg(svg_path, title=f"nikasha extract {report}")
+
+
+RepoOption = Annotated[str, typer.Option("--repo", help="Repository URL (https) or local path.")]
+OnlineOption = Annotated[
+    bool, typer.Option("--online", help="Allow network access (clone or refresh the repository).")
+]
+JsonOption = Annotated[bool, typer.Option("--json", help="Emit JSON instead of a table.")]
+
+
+@app.command()
+def index(
+    repo: RepoOption,
+    ref: Annotated[str | None, typer.Option("--ref", help="Git ref to index.")] = None,
+    version: Annotated[str | None, typer.Option("--version", help="Release to index.")] = None,
+    history: Annotated[
+        bool, typer.Option("--history", help="Index every final release (full timeline).")
+    ] = False,
+    online: OnlineOption = False,
+) -> None:
+    """Clone (with --online) and index a repository for fast, offline checks.
+
+    Example:
+        nikasha index --repo https://github.com/curl/curl --online
+        nikasha index --repo ./libhdr.git --history
+    """
+    from nikasha.code.index import CodeIndex  # noqa: PLC0415
+
+    try:
+        res = _resolve_repo(repo, ref=ref, version=version, online=online)
+        console = Console()
+        with res.repo, CodeIndex(res.repo) as idx:
+            targets = (
+                [(r.name, r.commit) for r in res.releases.finals()]
+                if history
+                else [
+                    (res.target.ref_name or "HEAD", res.target.commit or res.repo.rev_parse("HEAD"))
+                ]
+            )
+            table = Table(title=f"index {res.target.repo_url}", title_justify="left")
+            for column in ("Ref", "Files", "Source files", "Parsed now", "Seconds"):
+                table.add_column(column, justify="right" if column != "Ref" else "left")
+            for name, commit in targets:
+                if commit is None:
+                    continue
+                stats = idx.index_commit(commit)
+                table.add_row(name, str(stats.files), str(stats.source_files),
+                              str(stats.parsed_now), f"{stats.seconds:.1f}")  # fmt: skip
+            console.print(table)
+    except NikashaError as exc:
+        _fail(exc)
+
+
+@app.command()
+def timeline(
+    symbol: Annotated[str, typer.Argument(help="Function, macro or type name.")],
+    repo: RepoOption,
+    strategy: Annotated[str, typer.Option("--strategy", help="lazy or full.")] = "lazy",
+    online: OnlineOption = False,
+    as_json: JsonOption = False,
+) -> None:
+    """Show in which releases a symbol is defined (and suggest names if it never is).
+
+    Example:
+        nikasha timeline util_copy_value --repo ./libhdr.git
+        nikasha timeline Curl_http_readwrite_headers --repo https://github.com/curl/curl
+    """
+    from nikasha.code.bktree import BKTree  # noqa: PLC0415
+    from nikasha.code.index import CodeIndex  # noqa: PLC0415
+    from nikasha.code.timeline import build_timeline  # noqa: PLC0415
+
+    if strategy not in ("lazy", "full"):
+        raise typer.BadParameter("must be lazy or full", param_hint="--strategy")
+    try:
+        res = _resolve_repo(repo, online=online)
+        with res.repo, CodeIndex(res.repo) as idx:
+            tl = build_timeline(idx, res.releases, symbol, strategy=strategy)  # type: ignore[arg-type]
+            suggestions: list[str] = []
+            finals = res.releases.finals()
+            if not tl.ever_defined and finals:
+                latest = finals[-1].commit
+                idx.index_commit(latest)
+                names = {row[0] for row in idx.db.execute("SELECT DISTINCT name FROM symbols")}
+                suggestions = BKTree(sorted(names)).suggest(symbol)
+    except NikashaError as exc:
+        _fail(exc)
+    if as_json:
+        _emit_utf8(json.dumps({
+            "symbol": symbol, "strategy": tl.strategy, "runs": tl.runs,
+            "presence": [{"release": p.release, "defined": p.defined, "referenced": p.referenced,
+                          "paths": list(p.paths), "partial": list(p.partial),
+                          "uncertain": p.uncertain} for p in tl.presence],
+            "uncertain_releases": tl.uncertain_releases,
+            "history_complete": tl.history_complete, "never_in_history": tl.never_in_history,
+            "suggestions": suggestions, "seconds": round(tl.seconds, 3), "notes": tl.notes,
+        }, indent=2, sort_keys=True) + "\n")  # fmt: skip
+        return
+    console = Console()
+    strip = "".join(
+        "█" if p.defined else "?" if p.uncertain else "·" if p.referenced else " "
+        for p in tl.presence
+    )
+    first = tl.presence[0].release if tl.presence else "-"
+    last = tl.presence[-1].release if tl.presence else "-"
+    console.print(f"[bold]{symbol}[/] across {len(tl.presence)} releases ({first} … {last})",
+                  highlight=False)  # fmt: skip
+    console.print(f"  [{strip}]", highlight=False)
+    console.print(
+        "  █ defined  ? mentioned in a file that did not parse cleanly  · mentioned",
+        style="dim", highlight=False,
+    )  # fmt: skip
+    if tl.runs:
+        for a, b in tl.runs:
+            console.print(
+                f"  defined in {a} to {b}" if a != b else f"  defined in {a}", highlight=False
+            )
+    else:
+        console.print("  [red]no definition found in any release[/]", highlight=False)
+        if tl.never_in_history:
+            console.print(
+                "  and the name never appears anywhere in the git history", highlight=False
+            )
+        if not tl.history_complete:
+            console.print("  [yellow]history search incomplete:[/] " + "; ".join(tl.notes),
+                          highlight=False)  # fmt: skip
+        if suggestions:
+            console.print("  did you mean: " + ", ".join(suggestions), highlight=False)
+    if tl.uncertain_releases:
+        console.print(
+            f"  [yellow]uncertain in {len(tl.uncertain_releases)} release(s):[/] the name "
+            "appears in files that did not parse cleanly, so a definition may have been missed",
+            highlight=False,
+        )  # fmt: skip
+    console.print(f"  ({tl.strategy} strategy, {tl.seconds:.1f}s)", style="dim", highlight=False)
+
+
+@app.command()
+def trace(
+    file: Annotated[str, typer.Argument(help="A file containing a stack trace (or a report).")],
+    *,
+    repo: RepoOption,
+    version: Annotated[str | None, typer.Option("--version", help="Claimed release.")] = None,
+    ref: Annotated[str | None, typer.Option("--ref", help="Git ref.")] = None,
+    online: OnlineOption = False,
+    as_json: JsonOption = False,
+) -> None:
+    """Check a stack trace against the code: files, lines, functions and call edges.
+
+    Example:
+        nikasha trace crash.txt --repo ./libhdr.git --version 1.2.0
+    """
+    from nikasha.code.index import CodeIndex  # noqa: PLC0415
+    from nikasha.code.trace_forensics import analyze_trace  # noqa: PLC0415
+    from nikasha.extract import extract_claims  # noqa: PLC0415
+    from nikasha.ingest import load_report  # noqa: PLC0415
+    from nikasha.model.claims import TraceClaim  # noqa: PLC0415
+
+    try:
+        report = load_report(file)
+        traces = [c for c in extract_claims(report).claims if isinstance(c, TraceClaim)]
+        if not traces:
+            raise NikashaError(f"no stack trace found in {file}")
+        res = _resolve_repo(repo, ref=ref, version=version, online=online)
+        if res.target.commit is None:
+            raise NikashaError("pass --version or --ref to choose the code to check against")
+        with res.repo, CodeIndex(res.repo) as idx:
+            analyses = [
+                analyze_trace(idx, res.target.commit, t, project=res.project) for t in traces
+            ]
+    except NikashaError as exc:
+        _fail(exc)
+    if as_json:
+        payload = [
+            {"format": t.format, "commit": a.commit, "ratio": a.ratio,
+             "frames": [f.__dict__ | {"generated": f.generated.reason if f.generated else None}
+                        for f in a.frames],
+             "edges": [{"caller": e.caller, "callee": e.callee, "kind": e.kind,
+                        "caller_calls": e.caller_calls} for e in a.edges]}
+            for t, a in zip(traces, analyses, strict=True)
+        ]  # fmt: skip
+        _emit_utf8(json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n")
+        return
+    console = Console()
+    ok, bad = ("✓", "✗") if status_symbols(console.encoding)["ok"] == "✓" else ("+", "x")
+    for t, a in zip(traces, analyses, strict=True):
+        table = Table(title=f"{t.format} trace at {res.target.ref_name} ({a.commit[:12]})",
+                      title_justify="left")  # fmt: skip
+        for column in ("#", "Function", "Claimed location", "File", "Line", "Function at line"):
+            table.add_column(column)
+        for f in a.frames:
+            where = f"{f.claimed_path}:{f.line}" if f.line else str(f.claimed_path)
+            file_cell = "generated" if f.generated else (ok if f.file_exists else bad)
+            line_cell = (
+                ""
+                if f.line_in_bounds is None
+                else (ok if f.line_in_bounds else f"{bad} (file has {f.n_lines})")
+            )
+            fn_cell = (
+                ""
+                if f.function_matches is None
+                else (ok if f.function_matches else f"{bad} {f.actual_function or '(none)'}")
+            )
+            table.add_row(str(f.index), f.function or "", where, file_cell, line_cell, fn_cell)
+        console.print(table)
+        for e in a.edges:
+            mark = ok if e.kind != "none" else bad
+            detail = (
+                ""
+                if e.kind != "none"
+                else f" ({e.caller} calls: {', '.join(e.caller_calls) or 'nothing'})"
+            )
+            console.print(f"  {mark} {e.caller} → {e.callee}: {e.kind}{detail}", highlight=False)
+        ratio = "n/a" if a.ratio is None else f"{a.ratio:.0%}"
+        console.print(f"  consistent frames: {ratio}", highlight=False)
+
+
+def _resolve_repo(
+    repo: str, *, ref: str | None = None, version: str | None = None, online: bool = False
+) -> Resolution:
+    from nikasha.ingest import ingest_string  # noqa: PLC0415
+    from nikasha.resolve.target import resolve_target  # noqa: PLC0415
+
+    empty = ingest_string("", input_format="text")
+    return resolve_target(empty, [], repo=repo, ref=ref, version=version, online=online)
 
 
 def _emit_utf8(text: str) -> None:
