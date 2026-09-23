@@ -1,0 +1,29 @@
+Traceback (most recent call last):
+  File "/src/programs/python/stdlib_json.py", line 15, in parse_config
+    return json.loads(text)
+           ~~~~~~~~~~^^^^^^
+  File "/usr/lib64/python3.14/json/__init__.py", line 352, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "/usr/lib64/python3.14/json/decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/json/decoder.py", line 361, in raw_decode
+    obj, end = self.scan_once(s, idx)
+               ~~~~~~~~~~~~~~^^^^^^^^
+json.decoder.JSONDecodeError: Expecting property name enclosed in double quotes: line 1 column 31 (char 30)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/src/programs/python/stdlib_json.py", line 29, in <module>
+    main()
+    ~~~~^^
+  File "/src/programs/python/stdlib_json.py", line 25, in main
+    print(load('{"name": "demo", "retries": 3,,}'))
+          ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/src/programs/python/stdlib_json.py", line 21, in load
+    return parse_config(path_text)
+  File "/src/programs/python/stdlib_json.py", line 17, in parse_config
+    raise ConfigError("config is not valid JSON") from exc
+ConfigError: config is not valid JSON
