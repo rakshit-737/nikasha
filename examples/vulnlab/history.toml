@@ -1,0 +1,50 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Commit plan for the vulnlab demo repository (libhdr).
+#
+# scripts/build_vulnlab.py replays these commits, in order, onto the branch
+# "main" of a fresh bare repository via `git fast-import`. Author, committer,
+# dates and messages are fixed here so the resulting commit SHAs are identical
+# on every machine. "tree" names a directory under examples/vulnlab/src/ whose
+# complete contents are snapshotted for that commit; the builder additionally
+# injects the Apache-2.0 licence text as LICENSE at every commit. "tag", when
+# present, creates a lightweight tag pointing at that commit.
+
+branch = "main"
+author = "Vulnlab Maintainers <vulnlab@example.invalid>"
+
+[[commits]]
+message = "feat: initial libhdr header parser"
+date = "2026-01-05T10:00:00+00:00"
+tree = "v1.0.0-pre"
+
+[[commits]]
+message = "docs: add README for libhdr"
+date = "2026-01-06T10:00:00+00:00"
+tree = "v1.0.0"
+tag = "v1.0.0"
+
+[[commits]]
+message = "feat: add hdr_parse_block and util_copy_value; rename util_trim to util_strip"
+date = "2026-02-10T10:00:00+00:00"
+tree = "v1.1.0"
+tag = "v1.1.0"
+
+[[commits]]
+message = "refactor: streamline util_copy_value"
+date = "2026-03-15T10:00:00+00:00"
+tree = "v1.2.0"
+tag = "v1.2.0"
+
+[[commits]]
+message = "docs: expand parser and util comments"
+date = "2026-03-20T10:00:00+00:00"
+tree = "v1.2.1"
+tag = "v1.2.1"
+
+[[commits]]
+message = "fix: bounds-check header value copy; replace hdr_get with hdr_find"
+date = "2026-04-25T10:00:00+00:00"
+tree = "v1.3.0"
+tag = "v1.3.0"
