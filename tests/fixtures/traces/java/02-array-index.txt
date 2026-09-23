@@ -1,0 +1,5 @@
+Exception in thread "main" java.lang.ArrayIndexOutOfBoundsException: Index 3 out of bounds for length 3
+	at IndexOutOfBounds.pick(IndexOutOfBounds.java:6)
+	at IndexOutOfBounds.last(IndexOutOfBounds.java:10)
+	at IndexOutOfBounds.summarize(IndexOutOfBounds.java:14)
+	at IndexOutOfBounds.main(IndexOutOfBounds.java:18)
