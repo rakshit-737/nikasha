@@ -1,0 +1,10 @@
+{# SPDX-FileCopyrightText: 2026 The Nikasha Authors #}
+{# SPDX-License-Identifier: Apache-2.0 #}
+{# Appendix D: the trace fits another version exactly. #}
+{% set fits = best_release | default(best_version | default('', true), true) %}
+{% if fits %}
+The stack trace matches {{ fits }} exactly, but the report names {{ where }}. Were you testing {{ fits }}?
+{% else %}
+The stack trace fits a different release from the one the report names ({{ where }}). Could you confirm which version you were testing?
+{% endif %}
+A commit hash, or the output of the build you ran, would settle it.

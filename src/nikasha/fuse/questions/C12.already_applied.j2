@@ -1,0 +1,9 @@
+{# SPDX-FileCopyrightText: 2026 The Nikasha Authors #}
+{# SPDX-License-Identifier: Apache-2.0 #}
+{# Appendix D: the proposed change is already in the tree. #}
+The change the report proposes already seems to be in {{ where }}
+{% if path is defined %}
+(`{{ path }}`)
+{% endif %}
+.
+Could you check whether the issue still reproduces on {{ latest_release | default('the latest release', true) }}, and tell us the commit you tested?

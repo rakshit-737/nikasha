@@ -1,0 +1,17 @@
+{# SPDX-FileCopyrightText: 2026 The Nikasha Authors #}
+{# SPDX-License-Identifier: Apache-2.0 #}
+{# Appendix D: the report is missing the pieces that would let anyone check it. #}
+{% set gaps = missing | default([], true) %}
+{% if 'poc' in gaps %}
+Could you attach a minimal proof of concept and the exact command used?
+{% endif %}
+{% if 'version' in gaps %}
+Could you tell us the exact version or commit you tested?
+{% endif %}
+{% if 'trace' in gaps %}
+Could you attach the unmodified sanitizer or debugger output?
+{% endif %}
+{% if not gaps %}
+Could you attach a minimal proof of concept, the exact command used, and the version or commit you tested?
+{% endif %}
+That is the fastest way for us to confirm the issue.

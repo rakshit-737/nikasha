@@ -215,6 +215,7 @@ def test_line_numbers_after_multiline_comment():
         ("r'", "python", 256_000),
     ],
 )
+@pytest.mark.no_cover  # the budget measures the lexer, not coverage.py's tracer (~5x)
 def test_lexer_is_linear_on_hostile_input(unit, lang, size):
     code = unit * (size // len(unit))
     started = time.perf_counter()

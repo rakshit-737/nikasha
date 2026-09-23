@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 import typer
@@ -16,6 +17,7 @@ from rich.table import Table
 from nikasha.doctor import run_doctor
 
 if TYPE_CHECKING:
+    from nikasha.pipeline import CheckReport
     from nikasha.resolve.target import Resolution
 from nikasha.errors import NikashaError
 from nikasha.version import __version__
@@ -358,6 +360,145 @@ def trace(
             console.print(f"  {mark} {e.caller} → {e.callee}: {e.kind}{detail}", highlight=False)
         ratio = "n/a" if a.ratio is None else f"{a.ratio:.0%}"
         console.print(f"  consistent frames: {ratio}", highlight=False)
+
+
+@app.command()
+def check(  # noqa: PLR0917 - a CLI command's options are its signature
+    report: Annotated[
+        str, typer.Argument(help="Report file (Markdown, text or HTML), or - for stdin.")
+    ],
+    repo: Annotated[
+        str | None, typer.Option("--repo", help="Repository URL (https) or local path.")
+    ] = None,
+    ref: Annotated[
+        str | None, typer.Option("--ref", help="Exact git ref to check against.")
+    ] = None,
+    version: Annotated[
+        str | None, typer.Option("--version", help="Release the report is about, e.g. 8.5.0.")
+    ] = None,
+    product: Annotated[
+        str | None, typer.Option("--product", help="Product name, e.g. curl or libhdr.")
+    ] = None,
+    output_format: Annotated[
+        str, typer.Option("--format", help="terminal, json or markdown.")
+    ] = "terminal",
+    out: Annotated[
+        str | None, typer.Option("--out", "-o", help="Write the output to a file instead.")
+    ] = None,
+    online: OnlineOption = False,
+    ascii_only: Annotated[bool, typer.Option("--ascii", help="ASCII symbols only.")] = False,
+    quiet: Annotated[bool, typer.Option("--quiet", help="Print only the verdict line.")] = False,
+    explain: Annotated[
+        bool, typer.Option("--explain", help="Also print the log-odds ledger.")
+    ] = False,
+    fail_on: Annotated[
+        str | None,
+        typer.Option("--fail-on", help="Exit non-zero at this verdict or worse (for CI)."),
+    ] = None,
+    record_svg: Annotated[
+        str | None, typer.Option("--record-svg", hidden=True, help="Also save the view as SVG.")
+    ] = None,
+) -> None:
+    """Fact-check a vulnerability report against the code at the version it names.
+
+    Exit codes: 0 GROUNDED/REPRODUCED, 10 MIXED, 20 UNGROUNDED, 30 INSUFFICIENT, 1 error.
+
+    Example:
+        nikasha check report.md --repo https://github.com/curl/curl
+        nikasha check report.md --repo ./libhdr.git --format markdown -o reply.md
+    """
+    from nikasha.pipeline import check_report  # noqa: PLC0415
+    from nikasha.render.explain_view import render_explain  # noqa: PLC0415
+    from nikasha.render.terminal import render_check  # noqa: PLC0415
+
+    if output_format not in ("terminal", "json", "markdown"):
+        raise typer.BadParameter("must be terminal, json or markdown", param_hint="--format")
+    try:
+        checked = check_report(
+            report, repo=repo, ref=ref, version=version, product=product, online=online
+        )
+    except NikashaError as exc:
+        _fail(exc)
+
+    if output_format == "terminal":
+        svg_path = record_svg or os.environ.get("NIKASHA_RECORD_SVG")
+        console = Console(record=bool(svg_path))
+        render_check(
+            console, checked.result, ascii_only=ascii_only, quiet=quiet, source=str(report)
+        )
+        if explain:
+            render_explain(
+                console, checked.ledger, checked.verdict, {e.id: e for e in checked.evidence}
+            )
+        if svg_path:
+            console.save_svg(svg_path, title=f"nikasha check {report}")
+    else:
+        _write_out(_format_check(checked, output_format), out)
+
+    raise typer.Exit(code=_check_exit_code(checked.verdict.label, fail_on))
+
+
+def _format_check(checked: CheckReport, output_format: str) -> str:
+    if output_format == "json":
+        return checked.result.to_json()
+    from nikasha.render.markdown import render_markdown  # noqa: PLC0415
+
+    return render_markdown(checked)
+
+
+def _write_out(text: str, out: str | None) -> None:
+    if out:
+        Path(out).write_text(text, encoding="utf-8")
+    else:
+        _emit_utf8(text)
+
+
+#: Verdicts ordered from best to worst, for ``--fail-on`` (SPEC §15.1).
+_VERDICT_ORDER = ("GROUNDED", "REPRODUCED", "MIXED", "UNGROUNDED", "INSUFFICIENT")
+
+
+def _check_exit_code(label: str, fail_on: str | None) -> int:
+    from nikasha.render.terminal import exit_code  # noqa: PLC0415
+
+    if not fail_on:
+        return exit_code(label)
+    wanted = fail_on.upper()
+    if wanted not in _VERDICT_ORDER:
+        raise typer.BadParameter(
+            f"must be one of {', '.join(_VERDICT_ORDER)}", param_hint="--fail-on"
+        )
+    if label not in _VERDICT_ORDER:
+        return 1
+    return 1 if _VERDICT_ORDER.index(label) >= _VERDICT_ORDER.index(wanted) else 0
+
+
+@app.command()
+def explain(
+    result_json: Annotated[
+        str, typer.Argument(help="A RESULT.json from `nikasha check --format json`.")
+    ],
+) -> None:
+    """Print the log-odds ledger behind a verdict: every strength, weight and contribution.
+
+    Example:
+        nikasha check report.md --repo ./libhdr.git --format json > result.json
+        nikasha explain result.json
+    """
+    from nikasha.fuse.scoring import fuse  # noqa: PLC0415
+    from nikasha.model.result import Result  # noqa: PLC0415
+    from nikasha.render.explain_view import render_explain  # noqa: PLC0415
+
+    try:
+        data = json.loads(Path(result_json).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        Console(stderr=True).print(f"[red]error:[/] cannot read {result_json}: {exc}")
+        raise typer.Exit(code=1) from exc
+    result = Result.model_validate(data)
+    if result.verdict is None:
+        Console(stderr=True).print("[red]error:[/] that result carries no verdict")
+        raise typer.Exit(code=1)
+    ledger = fuse(result.evidence)
+    render_explain(Console(), ledger, result.verdict, {e.id: e for e in result.evidence})
 
 
 def _resolve_repo(

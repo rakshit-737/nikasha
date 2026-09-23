@@ -1,0 +1,12 @@
+{# SPDX-FileCopyrightText: 2026 The Nikasha Authors #}
+{# SPDX-License-Identifier: Apache-2.0 #}
+{# Appendix D: the symbol the report rests on is in no release and in no commit. #}
+`{{ symbol }}` doesn't appear in any released version of {{ project | default('this project', true) }}
+{% if releases_searched %}
+({{ releases_searched | ranged }})
+{% endif %}
+or in its git history.
+{% if suggestions | default([], true) %}
+The closest names in the tree are {{ suggestions | listed }}.
+{% endif %}
+Could you point us to the exact source location, for example with a permalink?

@@ -1,0 +1,9 @@
+{# SPDX-FileCopyrightText: 2026 The Nikasha Authors #}
+{# SPDX-License-Identifier: Apache-2.0 #}
+{# The patch context matches nothing in the tree. #}
+We couldn't find the context lines of the patch
+{% if path is defined %}
+in `{{ path }}`
+{% endif %}
+at {{ where }}.
+Could you send it as `git diff` output against a commit you can name, or a permalink to the code it changes?

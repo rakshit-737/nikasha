@@ -1,0 +1,9 @@
+{# SPDX-FileCopyrightText: 2026 The Nikasha Authors #}
+{# SPDX-License-Identifier: Apache-2.0 #}
+{# Not in the sampled releases, but the history could not be searched exhaustively (P4). #}
+We couldn't find `{{ symbol }}` defined in {{ target }}
+{% if releases_searched %}
+or in the {{ releases_searched | length }} releases we sampled ({{ releases_searched | ranged }})
+{% endif %}
+, and we couldn't search the full history here ({{ history_gap }}).
+Could you confirm the exact version or commit, ideally with a permalink to the definition?

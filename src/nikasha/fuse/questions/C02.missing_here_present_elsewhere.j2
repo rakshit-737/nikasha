@@ -1,0 +1,9 @@
+{# SPDX-FileCopyrightText: 2026 The Nikasha Authors #}
+{# SPDX-License-Identifier: Apache-2.0 #}
+{# The report names a file that is not in the tree here, but is in other releases. #}
+{% set elsewhere = present_in | default(defined_in | default([], true), true) %}
+The report cites `{{ path }}`, which is not in the tree at {{ target }}.
+{% if elsewhere %}
+It is present in {{ elsewhere | ranged }}.
+{% endif %}
+Could you confirm the exact version or commit you tested, for example with a permalink to the file?

@@ -1,0 +1,9 @@
+{# SPDX-FileCopyrightText: 2026 The Nikasha Authors #}
+{# SPDX-License-Identifier: Apache-2.0 #}
+{# A call path in the report has an edge the call graph does not contain. #}
+The report describes a call path we couldn't follow at {{ where }}
+{% if caller is defined and callee is defined %}
+: we found no call from {{ caller }}() to {{ callee }}()
+{% endif %}
+.
+Could you point us to the call site with a permalink, or say whether it is reached indirectly (through a function pointer or a macro)?

@@ -1,0 +1,11 @@
+{# SPDX-FileCopyrightText: 2026 The Nikasha Authors #}
+{# SPDX-License-Identifier: Apache-2.0 #}
+{# A build option, flag or configuration key that is in no release and in no commit. #}
+{% set opt = option | default(name | default('', true), true) %}
+{% if opt %}
+`{{ opt }}` doesn't
+{% else %}
+The option the report names doesn't
+{% endif %}
+appear in {{ target }} or anywhere in this repository's history.
+Could you point us to where it is set or defined, for example with a permalink or the exact command line you used?

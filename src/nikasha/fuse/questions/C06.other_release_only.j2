@@ -1,0 +1,10 @@
+{# SPDX-FileCopyrightText: 2026 The Nikasha Authors #}
+{# SPDX-License-Identifier: Apache-2.0 #}
+{# The quoted line exists, but only in another release. #}
+{% set elsewhere = other_releases | default(releases | default([], true), true) %}
+The line the report quotes is in `{{ path }}`
+{% if elsewhere %}
+in {{ elsewhere | listed }}
+{% endif %}
+, but not at {{ where }}.
+Could you confirm the exact version or commit you were reading?

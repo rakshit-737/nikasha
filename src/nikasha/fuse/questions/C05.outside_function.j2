@@ -1,0 +1,8 @@
+{# SPDX-FileCopyrightText: 2026 The Nikasha Authors #}
+{# SPDX-License-Identifier: Apache-2.0 #}
+{# The line is real, but it is not inside the function the report names. #}
+The report puts `{{ path }}:{{ line }}` inside {{ function }}(), which spans lines {{ function_span | join('-') }} at {{ where }}.
+{% if actual_function is defined %}
+Line {{ line }} is inside {{ actual_function }}() there.
+{% endif %}
+Could you share a permalink to the line, or the commit you were reading?

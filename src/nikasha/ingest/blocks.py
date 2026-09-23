@@ -37,7 +37,12 @@ _TRACE_RES: tuple[re.Pattern[str], ...] = (
     re.compile(r"^#\d{1,4} {1,3}0x[0-9a-fA-F]{1,16} in \S", re.MULTILINE),
     re.compile(r"^\s{2,8}at \S[^\n]{0,300}:\d+:\d+\)?$", re.MULTILINE),
 )
-_JAVA_FRAME_RE = re.compile(r"^\s+at [\w$.<>]{1,300}\([\w$.]{0,200}(?::\d+)?\)", re.MULTILINE)
+# The indent is *horizontal* whitespace only, and bounded. With `\s+` under re.MULTILINE
+# the newline class and the per-line `^` anchor combine into a quadratic scan: every line
+# start re-consumes the rest of the run before failing on "at " (16k newlines took 0.43 s).
+_JAVA_FRAME_RE = re.compile(
+    r"^[^\S\r\n]{1,16}at [\w$.<>]{1,300}\([\w$.]{0,200}(?::\d+)?\)", re.MULTILINE
+)
 
 _PATCH_GIT_RE = re.compile(r"^diff --git ", re.MULTILINE)
 _PATCH_MINUS_RE = re.compile(r"^--- \S", re.MULTILINE)

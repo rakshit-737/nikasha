@@ -3,8 +3,8 @@
 """Every regex that reads report or repository text must run in linear time on hostile input
 (SPEC §9, §19.2).
 
-Each compiled pattern (text or bytes) in the extraction, ingest, code-intelligence and
-resolution modules is fed adversarial strings: a
+Each compiled pattern (text or bytes) in the extraction, ingest, code-intelligence,
+resolution and checks modules is fed adversarial strings: a
 short seed of "interesting" characters repeated to ~40k characters, the classic shape that
 triggers catastrophic backtracking. A pattern that backtracks exponentially or
 quadratically blows through the time budget.
@@ -22,6 +22,7 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
+import nikasha.checks
 import nikasha.code
 import nikasha.extract
 import nikasha.extract.traces
@@ -34,7 +35,8 @@ ALPHABET = "aA_0 .:/-`'\"()[]{}<>#*@$=,;\n\t" + "xX1lL"
 
 
 _PACKAGES = (
-    nikasha.extract, nikasha.extract.traces, nikasha.ingest, nikasha.code, nikasha.resolve
+    nikasha.extract, nikasha.extract.traces, nikasha.ingest, nikasha.code, nikasha.resolve,
+    nikasha.checks,
 )  # fmt: skip
 
 

@@ -12,7 +12,7 @@ The living build log. Milestones follow SPEC §22, plus **M3.5** from ADR 0003.
 | M0 Bootstrap | **done**: repo live at https://github.com/rakshit-737/nikasha |
 | M1 Models, intake, extraction (+ claim scoping, polarity) | **done** (LSan/MSan/TSan parsers deferred, ADR 0005) |
 | M2 Resolution and code intelligence | **done** (numbers in ADR 0004) |
-| M3 Checks, fusion, CLI outputs | not started |
+| M3 Checks, fusion, CLI outputs | **done** (numbers below) |
 | M3.5 Early real-world gate (curl corpus vs. slopcheck) | not started |
 | M4 HTML report and media v1 | not started |
 | M5 Sandbox reproduction | not started |
@@ -176,6 +176,82 @@ The living build log. Milestones follow SPEC §22, plus **M3.5** from ADR 0003.
 ### Open questions for the maintainer
 - None blocking. The M3.5 gate still needs the HackerOne-terms check before any corpus is
   fetched.
+
+## M3: Checks, fusion, CLI outputs (2026-09-23)
+
+### Done
+- **Check framework** (`checks/base.py`): the `Check` protocol, auto-registration of every
+  `cNN_*` module, a shared `CheckContext` (tree, paths, facts, timelines, BK-tree,
+  permalinks) so twenty checks do not each re-read the repository, and per-check time
+  bounds. Three rules are enforced *there* rather than in each check: the ADR 0003
+  refutation gate, content-derived evidence IDs with stable ordering, and "a check that
+  overruns or raises yields ERROR, never a refutation".
+- **19 checks: C01–C18 and C21.** (C19 needs the sandbox, M5; C20 is the optional LLM, M7.)
+  Every strength comes from `lr_defaults.yaml` — no float literal is ever used as a
+  strength, so the whole scoring model is auditable and calibratable in one file.
+- **Fusion** (`fuse/`): per-group damping (1, ½, ¼, …), `lambda`, the grounding score, and
+  the SPEC §14.3 verdict ladder with configurable thresholds.
+- **Questions** (`fuse/questions/`, jinja2): 22 templates keyed by (check, outcome), at
+  most six, ordered by how much each would change the verdict.
+- **Outputs**: terminal (rich), Markdown (under GitHub's 65,536-character comment cap,
+  everything escaped) and JSON; `nikasha check` and `nikasha explain`.
+- **`docs/checks.md` is generated** from the registry; `--check` fails when it is stale.
+
+### Numbers
+- **Tests: 3,493 passing**, 31 skipped, 1 xfail (a recorded SPEC divergence, below).
+  2,564 at the end of M2. Coverage 93% overall, **95% on the core packages** (gate 85%).
+- **Verdicts on the five vulnlab fixtures, offline — all five as intended:**
+
+  | Fixture | Verdict | Score |
+  |---|---|---|
+  | `fabricated_hdr_overflow` | UNGROUNDED | 0/100, high |
+  | `genuine_hdr_overflow` | GROUNDED | 100/100, high |
+  | `mixed_wrong_version` | MIXED | 100/100, high |
+  | `already_fixed` | MIXED | 82/100, low |
+  | `vague` | INSUFFICIENT | 50/100, low |
+
+- **One full check: 6.2 s** on the fabricated fixture (11 claims, 24 evidence items, 6
+  questions), of which 5.9 s is the checks themselves and 4.2 s is C10 alone — it scores
+  frame consistency across a window of releases, and is the obvious optimisation target.
+- **Linear-time regexes: 1,449 patterns** now checked, because `nikasha.checks` was added
+  to the sweep (154 at M2). That is how the ReDoS below was found.
+- Machine: Windows 11, Python 3.12.13, repo on NTFS.
+
+### Bugs found and fixed while building M3
+- **A ReDoS in M1 intake code** (`ingest/blocks.py`): `^\s+at …` under `re.MULTILINE` is
+  quadratic, because `\s` matches newlines and `^` retries at every line start. 16k
+  newlines took 0.43 s and grew with the square of the input; now 0.0003 s. Found only
+  because the checks package was added to the linear-time sweep.
+- **ANSI escape injection into the terminal** through `ResolvedTarget.method`, which
+  quotes the report text it resolved from (P7).
+- `--ascii` was not ASCII (separator, ellipsis and panel borders).
+- A report with no resolvable version raised an error instead of returning INSUFFICIENT.
+- The runner skipped any check with no applicable claim, so a report with *zero* claims
+  never reached C21 — exactly the case that drives INSUFFICIENT. Fixed with an opt-in
+  `runs_on_empty`.
+- Fusion could not identify a zero-strength outcome (C12 "already applied"), so
+  `already_fixed.md` came out GROUNDED instead of MIXED. Every check now records the
+  strengths key it used in `details["outcome"]`.
+
+### Open questions for the maintainer
+1. **C02 and C08 both judge trace frame paths, in different groups** (`locus` and `trace`),
+   so §14.1 damping cannot cancel the overlap and one fabricated path can satisfy rule 3a's
+   "two independent groups" on its own. SPEC specifies both behaviours; the interaction is
+   what needs a decision. This is a P4 risk and belongs in the M3.5 measurement.
+2. **Rule 3a counts groups over *all* refutations, not the strong ones**, so a single −0.3
+   finding in a second group is enough corroboration beside a core refutation. Literal to
+   SPEC, but the weakest link in the P4 chain.
+3. **Rule 1 hard-codes `confidence="high"`** for REPRODUCED, which SPEC §14.3's confidence
+   formula would call medium. Recorded as a strict xfail. Decide at M5, when C19 lands.
+4. **Four checks asked for strength keys that do not exist** (C03 `absent_in_sampled_supporting`,
+   C06 `elsewhere_in_repo` and `absent_in_sampled_releases`, C07 `absent_in_sampled`). Today
+   those P4 downgrades collapse to NEUTRAL 0.0, discarding real signal. Adding them changes
+   the scoring model, so it is a calibration decision (§14.2), not one to make by hand.
+5. **No `CommandRecord` is emitted anywhere**, although P6 asks for the command with output
+   hashes. Four checks flagged the same blocker: `GitResult.argv` carries absolute cache
+   paths (a P3 leak into rendered reports) and `duration_ms` would break byte-identical
+   JSON. It needs one shared helper with a redacted argv and the duration kept out of the
+   identity payload.
 
 ## Carry-overs to later milestones
 

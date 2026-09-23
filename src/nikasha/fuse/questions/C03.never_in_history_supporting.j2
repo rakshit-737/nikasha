@@ -1,0 +1,8 @@
+{# SPDX-FileCopyrightText: 2026 The Nikasha Authors #}
+{# SPDX-License-Identifier: Apache-2.0 #}
+{# The same finding on a supporting claim: worth asking about, not worth leading with. #}
+We couldn't find `{{ symbol }}` in {{ target }}, in the releases we sampled, or in this repository's git history.
+{% if suggestions | default([], true) %}
+Did you mean {{ suggestions | listed }}?
+{% endif %}
+A permalink to the definition would let us check it against the right place.

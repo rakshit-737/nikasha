@@ -1,0 +1,5 @@
+{# SPDX-FileCopyrightText: 2026 The Nikasha Authors #}
+{# SPDX-License-Identifier: Apache-2.0 #}
+{# The patch context only exists in a different release. #}
+The patch in the report applies to {{ other_release | default('another release', true) }}, but its context isn't in the tree at {{ where }}.
+Could you confirm the exact version or commit the patch is against?

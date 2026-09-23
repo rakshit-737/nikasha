@@ -31,14 +31,14 @@ SPDX-License-Identifier: CC-BY-4.0
 | `tree-sitter-{c,cpp,python,javascript,typescript,go,rust,java,php,ruby}` | M2 | Per-language grammar wheels (abi3, all platforms). **We do not use `tree-sitter-language-pack` ≥ 1.0**: its docs say it "downloads each parser on first use", which breaks offline operation (P3). TypeScript exposes `language_typescript()` and `language_tsx()`; PHP exposes `language_php()` and `language_php_only()` (we use `language_php`, which handles `<?php` tags). The cpp, typescript, java and ruby grammars have had no release since 2024. | c 0.24.2, cpp 0.23.4, python 0.25.0, javascript 0.25.0, typescript 0.23.2, go 0.25.0, rust 0.24.2, java 0.23.5, php 0.24.1, ruby 0.23.1; all MIT |
 | `rapidfuzz` | M2 | Levenshtein distance for the "did you mean" BK-tree (the tree itself is our own code). rapidfuzz needs Python ≥3.11, which sets our floor. | 3.14.6, MIT |
 | `pyyaml` | M2 | Reads the packaged `known_projects.yaml`, with `yaml.safe_load` only; YAML errors become `NikashaError`. | 6.0.3, MIT; `types-pyyaml` in the dev group for mypy |
+| `jinja2` | M3 | The reporter-question templates (`fuse/questions/*.j2`, SPEC §14.4). Loaded with `StrictUndefined` so a template referencing a detail a check does not record fails in tests instead of silently rendering "None". `autoescape` is **off** here because questions are plain text; the HTML report (M4) will use a separate autoescaping environment. | 3.1.6, BSD-3-Clause |
 
 ## Planned (added in the milestone named; versions re-checked then)
 
 | Package | Milestone | Why / decision |
 |---|---|---|
 | `pygments` | M4 | Pre-rendered highlighting in the HTML report (output escaped) |
-| `jinja2` | M3 | Templates with autoescape on |
-| `cvss` ≥ 3.6 | M3 | CVSS v3 and v4 (`CVSS3`, `CVSS4`). The spec's example vector `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H` computes to 7.5, confirmed. |
+| ~~`cvss` ≥ 3.6~~ | ~~M3~~ | **Not adopted (M3).** C17 needs one base-score formula on a string we have already parsed, so the dependency buys little and costs a supply-chain surface on the path that reads attacker-controlled report text (P7). `checks/c17_impact_consistency.py` implements the CVSS v3.1 §7.1 base formula (v3.0 shares it), including the `roundup` procedure and the changed-scope weights, and is tested against 11 published vectors (Heartbleed 7.5, Log4Shell 10.0, reflected XSS 6.1, and the spec's own 7.5 example). **v4.0 is deliberately not scored** — its macrovector lookup cannot be written by hand with confidence, so a v4.0 vector is NEUTRAL, never reported as a malformed vector (P4). Revisit if v4.0 scoring becomes a requirement. |
 
 ### Deviation from SPEC §5: no `httpx`
 

@@ -1,0 +1,110 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Initial per-(check, outcome) strengths: natural-log likelihood ratios (SPEC §12, §14.1).
+# These are *priors*, replaced by calibration-vN.yaml once NikashaBench has enough labelled
+# reports (SPEC §14.2). Never tune them to make a fixture pass.
+#
+# Scale: refutations strong -3.0, moderate -1.2, weak -0.4;
+#        support weak +0.4, moderate +1.0, strong +2.0; decisive +6.0.
+version: 1
+
+checks:
+  C01:
+    resolves: 0.2
+    future_release: -1.5
+    gap_in_releases: -1.0
+    no_tags: 0.0
+  C02:
+    exists: 0.5
+    missing_here_present_elsewhere: -0.8
+    never_in_history: -2.0
+    never_in_history_core_multiplier: 1.5
+    generated: 0.0
+  C03:
+    defined: 0.6
+    defined_core: 1.0
+    referenced_only: 0.0
+    absent_here_present_elsewhere: -0.8
+    never_in_history_core: -3.0
+    never_in_history_supporting: -1.5
+    absent_in_sampled_core: -1.5
+  C04:
+    in_bounds: 0.2
+    past_end: -1.5
+  C05:
+    in_function: 1.0
+    outside_function: -0.8
+    fits_nearby_release: -0.3
+  C06:
+    exact: 1.5
+    near_by_offset: 0.8
+    elsewhere_in_file: -0.3
+    other_release_only: -0.4
+    nowhere_in_history: -2.0
+  C07:
+    contained: 2.0
+    partial: 0.5
+    other_release_only: -0.5
+    absent_everywhere: -2.5
+    small_snippet_multiplier: 0.3
+  C08:
+    all_consistent: 2.0
+    mostly_consistent: 0.8
+    mixed: -0.5
+    inconsistent: -2.0
+  C09:
+    all_edges_real: 1.5
+    missing_edge: -1.0
+    missing_edge_cap: -3.0
+    indirect_possible: 0.0
+  C10:
+    claimed_release_fits: 1.0
+    other_release_fits: -0.3
+    no_release_fits: -1.5
+  C11:
+    violation: -0.7
+    violation_cap: -2.5
+    consistent: 0.3
+  C12:
+    applies_clean: 1.5
+    applies_with_fuzz: 0.6
+    already_applied: 0.0
+    other_release_only: -0.4
+    context_not_found: -1.8
+  C13:
+    modified_after: 0.0
+  C14:
+    present: 0.4
+    other_release_only: -0.5
+    never_in_history: -2.0
+  C15:
+    commit_exists: 0.3
+    commit_touches_file: 0.5
+    commit_missing: 0.0
+    foreign_repo: -0.3
+    cve_matches_product: 0.3
+    cve_other_product: -1.0
+    cve_rejected: -0.5
+    cve_not_found: -0.3
+    cwe_incompatible: -0.4
+  C16:
+    consistent: 0.3
+    range_predates_symbol: -1.0
+    fixed_in_unchanged: -0.6
+  C17:
+    vector_unparseable: -0.3
+    score_mismatch: -0.6
+    severity_mismatch: -0.3
+  C18:
+    calls_api: 0.8
+    does_not_call_api: -1.2
+    other_predicate: 0.0
+  C19:
+    signature_match: 6.0
+    different_signature: 0.5
+    no_crash: -0.5
+  C20:
+    llm_cap: 0.5
+  C21:
+    hygiene: 0.0

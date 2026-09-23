@@ -1,0 +1,206 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Which CWE IDs are compatible with which bug type (SPEC §12, C15).
+#
+# Used only to catch a *cited* CWE that cannot describe the bug the report demonstrates —
+# SPEC's example is CWE-79 (cross-site scripting) cited for a heap overflow in a C library.
+# The table is deliberately coarse and each family is deliberately generous: a wrong
+# "incompatible" on a genuine report costs more than a missed one (P4). So a family lists
+# every CWE a reasonable reporter might pick for that bug, including plausible root causes
+# (an integer overflow behind a buffer overflow) and the read/write twin of a memory error,
+# which tools and reporters mix up constantly.
+#
+# Rules the loader enforces, and the check relies on:
+#   * a CWE that is not in `cwes` is *unknown*, so it is never called incompatible;
+#   * a bug type that no family claims is *unknown*, so nothing is compared;
+#   * a CWE is incompatible only when it is known AND absent from every known bug type's
+#     `compatible` list.
+#
+# `aliases` are matched after slugging (lower-cased, runs of non-alphanumerics collapsed to
+# "-"), so "Heap Buffer Overflow" and "heap-buffer-overflow" are the same key. They are the
+# strings the trace parsers actually produce: ASan's SUMMARY type, UBSan's slugs
+# (extract/traces/ubsan.py), Valgrind's Memcheck kinds (extract/traces/valgrind.py) and the
+# common prose spellings.
+#
+# CWE titles are abbreviated from the CWE list (cwe.mitre.org), CWE 4.x.
+version: 1
+
+cwes:
+  20: Improper Input Validation
+  22: Path Traversal
+  23: Relative Path Traversal
+  35: Path Traversal (".../...//")
+  36: Absolute Path Traversal
+  59: Improper Link Resolution Before File Access ("Link Following")
+  73: External Control of File Name or Path
+  77: Command Injection
+  78: OS Command Injection
+  79: Cross-site Scripting
+  80: Improper Neutralization of Script-Related HTML Tags
+  83: Improper Neutralization of Script in Attributes
+  88: Argument Injection
+  89: SQL Injection
+  94: Improper Control of Generation of Code ("Code Injection")
+  116: Improper Encoding or Escaping of Output
+  119: Improper Restriction of Operations within the Bounds of a Memory Buffer
+  120: Classic Buffer Overflow (Buffer Copy without Checking Size of Input)
+  121: Stack-based Buffer Overflow
+  122: Heap-based Buffer Overflow
+  124: Buffer Underwrite
+  125: Out-of-bounds Read
+  126: Buffer Over-read
+  127: Buffer Under-read
+  128: Wrap-around Error
+  131: Incorrect Calculation of Buffer Size
+  134: Use of Externally-Controlled Format String
+  170: Improper Null Termination
+  190: Integer Overflow or Wraparound
+  191: Integer Underflow (Wrap or Wraparound)
+  193: Off-by-one Error
+  200: Exposure of Sensitive Information to an Unauthorized Actor
+  252: Unchecked Return Value
+  306: Missing Authentication for Critical Function
+  352: Cross-Site Request Forgery
+  362: Concurrent Execution using Shared Resource with Improper Synchronization ("Race Condition")
+  366: Race Condition within a Thread
+  367: Time-of-check Time-of-use (TOCTOU) Race Condition
+  369: Divide By Zero
+  400: Uncontrolled Resource Consumption
+  401: Missing Release of Memory after Effective Lifetime
+  415: Double Free
+  416: Use After Free
+  457: Use of Uninitialized Variable
+  476: NULL Pointer Dereference
+  502: Deserialization of Untrusted Data
+  562: Return of Stack Variable Address
+  590: Free of Memory not on the Heap
+  601: URL Redirection to Untrusted Site ("Open Redirect")
+  611: Improper Restriction of XML External Entity Reference
+  674: Uncontrolled Recursion
+  680: Integer Overflow to Buffer Overflow
+  690: Unchecked Return Value to NULL Pointer Dereference
+  681: Incorrect Conversion between Numeric Types
+  704: Incorrect Type Conversion or Cast
+  762: Mismatched Memory Management Routines
+  763: Release of Invalid Pointer or Reference
+  770: Allocation of Resources Without Limits or Throttling
+  772: Missing Release of Resource after Effective Lifetime
+  776: XML Entity Expansion
+  787: Out-of-bounds Write
+  788: Access of Memory Location After End of Buffer
+  805: Buffer Access with Incorrect Length Value
+  822: Untrusted Pointer Dereference
+  824: Access of Uninitialized Pointer
+  825: Expired Pointer Dereference
+  843: Type Confusion (Access of Resource Using Incompatible Type)
+  908: Use of Uninitialized Resource
+  915: Improperly Controlled Modification of Dynamically-Determined Object Attributes
+  918: Server-Side Request Forgery
+  943: Improper Neutralization of Special Elements in Data Query Logic
+  1321: Prototype Pollution
+  1333: Inefficient Regular Expression Complexity
+
+bug_types:
+  # --- memory safety (ASan, Valgrind, GDB) ------------------------------------------------
+  heap_buffer_overflow:
+    aliases: [heap-buffer-overflow, heap-overflow, heap-corruption, heap-buffer-overrun]
+    compatible: [119, 120, 122, 124, 125, 126, 127, 128, 131, 170, 190, 191, 193, 680, 787,
+                 788, 805]
+  stack_buffer_overflow:
+    aliases: [stack-buffer-overflow, dynamic-stack-buffer-overflow, stack-buffer-underflow,
+              stack-overflow-write, buffer-overflow, buffer-overrun]
+    compatible: [119, 120, 121, 124, 125, 126, 127, 128, 131, 170, 190, 191, 193, 562, 680,
+                 787, 788, 805]
+  global_buffer_overflow:
+    aliases: [global-buffer-overflow, global-overflow]
+    compatible: [119, 120, 125, 126, 127, 128, 131, 170, 190, 191, 193, 680, 787, 788, 805]
+  out_of_bounds_access:
+    aliases: [invalid-read, invalid-write, out-of-bounds-read, out-of-bounds-write, oob-read,
+              oob-write, container-overflow, intra-object-overflow, array-index-out-of-bounds]
+    compatible: [119, 120, 121, 122, 124, 125, 126, 127, 128, 131, 170, 190, 191, 193, 680,
+                 787, 788, 805, 822]
+  use_after_free:
+    aliases: [heap-use-after-free, use-after-free, use-after-poison, invalid-free,
+              stack-use-after-return, stack-use-after-scope]
+    compatible: [119, 415, 416, 562, 590, 763, 825]
+  double_free:
+    aliases: [double-free, attempting-double-free, alloc-dealloc-mismatch,
+              new-delete-type-mismatch, mismatched-free]
+    compatible: [415, 416, 590, 762, 763]
+  memory_leak:
+    aliases: [detected-memory-leaks, memory-leaks, memory-leak, leak-definitely-lost,
+              leak-indirectly-lost, leak-possibly-lost, leak-still-reachable]
+    compatible: [400, 401, 770, 772]
+  uninitialized_memory:
+    aliases: [uninitialised-value, uninitialized-value, use-of-uninitialized-value,
+              conditional-jump-on-uninitialised-value, msan-use-of-uninitialized-value]
+    compatible: [200, 457, 824, 908]
+  null_or_wild_dereference:
+    aliases: [segv, sigsegv, sigbus, null-pointer-dereference, null-deref, nullptr-dereference,
+              access-violation, wild-pointer-dereference]
+    compatible: [119, 125, 416, 476, 690, 787, 822, 824, 825, 908]
+  stack_exhaustion:
+    aliases: [stack-overflow, stack-exhaustion, infinite-recursion, sigstkflt]
+    compatible: [400, 674, 770]
+
+  # --- arithmetic and typing (UBSan) ------------------------------------------------------
+  integer_overflow:
+    aliases: [signed-integer-overflow, unsigned-integer-overflow, integer-overflow,
+              integer-underflow, implicit-conversion, shift, pointer-overflow]
+    compatible: [119, 120, 122, 128, 131, 190, 191, 193, 680, 681, 704, 787]
+  divide_by_zero:
+    aliases: [integer-divide-by-zero, float-divide-by-zero, divide-by-zero, sigfpe]
+    compatible: [369]
+  type_confusion:
+    aliases: [type-confusion, vptr, function-type-mismatch, invalid-cast, downcast]
+    compatible: [119, 704, 843]
+
+  # --- injection and web bugs -------------------------------------------------------------
+  cross_site_scripting:
+    aliases: [xss, cross-site-scripting, reflected-xss, stored-xss, dom-xss, html-injection]
+    compatible: [20, 79, 80, 83, 116]
+  sql_injection:
+    aliases: [sql-injection, sqli, blind-sql-injection, nosql-injection]
+    compatible: [20, 89, 943]
+  command_injection:
+    aliases: [command-injection, os-command-injection, shell-injection, argument-injection,
+              code-injection, remote-code-execution, rce]
+    compatible: [20, 77, 78, 88, 94, 502]
+  path_traversal:
+    aliases: [path-traversal, directory-traversal, zip-slip, arbitrary-file-read,
+              arbitrary-file-write, symlink-attack]
+    compatible: [20, 22, 23, 35, 36, 59, 73]
+  server_side_request_forgery:
+    aliases: [ssrf, server-side-request-forgery]
+    compatible: [20, 601, 918]
+  open_redirect:
+    aliases: [open-redirect, url-redirection]
+    compatible: [20, 601]
+  cross_site_request_forgery:
+    aliases: [csrf, cross-site-request-forgery, xsrf]
+    compatible: [306, 352]
+  deserialization:
+    aliases: [insecure-deserialization, deserialization-of-untrusted-data, unsafe-pickle,
+              object-injection]
+    compatible: [20, 94, 502, 915, 1321]
+  xml_external_entity:
+    aliases: [xxe, xml-external-entity, billion-laughs, xml-entity-expansion]
+    compatible: [400, 611, 776, 918]
+  prototype_pollution:
+    aliases: [prototype-pollution]
+    compatible: [915, 1321]
+
+  # --- other recurring families ------------------------------------------------------------
+  format_string:
+    aliases: [format-string, uncontrolled-format-string, printf-format]
+    compatible: [119, 125, 134, 787]
+  regex_denial_of_service:
+    aliases: [redos, regular-expression-denial-of-service, catastrophic-backtracking]
+    compatible: [400, 770, 1333]
+  race_condition:
+    aliases: [data-race, race-condition, toctou, time-of-check-time-of-use, thread-leak]
+    compatible: [362, 366, 367, 416, 476]
+  unchecked_return:
+    aliases: [unchecked-return-value, missing-return, ignored-error]
+    compatible: [20, 252, 476]

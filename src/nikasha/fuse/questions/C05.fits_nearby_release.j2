@@ -1,0 +1,5 @@
+{# SPDX-FileCopyrightText: 2026 The Nikasha Authors #}
+{# SPDX-License-Identifier: Apache-2.0 #}
+{# The report is self-consistent against a neighbouring release: likelier a version mix-up. #}
+`{{ path }}:{{ line }}` is inside {{ function }}() in {{ version_fit_hint.release }}, but not at {{ where }}.
+Were you testing {{ version_fit_hint.release }}? The exact version or commit would settle it.
