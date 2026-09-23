@@ -57,13 +57,17 @@ are stubs until their milestones.
 
 | Package | Role | Status |
 |---|---|---|
-| `cli.py` | typer app | `version`, `doctor` |
+| `cli.py` | typer app | `version`, `doctor`, `extract` |
 | `doctor.py` | environment self-check | done (M0) |
 | `config.py` | cache and config dirs (0700) | done (M0) |
 | `errors.py` | `NikashaError` hierarchy | done (M0) |
 | `code/gitio.py` | **the only git runner** | hardened base (M0); extended in M2 |
 | `repro/sandbox.py` | **the only container-engine runner** | detection (M0); runs in M5 |
-| `model/`, `ingest/`, `extract/` | models, intake, claim extraction | M1 |
+| `model/` | frozen pydantic models; `ids.py` content IDs; `result.py` JSON | done (M1) |
+| `ingest/` | text / Markdown / HTML → `Report` with `SourceMap`; attachments | done (M1; email etc. M7) |
+| `extract/` | registry + one module per claim kind; `pipeline.py` merges, scopes, orders | done (M1) |
+| `extract/traces/` | one parser per trace format on `common.py` | 9/12 formats (ADR 0005) |
+| `render/extract_view.py` | `nikasha extract` view | done (M1) |
 | `resolve/`, `code/*` | refs, tags, index, tree-sitter, timeline | M2 |
 | `checks/`, `fuse/`, `render/` | C01–C21, fusion, outputs | M3, M4 |
 | `bench/` | NikashaBench | M3.5, M6 |
@@ -103,6 +107,20 @@ are stubs until their milestones.
   minimal `permissions:` and `persist-credentials: false`.
 - Never commit secrets, embargoed text, or third-party report text. Bench manifests hold
   IDs and labels only.
+
+## Extraction rules worth knowing (M1)
+
+- Claim IDs come from *content* (`registry.make_claim`); symbols merge by name and files by path;
+  mentions inside trace or patch claims are dropped (`pipeline.drop_contained`).
+- Every claim has a `provenance` (`extract/scope.py`), and only `project_attributed`,
+  non-negated claims may ever be refuted (ADR 0003). Negation lives in `extract/polarity.py`.
+- HTML comments in Markdown are not report content (issue templates are full of them).
+- Every regex must be linear-time: use possessive or bounded quantifiers.
+  `tests/unit/extract/test_regex_linear.py` checks every module-level pattern automatically.
+- Use `spans.IntervalIndex` for overlap and containment checks; linear scans went quadratic on
+  1 MB reports.
+- Trace fixtures are real output only: `scripts/capture_trace_fixtures.py`, run in the pinned
+  `docker/capture` image. Memory-error traces come only from vulnlab (ADR 0005).
 
 ## Step-by-step guides
 
