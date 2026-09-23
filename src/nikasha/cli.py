@@ -380,7 +380,7 @@ def check(  # noqa: PLR0917 - a CLI command's options are its signature
         str | None, typer.Option("--product", help="Product name, e.g. curl or libhdr.")
     ] = None,
     output_format: Annotated[
-        str, typer.Option("--format", help="terminal, json or markdown.")
+        str, typer.Option("--format", help="terminal, json, markdown or html.")
     ] = "terminal",
     out: Annotated[
         str | None, typer.Option("--out", "-o", help="Write the output to a file instead.")
@@ -411,8 +411,8 @@ def check(  # noqa: PLR0917 - a CLI command's options are its signature
     from nikasha.render.explain_view import render_explain  # noqa: PLC0415
     from nikasha.render.terminal import render_check  # noqa: PLC0415
 
-    if output_format not in ("terminal", "json", "markdown"):
-        raise typer.BadParameter("must be terminal, json or markdown", param_hint="--format")
+    if output_format not in ("terminal", "json", "markdown", "html"):
+        raise typer.BadParameter("must be terminal, json, markdown or html", param_hint="--format")
     try:
         checked = check_report(
             report, repo=repo, ref=ref, version=version, product=product, online=online
@@ -433,14 +433,27 @@ def check(  # noqa: PLR0917 - a CLI command's options are its signature
         if svg_path:
             console.save_svg(svg_path, title=f"nikasha check {report}")
     else:
-        _write_out(_format_check(checked, output_format), out)
+        _write_out(_format_check(checked, output_format, str(report)), out)
 
     raise typer.Exit(code=_check_exit_code(checked.verdict.label, fail_on))
 
 
-def _format_check(checked: CheckReport, output_format: str) -> str:
+def _format_check(checked: CheckReport, output_format: str, source: str = "") -> str:
     if output_format == "json":
         return checked.result.to_json()
+    if output_format == "html":
+        from nikasha.render.html import render_html  # noqa: PLC0415
+        from nikasha.render.html.excerpts import repo_excerpts  # noqa: PLC0415
+
+        # The cached clone is reopened just to read the excerpt lines; a report rendered
+        # without it still shows every finding, only without the surrounding code.
+        try:
+            with repo_excerpts(
+                checked.result.target.repo_url if checked.result.target else ""
+            ) as e:
+                return render_html(checked, excerpts=e, source=source)
+        except NikashaError:
+            return render_html(checked, source=source)
     from nikasha.render.markdown import render_markdown  # noqa: PLC0415
 
     return render_markdown(checked)
