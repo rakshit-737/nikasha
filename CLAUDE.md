@@ -21,6 +21,10 @@ prose.*
     `MCPServer`; tree-sitter 0.26 `Query`/`QueryCursor`.
   - `docs/adr/0003-differentiation-vs-slopcheck.md`: claim scoping, polarity, refutation
     gating, and the **M3.5 gate**.
+  - `docs/adr/0006-repository-access.md`: full clones (not `blob:none`), **no `git archive`**,
+    hardened git arguments.
+  - `docs/adr/0004-timeline.md`: the lazy timeline strategy is the default, with measured
+    numbers.
   - `docs/research/2026-09-23-m0-verification.md`: git and container flag corrections.
 - **`PROGRESS.md`** gives the current milestone, what is done, what is next, and open
   questions. Update it at every milestone.
@@ -57,18 +61,19 @@ are stubs until their milestones.
 
 | Package | Role | Status |
 |---|---|---|
-| `cli.py` | typer app | `version`, `doctor`, `extract` |
+| `cli.py` | typer app | `version`, `doctor`, `extract`, `index`, `timeline`, `trace` |
 | `doctor.py` | environment self-check | done (M0) |
 | `config.py` | cache and config dirs (0700) | done (M0) |
 | `errors.py` | `NikashaError` hierarchy | done (M0) |
-| `code/gitio.py` | **the only git runner** | hardened base (M0); extended in M2 |
+| `code/gitio.py` | **the only git runner**; `GitRepo` (tags, ls-tree, cat-file batch, grep, pickaxe, `export_tree`) | done (M2) |
 | `repro/sandbox.py` | **the only container-engine runner** | detection (M0); runs in M5 |
 | `model/` | frozen pydantic models; `ids.py` content IDs; `result.py` JSON | done (M1) |
 | `ingest/` | text / Markdown / HTML → `Report` with `SourceMap`; attachments | done (M1; email etc. M7) |
 | `extract/` | registry + one module per claim kind; `pipeline.py` merges, scopes, orders | done (M1) |
 | `extract/traces/` | one parser per trace format on `common.py` | 9/12 formats (ADR 0005) |
 | `render/extract_view.py` | `nikasha extract` view | done (M1) |
-| `resolve/`, `code/*` | refs, tags, index, tree-sitter, timeline | M2 |
+| `resolve/` | `refs.py` tag parsing and `ReleaseList`; `repo.py` clone cache; `target.py` repo and commit resolution; `products.py` loads `data/known_projects.yaml` | done (M2) |
+| `code/` | `languages`, `parser` (+ `symbols`, `calls`, `macros`, `preproc`, `queries/*.scm`) → `facts.FileFacts`; `index.py` SQLite by blob; `timeline.py`; `callgraph.py`; `trace_forensics.py`; `generated.py`; `literal.py` (capped `git grep -F`); `pathtrie`, `bktree`, `fingerprint` | done (M2) |
 | `checks/`, `fuse/`, `render/` | C01–C21, fusion, outputs | M3, M4 |
 | `bench/` | NikashaBench | M3.5, M6 |
 | `integrations/`, `llm/` | Action, MCP, web UI, LLM | M7 |
@@ -121,6 +126,28 @@ are stubs until their milestones.
   1 MB reports.
 - Trace fixtures are real output only: `scripts/capture_trace_fixtures.py`, run in the pinned
   `docker/capture` image. Memory-error traces come only from vulnlab (ADR 0005).
+
+## Code intelligence rules worth knowing (M2)
+
+- Every revision taken from a report goes through `gitio.safe_rev` and follows
+  `--end-of-options`. Option-looking text is refused everywhere except true data positions
+  (`grep`'s pattern after `-e`, and pathspecs after `--`). `archive`, `checkout` and other
+  porcelain are not in the allowlist. `tests/security/test_git_hazards.py` (20 canary
+  hooks) must stay green.
+- `parser.parse_file` never raises. It caps file size, parse time (read-callback cut-off)
+  and error-tree width, and marks such files `parsed_ok=False`. Do not use tree-sitter's
+  `progress_callback` (segfaults in 0.26.0) or chained `node.start_point.row` (use
+  `start_point[0]`).
+- C/C++ files with syntax errors are re-parsed with attribute-like macros blanked
+  (`code/preproc.py`, same offsets); the result is kept only if it has fewer errors.
+- Absence is never certain when a mention sits in a partially parsed file:
+  `Timeline.uncertain_releases` (about 0.4% of C definitions are lost to body-level `#if`).
+- Generated and release-only files (`known_projects.yaml` globs plus the sibling-template
+  rule in `code/generated.py`) are never judged. Missing-in-tree is not "fabricated" until
+  history says so: a timed-out pickaxe means `history_complete=False` (P4).
+- `known_projects.yaml` is the single product list; `extract/products.py` derives from it.
+- Tag matching: `refs.main_line_families()` keeps variant lines (tiny-curl,
+  OpenSSL-fips) out of neighbours and windows.
 
 ## Step-by-step guides
 
