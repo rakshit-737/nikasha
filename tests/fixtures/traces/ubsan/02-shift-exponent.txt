@@ -1,0 +1,9 @@
+/src/programs/ubsan/shift_exponent.c:8:18: runtime error: shift exponent 40 is too large for 32-bit type 'int'
+    #0 0x00000042e2f7 in shift_left /src/programs/ubsan/shift_exponent.c:8:18
+    #1 0x00000042e26b in encode_flags /src/programs/ubsan/shift_exponent.c:13:12
+    #2 0x00000042e1ea in main /src/programs/ubsan/shift_exponent.c:19:20
+    #3 0x7fed4755e680 in __libc_start_call_main /usr/src/debug/glibc-2.43-8.fc44.x86_64/csu/../sysdeps/nptl/libc_start_call_main.h:59:16
+    #4 0x7fed4755e797 in __libc_start_main@GLIBC_2.2.5 /usr/src/debug/glibc-2.43-8.fc44.x86_64/csu/../csu/libc-start.c:360:3
+    #5 0x000000400764 in _start (/work/prog+0x400764) (BuildId: a3f67a393c9343a9a7eb83a3f5c5d0472bedd168)
+
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior /src/programs/ubsan/shift_exponent.c:8:18 
