@@ -1,0 +1,30 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Toolchain image for capturing real crash-trace fixtures (tests/fixtures/traces/).
+# Built and driven by scripts/capture_trace_fixtures.py. Network is used only while this
+# image is built; every capture runs with `podman run --network none` as the `capture` user.
+FROM registry.fedoraproject.org/fedora:44@sha256:b4488a77fd2b96513fc8c18b502df7fbf19dad9e77d9a430c0163c574654822c
+
+RUN dnf install -y --setopt=install_weak_deps=False \
+        clang compiler-rt llvm libasan libubsan libtsan liblsan \
+        gdb valgrind make \
+        python3 java-25-openjdk-devel nodejs24 nodejs24-bin \
+        rust cargo golang \
+    && dnf install -y --setopt=install_weak_deps=False \
+        --enablerepo=fedora-debuginfo --enablerepo=updates-debuginfo \
+        glibc-debuginfo \
+    && dnf clean all \
+    && useradd --create-home --uid 1000 capture
+
+# No debuginfod lookups at capture time (there is no network anyway), stable locale,
+# and writable per-run caches for the Go and Rust toolchains.
+ENV DEBUGINFOD_URLS="" \
+    LANG=C.UTF-8 \
+    GOTOOLCHAIN=local \
+    GOCACHE=/tmp/gocache \
+    GOPATH=/tmp/gopath \
+    CARGO_HOME=/tmp/cargo
+
+USER capture
+WORKDIR /work
