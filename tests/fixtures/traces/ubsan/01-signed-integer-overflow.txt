@@ -1,0 +1,9 @@
+/src/programs/ubsan/signed_overflow.c:9:18: runtime error: signed integer overflow: 1073741823 * 4 cannot be represented in type 'int'
+    #0 0x00000042e27d in scale /src/programs/ubsan/signed_overflow.c:9:18
+    #1 0x00000042e21f in accumulate /src/programs/ubsan/signed_overflow.c:14:12
+    #2 0x00000042e1e0 in main /src/programs/ubsan/signed_overflow.c:19:20
+    #3 0x7fe967afd680 in __libc_start_call_main /usr/src/debug/glibc-2.43-8.fc44.x86_64/csu/../sysdeps/nptl/libc_start_call_main.h:59:16
+    #4 0x7fe967afd797 in __libc_start_main@GLIBC_2.2.5 /usr/src/debug/glibc-2.43-8.fc44.x86_64/csu/../csu/libc-start.c:360:3
+    #5 0x000000400764 in _start (/work/prog+0x400764) (BuildId: 233398b9a73023122cd756603cf54371ba84d80b)
+
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior /src/programs/ubsan/signed_overflow.c:9:18 
