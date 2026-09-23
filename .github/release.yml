@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+# Categories for GitHub's automatically generated release notes.
+changelog:
+  exclude:
+    labels: [skip-changelog]
+  categories:
+    - title: Breaking changes
+      labels: [breaking]
+    - title: Features
+      labels: [enhancement, feature]
+    - title: Fixes
+      labels: [bug, false-verdict]
+    - title: Checks
+      labels: [checks]
+    - title: Recipes
+      labels: [recipe]
+    - title: Docs
+      labels: [documentation]
+    - title: Maintenance
+      labels: ["*"]
