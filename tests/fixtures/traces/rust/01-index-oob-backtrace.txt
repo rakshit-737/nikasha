@@ -1,0 +1,19 @@
+
+thread 'main' (1) panicked at /src/programs/rust/index_oob.rs:5:5:
+index out of bounds: the len is 3 but the index is 3
+stack backtrace:
+   0: __rustc::rust_begin_unwind
+             at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/panicking.rs:679:5
+   1: core::panicking::panic_fmt
+             at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/core/src/panicking.rs:80:14
+   2: core::panicking::panic_bounds_check
+             at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/core/src/panicking.rs:271:5
+   3: index_oob::pick
+             at /src/programs/rust/index_oob.rs:5:5
+   4: index_oob::last
+             at /src/programs/rust/index_oob.rs:9:5
+   5: index_oob::main
+             at /src/programs/rust/index_oob.rs:14:20
+   6: <fn() as core::ops::function::FnOnce<()>>::call_once
+             at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/core/src/ops/function.rs:250:5
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
