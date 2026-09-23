@@ -1,0 +1,21 @@
+Traceback (most recent call last):
+  File "/src/programs/python/chained_exception.py", line 14, in read_timeout
+    return int(lookup("timeout"))
+               ~~~~~~^^^^^^^^^^^
+  File "/src/programs/python/chained_exception.py", line 9, in lookup
+    return SETTINGS[key]
+           ~~~~~~~~^^^^^
+KeyError: 'timeout'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/src/programs/python/chained_exception.py", line 24, in <module>
+    main()
+    ~~~~^^
+  File "/src/programs/python/chained_exception.py", line 20, in main
+    print(read_timeout())
+          ~~~~~~~~~~~~^^
+  File "/src/programs/python/chained_exception.py", line 16, in read_timeout
+    raise ValueError("timeout is not configured")
+ValueError: timeout is not configured
