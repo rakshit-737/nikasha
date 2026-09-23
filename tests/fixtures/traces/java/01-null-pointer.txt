@@ -1,0 +1,4 @@
+Exception in thread "main" java.lang.NullPointerException: Cannot invoke "String.length()" because "<parameter1>.user" is null
+	at NullField.nameLength(NullField.java:10)
+	at NullField.describe(NullField.java:14)
+	at NullField.main(NullField.java:18)
