@@ -1,8 +1,10 @@
 # SPDX-FileCopyrightText: 2026 The Nikasha Authors
 # SPDX-License-Identifier: Apache-2.0
-"""Every extraction regex must run in linear time on hostile input (SPEC §9, §19.2).
+"""Every regex that reads report or repository text must run in linear time on hostile input
+(SPEC §9, §19.2).
 
-Each compiled pattern in the extraction and ingest modules is fed adversarial strings: a
+Each compiled pattern (text or bytes) in the extraction, ingest, code-intelligence and
+resolution modules is fed adversarial strings: a
 short seed of "interesting" characters repeated to ~40k characters, the classic shape that
 triggers catastrophic backtracking. A pattern that backtracks exponentially or
 quadratically blows through the time budget.
@@ -14,27 +16,35 @@ import importlib
 import pkgutil
 import re
 import time
+from typing import Any
 
 import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
+import nikasha.code
 import nikasha.extract
 import nikasha.extract.traces
 import nikasha.ingest
+import nikasha.resolve
 
 BUDGET_S = 0.5
 TARGET_LEN = 40_000
 ALPHABET = "aA_0 .:/-`'\"()[]{}<>#*@$=,;\n\t" + "xX1lL"
 
 
-def _patterns() -> list[tuple[str, re.Pattern[str]]]:
-    found: dict[str, re.Pattern[str]] = {}
-    for package in (nikasha.extract, nikasha.extract.traces, nikasha.ingest):
+_PACKAGES = (
+    nikasha.extract, nikasha.extract.traces, nikasha.ingest, nikasha.code, nikasha.resolve
+)  # fmt: skip
+
+
+def _patterns() -> list[tuple[str, re.Pattern[Any]]]:
+    found: dict[str, re.Pattern[Any]] = {}
+    for package in _PACKAGES:
         for info in pkgutil.walk_packages(package.__path__, package.__name__ + "."):
             module = importlib.import_module(info.name)
             for name, value in vars(module).items():
-                if isinstance(value, re.Pattern) and isinstance(value.pattern, str):
+                if isinstance(value, re.Pattern):
                     found[f"{info.name}.{name}"] = value
     return sorted(found.items())
 
@@ -42,11 +52,12 @@ def _patterns() -> list[tuple[str, re.Pattern[str]]]:
 PATTERNS = _patterns()
 
 
-def _time(pattern: re.Pattern[str], text: str) -> float:
+def _time(pattern: re.Pattern[Any], text: str) -> float:
+    subject: str | bytes = text.encode() if isinstance(pattern.pattern, bytes) else text
     started = time.perf_counter()
-    for _ in pattern.finditer(text):
+    for _ in pattern.finditer(subject):
         pass
-    pattern.match(text)
+    pattern.match(subject)
     return time.perf_counter() - started
 
 
