@@ -1,0 +1,10 @@
+/src/programs/node/unhandled_rejection.js:8
+  throw new Error('record ' + id + ' not found');
+        ^
+
+Error: record 7 not found
+    at fetchRecord (/src/programs/node/unhandled_rejection.js:8:9)
+    at async loadProfile (/src/programs/node/unhandled_rejection.js:12:18)
+    at async main (/src/programs/node/unhandled_rejection.js:17:3)
+
+Node.js v24.18.0
