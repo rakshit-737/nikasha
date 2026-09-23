@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+# Label definitions. Applied with `gh label create --force` (see PROGRESS.md), after approval.
+- {name: bug, color: d73a4a, description: "Something isn't working"}
+- {name: false-verdict, color: b60205, description: "A verdict that contradicts the evidence"}
+- {name: enhancement, color: a2eeef, description: "New feature or request"}
+- {name: breaking, color: 5319e7, description: "Breaking change"}
+- {name: checks, color: 0e8a16, description: "Checks catalogue (C01–C21)"}
+- {name: recipe, color: 1d76db, description: "Sandbox reproduction recipes"}
+- {name: trace-format, color: c5def5, description: "Trace parsers"}
+- {name: language, color: bfdadc, description: "Language support"}
+- {name: documentation, color: 0075ca, description: "Docs"}
+- {name: security, color: ee0701, description: "Security hardening of Nikasha itself"}
+- {name: triage, color: ededed, description: "Needs a maintainer's first look"}
+- {name: skip-changelog, color: ffffff, description: "Omit from release notes"}
+- {name: dependencies, color: 0366d6, description: "Dependency updates"}
