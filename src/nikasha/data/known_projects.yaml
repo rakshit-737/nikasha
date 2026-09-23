@@ -1,0 +1,122 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Known projects (SPEC §9.2, §10, §11.5): product aliases, repository, release tag families,
+# shipped programs, project constant prefixes, and files that are generated or only exist in
+# release tarballs. Citing a generated file is never evidence of fabrication (P4).
+#
+# generated[].kind: amalgamation | generated | release_artifact
+version: 1
+projects:
+  - name: libhdr
+    aliases: [libhdr, vulnlab]
+    repo: null  # built locally by scripts/build_vulnlab.py
+    tag_families: [v]
+    programs: [hdrcat]
+    constant_prefixes: [HDR_]
+    recipe: vulnlab
+
+  - name: curl
+    aliases: [curl, libcurl]
+    repo: https://github.com/curl/curl
+    tag_families: [curl]
+    programs: [curl]
+    constant_prefixes: [CURLOPT_, CURLINFO_, CURLE_, CURLMOPT_, CURLSHOPT_, CURLU_, CURLUE_]
+    recipe: curl
+    generated:
+      - {path_glob: "lib/curl_config.h", kind: generated}
+      - {path_glob: "src/tool_hugehelp.c", kind: generated}
+      - {path_glob: "src/tool_ca_embed.c", kind: generated}
+      - {path_glob: "include/curl/curlbuild.h", kind: generated}
+
+  - name: sqlite
+    aliases: [sqlite, sqlite3]
+    repo: https://github.com/sqlite/sqlite
+    tag_families: [version]
+    programs: [sqlite3]
+    constant_prefixes: [SQLITE_]
+    recipe: sqlite
+    generated:
+      - {path_glob: "sqlite3.c", kind: amalgamation, source_markers: "Begin file"}
+      - {path_glob: "shell.c", kind: amalgamation}
+      - {path_glob: "sqlite3.h", kind: generated}
+      - {path_glob: "sqlite3ext.h", kind: release_artifact}
+      - {path_glob: "parse.c", kind: generated}
+      - {path_glob: "parse.h", kind: generated}
+      - {path_glob: "opcodes.c", kind: generated}
+      - {path_glob: "opcodes.h", kind: generated}
+      - {path_glob: "keywordhash.h", kind: generated}
+      - {path_glob: "fts5.c", kind: amalgamation}
+      - {path_glob: "fts5parse.c", kind: generated}
+
+  - name: openssl
+    aliases: [openssl, libssl, libcrypto]
+    repo: https://github.com/openssl/openssl
+    tag_families: [openssl]
+    programs: [openssl]
+    constant_prefixes: [SSL_, EVP_]
+    generated:
+      - {path_glob: "include/openssl/opensslv.h", kind: generated}
+      - {path_glob: "include/openssl/configuration.h", kind: generated}
+      - {path_glob: "crypto/buildinf.h", kind: generated}
+      - {path_glob: "**/*.s", kind: generated}
+
+  - name: libxml2
+    aliases: [libxml2, libxml]
+    repo: https://gitlab.gnome.org/GNOME/libxml2
+    tag_families: [v, libxml]
+    programs: [xmllint, xmlcatalog]
+    constant_prefixes: [XML_]
+    recipe: libxml2
+    generated:
+      - {path_glob: "config.h", kind: generated}
+      - {path_glob: "include/libxml/xmlversion.h", kind: generated}
+
+  - name: zlib
+    aliases: [zlib]
+    repo: https://github.com/madler/zlib
+    tag_families: [v]
+    constant_prefixes: [Z_]
+    generated:
+      - {path_glob: "zconf.h", kind: generated}
+
+  - name: nginx
+    aliases: [nginx]
+    repo: https://github.com/nginx/nginx
+    tag_families: [release]
+    programs: [nginx]
+    constant_prefixes: [NGX_]
+    generated:
+      - {path_glob: "objs/**", kind: generated}
+
+  - name: httpd
+    aliases: [apache httpd, httpd, apache http server]
+    repo: https://github.com/apache/httpd
+    tag_families: [""]
+    programs: [httpd, apachectl]
+    constant_prefixes: [APR_]
+    generated:
+      - {path_glob: "include/ap_config_auto.h", kind: generated}
+
+  - name: node
+    aliases: [node.js, nodejs]
+    repo: https://github.com/nodejs/node
+    tag_families: [v]
+    programs: [node]
+
+  - name: django
+    aliases: [django]
+    repo: https://github.com/django/django
+    tag_families: [""]
+    programs: [django-admin]
+
+# Patterns that apply to every project.
+generic_generated:
+  - {path_glob: "config.h", kind: generated}
+  - {path_glob: "**/config.h", kind: generated}
+  - {path_glob: "**/*_config.h", kind: generated}
+  - {path_glob: "**/*.min.js", kind: release_artifact}
+  - {path_glob: "dist/**", kind: release_artifact}
+  - {path_glob: "**/*.pb.c", kind: generated}
+  - {path_glob: "**/*.pb.h", kind: generated}
+  - {path_glob: "**/*.pb.go", kind: generated}
