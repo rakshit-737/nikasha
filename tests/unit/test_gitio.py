@@ -1,0 +1,93 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+import os
+from pathlib import Path
+
+import pytest
+
+from nikasha.code import gitio
+from nikasha.errors import ForbiddenCommandError
+
+pytestmark = pytest.mark.skipif(gitio.git_executable() is None, reason="git not installed")
+
+
+def _config_values(argv):
+    return [argv[i + 1] for i, a in enumerate(argv) if a == "-c"]
+
+
+def test_every_invocation_carries_hardening_config():
+    argv = gitio.build_argv(["ls-tree", "-r", "HEAD"])
+    assert argv[1] == "--no-pager"
+    assert set(gitio.HARDENING_CONFIG) <= set(_config_values(argv))
+
+
+def test_diff_external_is_not_relied_upon():
+    # An empty diff.external does not disable external diff; --no-ext-diff does.
+    assert not any(s.startswith("diff.external") for s in gitio.HARDENING_CONFIG)
+
+
+@pytest.mark.parametrize("sub", ["log", "show"])
+def test_log_and_show_disable_textconv_and_ext_diff(sub):
+    argv = gitio.build_argv([sub, "-1"])
+    i = argv.index(sub)
+    assert argv[i + 1 : i + 3] == ["--no-ext-diff", "--no-textconv"]
+
+
+@pytest.mark.parametrize(
+    "sub", ["checkout", "status", "diff", "config", "submodule", "filter-branch", "!sh"]
+)
+def test_forbidden_subcommands_are_rejected(sub):
+    with pytest.raises(ForbiddenCommandError):
+        gitio.build_argv([sub])
+
+
+def test_empty_command_is_rejected():
+    with pytest.raises(ForbiddenCommandError):
+        gitio.build_argv([])
+
+
+@pytest.mark.parametrize("sub", ["apply", "worktree"])
+def test_test_only_subcommands_need_opt_in(sub):
+    with pytest.raises(ForbiddenCommandError):
+        gitio.build_argv([sub])
+    assert sub in gitio.build_argv([sub], allow_test_only=True)
+
+
+def test_git_dir_adds_safe_directory(tmp_path):
+    argv = gitio.build_argv(["rev-parse", "HEAD"], git_dir=tmp_path)
+    resolved = str(tmp_path.resolve())
+    assert f"safe.directory={resolved}" in _config_values(argv)
+    assert f"--git-dir={resolved}" in argv
+    assert argv.index(f"--git-dir={resolved}") < argv.index("rev-parse")
+
+
+def test_env_scrubs_inherited_git_variables(monkeypatch):
+    monkeypatch.setenv("GIT_DIR", "/attacker")
+    monkeypatch.setenv("GIT_EXTERNAL_DIFF", "touch /tmp/pwned")
+    monkeypatch.setenv("GIT_CONFIG_PARAMETERS", "'core.pager=sh'")
+    env = gitio.hardened_env()
+    assert "GIT_DIR" not in env
+    assert "GIT_EXTERNAL_DIFF" not in env
+    assert "GIT_CONFIG_PARAMETERS" not in env
+    assert env["GIT_TERMINAL_PROMPT"] == "0"
+    assert env["GIT_OPTIONAL_LOCKS"] == "0"
+    assert env["GIT_CONFIG_NOSYSTEM"] == "1"
+    assert env["GIT_CONFIG_GLOBAL"] == os.devnull
+
+
+def test_user_config_is_opt_in():
+    assert "GIT_CONFIG_GLOBAL" not in gitio.hardened_env(use_user_config=True)
+
+
+def test_git_version_reports_something():
+    version = gitio.git_version()
+    assert version
+    assert version[0].isdigit()
+
+
+def test_run_git_executes_allowed_command(tmp_path):
+    # `rev-parse --git-dir` outside a repository fails cleanly rather than raising.
+    result = gitio.run_git(["rev-parse", "--is-bare-repository"], git_dir=tmp_path)
+    assert result.returncode != 0
+    assert Path(result.argv[0]).stem.lower() == "git"  # e.g. git, git.exe, git.EXE
+    assert result.duration_ms >= 0
