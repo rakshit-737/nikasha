@@ -1,0 +1,33 @@
+warning: panic message contains an unused formatting placeholder
+ --> /src/programs/rust/thread_panic.rs:8:21
+  |
+8 |         panic!("job {job} has no owner");
+  |                     ^^^^^
+  |
+  = note: this message is not used as a format string when given without arguments, but will be in Rust 2021
+  = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2021/panic-macro-consistency.html>
+  = note: `#[warn(non_fmt_panics)]` (part of `#[warn(rust_2021_compatibility)]`) on by default
+help: add the missing argument
+  |
+8 |         panic!("job {job} has no owner", ...);
+  |                                        +++++
+help: or add a "{}" format string to use the message literally
+  |
+8 |         panic!("{}", "job {job} has no owner");
+  |                +++++
+
+warning: 1 warning emitted
+
+
+thread '<unnamed>' (12) panicked at /src/programs/rust/thread_panic.rs:8:9:
+job {job} has no owner
+stack backtrace:
+   0: std::panicking::begin_panic::<&str>
+             at /builddir/build/BUILD/rust-1.98.1-build/rustc-1.98.1-src/library/std/src/panicking.rs:751:5
+   1: thread_panic::check
+             at /src/programs/rust/thread_panic.rs:8:9
+   2: thread_panic::run
+             at /src/programs/rust/thread_panic.rs:13:5
+   3: thread_panic::main::{closure#0}
+             at /src/programs/rust/thread_panic.rs:19:13
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
