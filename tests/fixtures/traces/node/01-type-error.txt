@@ -1,0 +1,17 @@
+/src/programs/node/type_error.js:7
+  return session.user.name;
+                      ^
+
+TypeError: Cannot read properties of undefined (reading 'name')
+    at userName (/src/programs/node/type_error.js:7:23)
+    at greeting (/src/programs/node/type_error.js:11:21)
+    at main (/src/programs/node/type_error.js:15:15)
+    at Object.<anonymous> (/src/programs/node/type_error.js:18:1)
+    at Module._compile (node:internal/modules/cjs/loader:1871:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:2002:10)
+    at Module.load (node:internal/modules/cjs/loader:1594:32)
+    at Module._load (node:internal/modules/cjs/loader:1396:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+
+Node.js v24.18.0
