@@ -1,0 +1,29 @@
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib64/libthread_db.so.1".
+
+Program received signal SIGABRT, Aborted.
+__pthread_kill_implementation (threadid=<optimized out>, signo=signo@entry=6, no_tid=no_tid@entry=0) at pthread_kill.c:44
+#0  __pthread_kill_implementation (threadid=<optimized out>, signo=signo@entry=6, no_tid=no_tid@entry=0) at pthread_kill.c:44
+#1  0x00007fac45230d93 in __pthread_kill_internal (threadid=<optimized out>, signo=6) at pthread_kill.c:89
+#2  0x00007fac451d5e8e in __GI_raise (sig=sig@entry=6) at ../sysdeps/posix/raise.c:26
+#3  0x00007fac451bd7b3 in __GI_abort () at abort.c:77
+#4  0x00007fac451be804 in __libc_message_impl (vma_name=vma_name@entry=0x7fac4536feb1 "glibc: fatal", fmt=fmt@entry=0x7fac453734bf "%s\n") at ../sysdeps/posix/libc_fatal.c:138
+#5  0x00007fac4523b08c in __libc_message_wrapper (vmaname=0x7fac4536feb1 "glibc: fatal", fmt=0x7fac453734bf "%s\n") at ../include/stdio.h:203
+#6  malloc_printerr (str=str@entry=0x7fac453760c8 "malloc(): invalid size (unsorted)") at malloc.c:5341
+#7  0x00007fac4523da5c in _int_malloc (av=av@entry=0x7fac453abac0 <main_arena>, bytes=bytes@entry=4096) at malloc.c:3938
+#8  0x00007fac4523e48f in __libc_malloc2 (bytes=4096) at malloc.c:3253
+#9  0x00007fac4523f423 in __GI___libc_malloc (bytes=bytes@entry=4096) at malloc.c:3306
+#10 0x00007fac45217f43 in __GI__IO_file_doallocate (fp=0x7fac453ac580 <_IO_2_1_stdout_>) at filedoalloc.c:91
+#11 0x00007fac452284b6 in __GI__IO_doallocbuf (fp=0x4141414141414141) at /usr/src/debug/glibc-2.43-8.fc44.x86_64/libio/libioP.h:1042
+#12 __GI__IO_doallocbuf (fp=fp@entry=0x7fac453ac580 <_IO_2_1_stdout_>) at genops.c:368
+#13 0x00007fac452262b9 in _IO_new_file_overflow (f=0x7fac453ac580 <_IO_2_1_stdout_>, ch=-1) at fileops.c:779
+#14 0x00007fac45226f88 in _IO_new_file_xsputn (f=<optimized out>, data=<optimized out>, n=18) at /usr/src/debug/glibc-2.43-8.fc44.x86_64/libio/libioP.h:1042
+#15 _IO_new_file_xsputn (f=0x7fac453ac580 <_IO_2_1_stdout_>, data=<optimized out>, n=18) at fileops.c:1258
+#16 0x00007fac451f3296 in __printf_buffer_flush_to_file (buf=buf@entry=0x7ffdbd7e2750) at ../libio/libioP.h:1042
+#17 0x00007fac451f337c in __printf_buffer_to_file_done (buf=buf@entry=0x7ffdbd7e2750) at printf_buffer_to_file.c:120
+#18 0x00007fac451feb70 in __vfprintf_internal (s=0x7fac453ac580 <_IO_2_1_stdout_>, format=0x402673 "%s=%s\n", ap=ap@entry=0x7ffdbd7e2850, mode_flags=mode_flags@entry=0) at vfprintf-internal.c:1549
+#19 0x00007fac451f2a43 in __printf (format=<optimized out>) at printf.c:33
+#20 0x0000000000400a2e in main (argc=2, argv=0x7ffdbd7e2ab8) at tools/hdrcat.c:125
+warning: Error disabling address space randomization: Function not implemented
+malloc(): invalid size (unsorted)
+warning: 44	pthread_kill.c: No such file or directory
