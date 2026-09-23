@@ -10,7 +10,7 @@ The living build log. Milestones follow SPEC §22, plus **M3.5** from ADR 0003.
 | Milestone | Status |
 |---|---|
 | M0 Bootstrap | **done**: repo live at https://github.com/rakshit-737/nikasha |
-| M1 Models, intake, extraction (+ claim scoping, polarity) | not started |
+| M1 Models, intake, extraction (+ claim scoping, polarity) | **done** (LSan/MSan/TSan parsers deferred, ADR 0005) |
 | M2 Resolution and code intelligence | not started |
 | M3 Checks, fusion, CLI outputs | not started |
 | M3.5 Early real-world gate (curl corpus vs. slopcheck) | not started |
@@ -72,13 +72,54 @@ The living build log. Milestones follow SPEC §22, plus **M3.5** from ADR 0003.
 - Ruleset on `main`: should there be an admin bypass while you are the only maintainer?
   (Decide before M8; the spec asks.)
 
+## M1: Models, intake, extraction (2026-09-23)
+
+### Done
+- Models (SPEC §7): frozen pydantic models, content-derived IDs, deterministic JSON, and
+  `schema/result-v1.json`, which is generated and drift-checked.
+- Intake: text, Markdown and HTML with an exact source map; attachments with caps and safe
+  opt-in archive extraction.
+- Extraction: 11 extractors, plus the pipeline (merge, containment, scope, polarity, roles,
+  500-claim cap), and `nikasha extract` (a highlighted view, and `--json`).
+- ADR 0003 countermeasures:
+  - claim provenance;
+  - negation detection;
+  - strict line binding;
+  - no symbol claims from PoC code;
+  - external-API and product/program attribution;
+  - HTML comments ignored.
+- Traces: 9 parsers (ASan, UBSan, valgrind, gdb, Python, Java, Go, Rust, Node), checked
+  against 27 real fixtures captured in a sandboxed container
+  (`scripts/capture_trace_fixtures.py`).
+- vulnlab: deterministic history (5 tags, pinned SHAs) and 5 fixture reports. The genuine
+  and mixed reports embed the real ASan trace.
+
+### Numbers
+- 1795 tests (including slow tests).
+- Coverage: 95% overall, 96% on the core packages (gate: 85%), 99% on trace parsers.
+- 79 regex patterns tested for linear time.
+- Extraction on a 1 MB report takes 0.94 s including intake (budget: under 1 s; measured on
+  a 16-core laptop, Fedora 44, repo on an NTFS volume).
+
+### Decisions (maintainer)
+- **Trace fixture scope (ADR 0005):** memory-error traces come only from the vulnlab bug;
+  everything else is benign. **LSan, MSan and TSan have no fixtures, so their parsers are
+  deferred.**
+- The real-corpus extraction smoke test planned for M1 moves to M3.5. It needs the
+  HackerOne terms check first.
+
+### Open questions for the maintainer
+- LSan, MSan and TSan: should they be captured later (e.g. from a real, already-fixed bug in
+  a public project at a pinned tag), or left out of v0.1.0?
+
 ## Carry-overs to later milestones
 
-- **M1:** `extract/scope.py`, `extract/polarity.py` and line binding (ADR 0003).
-  Coverage gate ≥85% on core packages once they exist. Schema drift check.
 - **M2:** check `GIT_NO_LAZY_FETCH` in the git docs before relying on it. Build the git
   hazard canary test.
-- **M3.5:** check HackerOne's terms for the disclosed-report `.json` endpoint before
+- **M3:** C11 must accept modern ASan wording ("N bytes after"; a SUMMARY naming
+  `__asan_memcpy` plus the module) as well as the older form (ADR 0005). Make the top
+  application frame of a trace a core claim.
+- **M3.5:** run the extraction smoke test on the real corpus. Check HackerOne's terms for the disclosed-report `.json` endpoint before
   fetching the corpus.
 - **M5:** engine-specific sandbox flags (see the verification report, §6).
 - **M8:**
