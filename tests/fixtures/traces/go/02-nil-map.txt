@@ -1,0 +1,10 @@
+panic: assignment to entry in nil map
+
+goroutine 1 [running]:
+main.(*registry).add(...)
+	/src/programs/go/nil_map.go:12
+main.register(...)
+	/src/programs/go/nil_map.go:17
+main.main()
+	/src/programs/go/nil_map.go:22 +0x71
+exit status 2
