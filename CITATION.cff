@@ -1,0 +1,30 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: CC0-1.0
+cff-version: 1.2.0
+message: "If you use Nikasha or NikashaBench in your work, please cite it using these metadata."
+title: "Nikasha: fact-checking vulnerability reports against source code at the claimed version"
+type: software
+authors:
+  - given-names: Rakshit
+    family-names: Rameshbabu
+    email: rakshitoffl@gmail.com
+version: 0.1.0.dev0
+repository-code: "https://github.com/rakshit-737/nikasha"
+url: "https://github.com/rakshit-737/nikasha"
+license: Apache-2.0
+keywords:
+  - security
+  - vulnerability disclosure
+  - vulnerability triage
+  - bug bounty
+  - CVE
+  - static analysis
+  - tree-sitter
+  - AddressSanitizer
+  - reproducibility
+abstract: >-
+  Nikasha checks the factual claims in a vulnerability report (cited files, functions,
+  line numbers, stack traces, quoted code, patches and options) against a project's source
+  code at the exact version the report names, and can reproduce the claimed crash in a
+  hardened container. It combines the evidence deterministically into an explainable
+  verdict and drafts neutral follow-up questions for the reporter.
