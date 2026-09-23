@@ -1,0 +1,146 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nikasha"
+dynamic = ["version"]
+description = "Proof, not prose. Fact-check vulnerability reports against the real code at the exact version they name."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE", "LICENSES/*.txt"]
+authors = [{ name = "Rakshit Rameshbabu", email = "rakshitoffl@gmail.com" }]
+keywords = [
+  "security",
+  "vulnerability",
+  "triage",
+  "cve",
+  "bug-bounty",
+  "tree-sitter",
+  "sanitizers",
+  "ai-slop",
+]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Information Technology",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Security",
+  "Topic :: Software Development :: Quality Assurance",
+  "Typing :: Typed",
+]
+dependencies = [
+    "platformdirs>=4.11.12",
+    "pydantic>=2.13.5",
+    "rich>=15.0.0",
+    "typer>=0.27.2",
+]
+
+[project.optional-dependencies]
+# Extras are filled in by the milestone that first needs them (ADR 0002).
+web = []
+mcp = []
+llm = []
+bench = []
+
+[project.scripts]
+nikasha = "nikasha.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/rakshit-737/nikasha"
+Source = "https://github.com/rakshit-737/nikasha"
+Issues = "https://github.com/rakshit-737/nikasha/issues"
+Changelog = "https://github.com/rakshit-737/nikasha/blob/main/CHANGELOG.md"
+
+[tool.hatch.version]
+path = "src/nikasha/version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nikasha"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/",
+  "tests/",
+  "LICENSE",
+  "NOTICE",
+  "LICENSES/",
+  "README.md",
+  "CHANGELOG.md",
+  "CITATION.cff",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+  "E", "W", "F", "I", "B", "UP", "S", "SIM", "RUF", "PTH", "N", "C4", "PL", "T20", "TID", "ANN",
+]
+ignore = [
+  "PLR0913", # CLI entry points legitimately take many options
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "ANN", "PLR2004"]
+"scripts/**" = ["T20"]
+# The only two modules allowed to spawn processes (enforced again by tests/unit/test_process_boundary.py).
+"src/nikasha/code/gitio.py" = ["TID251", "S603"]
+"src/nikasha/repro/sandbox.py" = ["TID251", "S603"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"subprocess".msg = "Run external programs only through nikasha.code.gitio or nikasha.repro.sandbox."
+
+[tool.mypy]
+strict = true
+python_version = "3.11"
+files = ["src"]
+warn_unreachable = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "-m", "not sandbox and not network and not slow"]
+markers = [
+  "sandbox: needs a container engine (podman or docker); CI runs these on ubuntu",
+  "network: needs network access; nightly only",
+  "slow: long-running tests",
+]
+xfail_strict = true
+
+[tool.coverage.run]
+source = ["nikasha"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.codespell]
+skip = "*.lock,*.svg,LICENSES/*,.git,.venv,SPEC.md"
+ignore-words-list = "nd"
+
+[dependency-groups]
+dev = [
+    "codespell>=2.4.3",
+    "hypothesis>=6.168.0",
+    "mypy>=2.3.1",
+    "packaging>=26.3",
+    "pre-commit>=4.6.2",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.8",
+]
