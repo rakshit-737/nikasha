@@ -1,0 +1,29 @@
+version = 1
+SPDX-PackageName = "nikasha"
+SPDX-PackageDownloadLocation = "https://github.com/rakshit-737/nikasha"
+
+# Files that cannot carry a comment header.
+[[annotations]]
+path = ["uv.lock", ".python-version", "src/nikasha/py.typed", "NOTICE"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 The Nikasha Authors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = ["schema/**", "tests/fixtures/**", "examples/**/*.json"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 The Nikasha Authors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = ["docs/assets/**"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 The Nikasha Authors"
+SPDX-License-Identifier = "CC-BY-4.0"
+
+# The original build specification and setup notes (documentation).
+[[annotations]]
+path = ["SPEC.md"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 The Nikasha Authors"
+SPDX-License-Identifier = "CC-BY-4.0"
