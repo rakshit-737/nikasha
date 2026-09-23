@@ -6,7 +6,7 @@ import pytest
 from typer.testing import CliRunner
 
 from nikasha import __version__
-from nikasha.cli import app
+from nikasha.cli import app, status_symbols
 from nikasha.code import gitio
 
 runner = CliRunner()
@@ -50,3 +50,25 @@ def test_doctor_table_and_json_agree_on_exit_code(tmp_path, monkeypatch, args):
     monkeypatch.setenv("NIKASHA_CACHE_DIR", str(tmp_path / "cache"))
     json_code = runner.invoke(app, ["doctor", "--json"]).exit_code
     assert runner.invoke(app, args).exit_code == json_code
+
+
+@pytest.mark.parametrize("encoding", ["cp1252", "ascii", "latin-1", "no-such-codec"])
+def test_legacy_encodings_fall_back_to_ascii(encoding):
+    symbols = status_symbols(encoding)
+    assert all(ch.isascii() for ch in "".join(symbols.values()))
+
+
+@pytest.mark.parametrize("encoding", ["utf-8", "UTF-8", None])
+def test_utf8_uses_check_marks(encoding):
+    assert status_symbols(encoding)["ok"] == "✓"
+
+
+def test_ascii_flag_forces_ascii():
+    assert status_symbols("utf-8", force_ascii=True)["ok"] == "+"
+
+
+def test_doctor_table_survives_cp1252_stdout(tmp_path, monkeypatch):
+    monkeypatch.setenv("NIKASHA_CACHE_DIR", str(tmp_path / "cache"))
+    result = CliRunner(charset="cp1252").invoke(app, ["doctor"])
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert "doctor" in result.output
