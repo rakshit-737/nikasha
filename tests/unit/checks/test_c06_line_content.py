@@ -10,13 +10,18 @@
 from __future__ import annotations
 
 import time
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from check_helpers import MakeContext, claim
 
 from nikasha.checks.base import run_checks
-from nikasha.checks.c06_line_content import LineContent, line_similarity, normalize
+from nikasha.checks.c06_line_content import LineContent, git_lines, line_similarity, normalize
 from nikasha.code.generated import GeneratedMatch
+from nikasha.code.gitio import GrepHit
+from nikasha.code.literal import LiteralResult
+from nikasha.code.literal import literal_search as real_literal_search
 from nikasha.model.claims import LineClaim
 
 #: ``src/util.c:15`` at v1.2.0, the line the demo bug is on.
@@ -27,7 +32,7 @@ BOUNDS_CHECK = "if (len >= HDR_VALUE_MAX)"
 INVENTED = "frobnicate_widget(quux, 42);"
 
 
-def _run(make_ctx: MakeContext, claims: list[LineClaim], tag: str = "v1.2.0") -> list:
+def _run(make_ctx: MakeContext, claims: list[LineClaim], tag: str = "v1.2.0") -> list[Any]:
     ctx = make_ctx(claims=claims, tag=tag)
     return LineContent().run(ctx, claims)
 
@@ -282,3 +287,71 @@ def test_normalization_and_similarity_are_pure_functions() -> None:
     assert line_similarity("memcpy(dst, value, len)", MEMCPY) == 1.0
     assert line_similarity(MEMCPY, "memcpy(line, p, len);") < 0.9
     assert line_similarity(MEMCPY, MEMCPY) == 1.0
+
+
+# --- review findings ----------------------------------------------------------------------
+
+
+class TestReviewFindings:
+    def test_lines_are_numbered_like_git_not_like_splitlines(
+        self, make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A form feed on its own line (GNU page break) is one line to git, C04 and GitHub;
+        # str.splitlines() would count two and push the cited line off by one.
+        ctx = make_ctx(claims=[claim(LineClaim, path="src/util.c", line=3, quoted_line=MEMCPY)])
+        blob = f"int a;\n\x0c\n    {MEMCPY}\n".encode()
+        monkeypatch.setattr(ctx.resolution.repo, "read_file", lambda commit, path: blob)
+        (evidence,) = LineContent().run(ctx, list(ctx.claims))
+        assert evidence.details["outcome"] == "exact"
+        assert git_lines("a\n\x0cb\x1cc\n") == ["a", "\x0cb\x1cc"]
+
+    def test_a_respaced_real_line_is_never_called_invented(self, make_ctx: MakeContext) -> None:
+        # The bounds check is real (v1.1.0, v1.3.0); a paste that lost one space misses
+        # every byte-exact search, which must not become -2.0 (P4).
+        c = claim(LineClaim, path="src/util.c", line=15, quoted_line="if(len >= HDR_VALUE_MAX)")
+        (evidence,) = _run(make_ctx, [c])
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.strength == 0.0
+        assert evidence.details["history_complete"] is False
+        assert "spacing" in evidence.details["incomplete"]
+
+    def test_a_spent_budget_does_not_claim_the_releases_were_searched(
+        self, make_ctx: MakeContext
+    ) -> None:
+        ctx = make_ctx(
+            claims=[claim(LineClaim, path="src/util.c", line=15, quoted_line=BOUNDS_CHECK)]
+        )
+        ctx.deadline = time.monotonic() - 1.0
+        (evidence,) = LineContent().run(ctx, list(ctx.claims))
+        assert "other release" not in evidence.summary
+        assert evidence.details["releases_searched"] is False
+
+    def test_release_tags_sharing_a_commit_are_all_named(
+        self, make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ctx = make_ctx(
+            claims=[claim(LineClaim, path="src/util.c", line=15, quoted_line=BOUNDS_CHECK)]
+        )
+        releases = list(ctx.resolution.releases.finals())
+        v110 = next(r for r in releases if r.name == "v1.1.0")
+        extra = SimpleNamespace(name="v1.1.0-retag", commit=v110.commit)
+        monkeypatch.setattr(ctx.resolution.releases, "finals", lambda: [*releases, extra])
+        (evidence,) = LineContent().run(ctx, list(ctx.claims))
+        assert evidence.details["found_in_releases"] == ["v1.1.0", "v1.1.0-retag", "v1.3.0"]
+
+    def test_a_capped_grep_listing_does_not_hide_the_claimed_file(
+        self, make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ctx = make_ctx(claims=[claim(LineClaim, path="src/util.c", line=15, quoted_line=MEMCPY)])
+        monkeypatch.setattr(ctx.resolution.repo, "read_file", lambda commit, path: None)
+
+        def capped(repo: Any, text: str, commit: str, **kw: Any) -> LiteralResult | None:
+            if kw.get("pathspecs"):
+                return real_literal_search(repo, text, commit, **kw)
+            hit = GrepHit(commit, "src/hdr.c", 5, text)
+            return LiteralResult(text, commit, (hit,), True, "git grep")
+
+        monkeypatch.setattr("nikasha.checks.c06_line_content.literal_search", capped)
+        (evidence,) = LineContent().run(ctx, list(ctx.claims))
+        assert evidence.outcome == "SUPPORTS"
+        assert evidence.details["found_path"] == "src/util.c"

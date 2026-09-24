@@ -9,10 +9,11 @@ machine finds ``src/util.c`` here.
 This check is where P4 is won or lost. "That file does not exist" is the most damaging
 thing Nikasha can say about a genuine report, so a missing path only becomes *never
 existed* when every sampled release lacks it (by path **or** basename, SPEC §12) *and* a
-complete history search agrees. A shallow clone, a pickaxe that timed out and a release
-scan cut short by the check's budget each downgrade the finding to "missing here" and say
-in the summary that absence was not established. Generated and release-only files (SPEC
-§11.5) are never judged at all: an amalgamation is absent from git by construction.
+complete history search agrees: no commit on any ref touched a file of that name, and no
+diff ever spelled the name out. A shallow clone, a failed or timed-out search, an empty
+release list and a budget that ran out each withhold the finding and say why. Generated
+and release-only files (SPEC §11.5) are never judged at all, and neither are trace frames
+in system headers or vendored code (C08's rule): those files are somebody else's.
 """
 
 from __future__ import annotations
@@ -22,14 +23,25 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from nikasha.checks.base import BaseCheck, CheckContext, make_evidence, register
+from nikasha.checks.c08_trace_frames import _third_party_reason
 from nikasha.checks.strengths import Strengths, default_strengths
 from nikasha.code.gitio import HistoryTimeoutError
 from nikasha.code.pathtrie import normalize_components
+from nikasha.errors import ExternalToolError
 from nikasha.model.claims import Claim, ClaimKind, FileClaim, Frame, LineClaim, TraceClaim
 from nikasha.model.evidence import CommandRecord, Evidence
 
 CHECK_ID = "C02"
 GROUP = "locus"
+
+#: Longest file name the history is searched for. No filesystem git runs on allows a
+#: longer path component, and an unbounded one would reach the argv (E2BIG, WinError 206).
+MAX_NAME_LEN = 255
+
+#: NEUTRAL outcome labels. None is a strengths-table key: these findings carry no weight.
+OUTSIDE_REPOSITORY = "outside_repository"
+ABSENCE_NOT_ESTABLISHED = "absence_not_established"
+BUDGET_EXPIRED = "budget_expired"
 
 
 def _ref(ctx: CheckContext) -> str:
@@ -38,6 +50,15 @@ def _ref(ctx: CheckContext) -> str:
 
 def _basename(path: str) -> str:
     return path.rsplit("/", 1)[-1]
+
+
+def _normalized(path: str) -> str:
+    return "/".join(normalize_components(path))
+
+
+def _glob_literal(name: str) -> str:
+    """``name`` with git wildmatch metacharacters escaped, for a ``:(glob)`` pathspec."""
+    return "".join("\\" + ch if ch in "\\*?[" else ch for ch in name)
 
 
 def _frames(claim: TraceClaim) -> Iterator[Frame]:
@@ -71,7 +92,7 @@ def cited_paths(claim: Claim) -> list[str]:
     for path in raw:
         if not path:
             continue
-        normalized = "/".join(normalize_components(path))
+        normalized = _normalized(path)
         if not normalized or normalized in seen:
             continue
         seen.add(normalized)
@@ -79,15 +100,47 @@ def cited_paths(claim: Claim) -> list[str]:
     return out
 
 
+def _outside_reasons(claim: Claim) -> dict[str, str]:
+    """Normalized trace paths whose every frame is somebody else's code, with the reason.
+
+    A frame in ``/usr/include/``, a vendored tree or a shared library names a file this
+    repository never had. C08 does not count such frames, and neither does this check.
+    """
+    if not isinstance(claim, TraceClaim):
+        return {}
+    reasons: dict[str, str | None] = {}
+    for frame in _frames(claim):
+        if not frame.path or frame.is_runtime:
+            continue
+        key = _normalized(frame.path)
+        reason = _third_party_reason(frame)
+        if key not in reasons:
+            reasons[key] = reason
+        elif reasons[key] is not None and reason is None:
+            reasons[key] = None
+    return {key: reason for key, reason in reasons.items() if reason is not None}
+
+
+@dataclass
+class _Cited:
+    """One normalized path and everything that cites it."""
+
+    path: str
+    claims: list[Claim] = field(default_factory=list)
+    #: Set only while every citation of the path is a third-party trace frame.
+    outside: str | None = None
+    has_own_citation: bool = False
+
+
 @dataclass(frozen=True, slots=True)
 class _History:
-    """What ``log -S`` could establish about a file name across the whole history."""
+    """What the history search could establish about a file name across every ref."""
 
     complete: bool
     first_commit: str | None = None
     reason: str | None = None
-    #: The pickaxe that answered, when one ran. A search that was refused or timed out
-    #: records nothing: there is no exit code or output to hash (P6).
+    #: The searches that answered. A search that was refused or timed out records
+    #: nothing: there is no exit code or output to hash (P6).
     commands: tuple[CommandRecord, ...] = ()
 
     @property
@@ -107,7 +160,7 @@ class _Scan:
 
 @dataclass
 class _Trees:
-    """Per-run caches, so twenty claims cost one tree listing and one pickaxe per name."""
+    """Per-run caches, so twenty claims cost one tree listing and one search per name."""
 
     _basenames: dict[str, dict[str, tuple[str, ...]]] = field(default_factory=dict)
     _history: dict[str, _History] = field(default_factory=dict)
@@ -126,6 +179,9 @@ class _Trees:
 
     def releases_with(self, ctx: CheckContext, path: str) -> _Scan:
         finals = ctx.resolution.releases.finals()
+        if not finals:
+            # Nothing was sampled, so "every sampled release lacks it" says nothing (P4).
+            return _Scan((), 0, complete=False)
         present: list[tuple[str, tuple[str, ...]]] = []
         for release in finals:
             if ctx.expired():
@@ -143,7 +199,7 @@ class _Trees:
         return cached
 
     def _probe(self, ctx: CheckContext, name: str) -> _History:
-        if not name.isprintable():
+        if not name or not name.isprintable() or len(name) > MAX_NAME_LEN:
             return _History(False, reason="the file name cannot be searched for")
         if ctx.expired():
             return _History(False, reason="the check's time budget ran out")
@@ -151,16 +207,38 @@ class _Trees:
             self._shallow = ctx.resolution.repo.is_shallow()
         if self._shallow:
             return _History(False, reason="the clone is shallow")
-        records: list[CommandRecord] = []
-        try:
-            first = ctx.resolution.repo.pickaxe_first(
-                name, timeout=ctx.history_timeout, record=records
-            )
-        except HistoryTimeoutError:
-            return _History(
-                False, reason=f"the history search timed out after {ctx.history_timeout:g}s"
-            )
-        return _History(True, first_commit=first, commands=tuple(records))
+        return _search(ctx, name)
+
+
+def _search(ctx: CheckContext, name: str) -> _History:
+    """Every ref's history, by file path and then by diff content, for one file name."""
+    timed_out = f"the history search timed out after {ctx.history_timeout:g}s"
+    failed = "the history search failed"
+    records: list[CommandRecord] = []
+    # By path first: a file whose name no tracked file ever spells out (a module found
+    # by a build glob, a test file) is invisible to log -S, which reads contents only.
+    pathspec = f":(glob)**/{_glob_literal(name)}"
+    try:
+        result = ctx.resolution.repo.run(
+            ["log", "--all", "-1", "--format=%H", "--", pathspec],
+            timeout=ctx.history_timeout,
+            record=records,
+        )
+    except ExternalToolError:
+        return _History(False, reason=timed_out)
+    if result.returncode != 0:
+        return _History(False, reason=failed, commands=tuple(records))
+    by_path = result.stdout.decode("ascii", "replace").strip()
+    if by_path:
+        return _History(True, first_commit=by_path, commands=tuple(records))
+    try:
+        first = ctx.resolution.repo.pickaxe_first(name, timeout=ctx.history_timeout, record=records)
+    except HistoryTimeoutError:
+        return _History(False, reason=timed_out, commands=tuple(records))
+    if any(record.exit_code != 0 for record in records):
+        # A failed log --all prints nothing, which is not "found nothing" (P4).
+        return _History(False, reason=failed, commands=tuple(records))
+    return _History(True, first_commit=first, commands=tuple(records))
 
 
 @register
@@ -175,31 +253,71 @@ class FileExists(BaseCheck):
         self.strengths = strengths or default_strengths()
 
     def run(self, ctx: CheckContext, claims: Sequence[Claim]) -> list[Evidence]:
+        # One finding per path, citing every claim that names it: a file claim and a line
+        # claim on the same missing file are one fact, not two refutations in one group.
+        cited: dict[str, _Cited] = {}
+        for claim in claims:
+            outside = _outside_reasons(claim)
+            for path in cited_paths(claim):
+                key = _normalized(path)
+                entry = cited.get(key)
+                if entry is None:
+                    entry = cited[key] = _Cited(path)
+                if claim not in entry.claims:
+                    entry.claims.append(claim)
+                reason = outside.get(key)
+                if reason is None:
+                    entry.has_own_citation = True
+                elif entry.outside is None:
+                    entry.outside = reason
         trees = _Trees()
         return [
-            self._one(ctx, claim, path, trees)
-            for claim in claims
-            for path in cited_paths(claim)
+            self._one(
+                ctx, entry.claims, entry.path, trees,
+                None if entry.has_own_citation else entry.outside,
+            )
+            for entry in cited.values()
         ]  # fmt: skip
 
-    def _one(self, ctx: CheckContext, claim: Claim, path: str, trees: _Trees) -> Evidence:
+    def _one(
+        self,
+        ctx: CheckContext,
+        claims: list[Claim],
+        path: str,
+        trees: _Trees,
+        outside: str | None,
+    ) -> Evidence:
         candidates = ctx.resolve_path(path)
-        normalized = "/".join(normalize_components(path))
+        normalized = _normalized(path)
         generated = ctx.generated(candidates[0] if len(candidates) == 1 else normalized)
         if generated is not None:
-            return self._generated(ctx, claim, normalized, generated.kind, generated.reason)
+            return self._generated(ctx, claims, normalized, generated.kind, generated.reason)
         if candidates:
-            return self._exists(ctx, claim, path, normalized, candidates)
-        return self._absent(ctx, claim, normalized, trees)
+            return self._exists(ctx, claims, path, normalized, candidates)
+        if outside is not None:
+            return self._outside(ctx, claims, normalized, outside)
+        return self._absent(ctx, claims, normalized, trees)
+
+    def _outside(self, ctx: CheckContext, claims: list[Claim], path: str, why: str) -> Evidence:
+        """A frame in a system header or vendored code is not this repository's file."""
+        return make_evidence(
+            check_id=CHECK_ID,
+            group=GROUP,
+            claims=claims,
+            outcome="NEUTRAL",
+            strength=0.0,
+            summary=f"{path} is not in the tree at {_ref(ctx)} and is not judged: {why}",
+            details={"outcome": OUTSIDE_REPOSITORY, "path": path, "reason": why},
+        )
 
     def _generated(
-        self, ctx: CheckContext, claim: Claim, path: str, kind: str, reason: str
+        self, ctx: CheckContext, claims: list[Claim], path: str, kind: str, reason: str
     ) -> Evidence:
         """SPEC §11.5: a generated or release-only file is never judged, in either direction."""
         return make_evidence(
             check_id=CHECK_ID,
             group=GROUP,
-            claims=[claim],
+            claims=claims,
             outcome="NEUTRAL",
             strength=self.strengths.get(CHECK_ID, "generated"),
             summary=f"{path} is a {kind} file, not in source control, so its presence at"
@@ -210,7 +328,7 @@ class FileExists(BaseCheck):
     def _exists(
         self,
         ctx: CheckContext,
-        claim: Claim,
+        claims: list[Claim],
         cited: str,
         path: str,
         candidates: Sequence[str],
@@ -236,7 +354,7 @@ class FileExists(BaseCheck):
         return make_evidence(
             check_id=CHECK_ID,
             group=GROUP,
-            claims=[claim],
+            claims=claims,
             outcome="SUPPORTS",
             strength=self.strengths.get(CHECK_ID, "exists"),
             summary=summary,
@@ -244,11 +362,23 @@ class FileExists(BaseCheck):
             locations=[ctx.location(matched, 1)],
         )
 
-    def _absent(self, ctx: CheckContext, claim: Claim, path: str, trees: _Trees) -> Evidence:
+    def _absent(self, ctx: CheckContext, claims: list[Claim], path: str, trees: _Trees) -> Evidence:
         ref = _ref(ctx)
         scan = trees.releases_with(ctx, path)
+        if not scan.complete and scan.sampled:
+            # How far the scan got depends on the clock, so nothing it saw is reported (P2).
+            return make_evidence(
+                check_id=CHECK_ID,
+                group=GROUP,
+                claims=claims,
+                outcome="NEUTRAL",
+                strength=0.0,
+                summary=f"{path} is not in the tree at {ref}; the check's time budget ran out"
+                " before the other releases were scanned, so it is not judged",
+                details={"outcome": BUDGET_EXPIRED, "path": path, "release_scan_complete": False},
+            )
         if scan.present:
-            return self._elsewhere(ctx, claim, path, scan)
+            return self._elsewhere(ctx, claims, path, scan)
 
         history = trees.history(ctx, _basename(path))
         missing = (
@@ -261,15 +391,16 @@ class FileExists(BaseCheck):
         }
         if scan.complete and history.never_seen:
             # The only place this check may say "never existed": every sampled release was
-            # looked at, and log -S found the name in no commit on any ref.
+            # looked at, no commit on any ref touched a file of that name, and log -S found
+            # the name in no diff.
             base = self.strengths.get(CHECK_ID, "never_in_history")
-            core = claim.role == "core"
+            core = any(claim.role == "core" for claim in claims)
             if core:
                 base *= self.strengths.get(CHECK_ID, "never_in_history_core_multiplier")
             return make_evidence(
                 check_id=CHECK_ID,
                 group=GROUP,
-                claims=[claim],
+                claims=claims,
                 outcome="REFUTES",
                 strength=base,
                 summary=f"{missing}, and the name appears nowhere in history",
@@ -283,10 +414,12 @@ class FileExists(BaseCheck):
             )
 
         # P4: absence is not established, so the strong outcome is withheld and the reason
-        # is stated. The file is still genuinely missing at the ref, which is the -0.8.
+        # is stated. Only a history that *has* the name is "present elsewhere" (the -0.8);
+        # an unfinished or impossible search establishes nothing, carries no weight, and
+        # must not read as a version mismatch to the fusion rules.
         reasons: list[str] = []
         if not scan.complete:
-            reasons.append("the release scan did not finish")
+            reasons.append("no release was available to sample")
         if history.reason is not None:
             reasons.append(history.reason)
         if history.first_commit is not None:
@@ -294,32 +427,44 @@ class FileExists(BaseCheck):
             details["first_commit_with_name"] = history.first_commit
         note = "; ".join(reasons)
         details["history_note"] = note
-        details["outcome"] = "missing_here_present_elsewhere"
+        in_history = history.first_commit is not None
+        details["outcome"] = (
+            "missing_here_present_elsewhere" if in_history else (ABSENCE_NOT_ESTABLISHED)
+        )
         return make_evidence(
             check_id=CHECK_ID,
             group=GROUP,
-            claims=[claim],
-            outcome="REFUTES",
-            strength=self.strengths.get(CHECK_ID, "missing_here_present_elsewhere"),
+            claims=claims,
+            outcome="REFUTES" if in_history else "NEUTRAL",
+            strength=(
+                self.strengths.get(CHECK_ID, "missing_here_present_elsewhere")
+                if in_history
+                else 0.0
+            ),
             summary=f"{missing}, but absence is not established: {note}",
             details=details,
             commands=history.commands,
         )
 
-    def _elsewhere(self, ctx: CheckContext, claim: Claim, path: str, scan: _Scan) -> Evidence:
+    def _elsewhere(
+        self, ctx: CheckContext, claims: list[Claim], path: str, scan: _Scan
+    ) -> Evidence:
         names = [name for name, _ in scan.present]
         found = sorted({p for _, paths in scan.present for p in paths})
+        # Releases match by path *or* basename; only say "the path" when it was the path.
+        what = path if path in found else f"a file named {_basename(path)}"
         note = (
-            f"{path} exists in {', '.join(names)}: the report may be about one of those"
+            f"{what} exists in {', '.join(names)}: the report may be about one of those"
             " versions rather than " + _ref(ctx)
         )
         return make_evidence(
             check_id=CHECK_ID,
             group=GROUP,
-            claims=[claim],
+            claims=claims,
             outcome="REFUTES",
             strength=self.strengths.get(CHECK_ID, "missing_here_present_elsewhere"),
-            summary=f"{path} is not in the tree at {_ref(ctx)}, but it is in {', '.join(names)}",
+            summary=f"{path} is not in the tree at {_ref(ctx)}, but {what} is in"
+            f" {', '.join(names)}",
             details={
                 "outcome": "missing_here_present_elsewhere",
                 "path": path,

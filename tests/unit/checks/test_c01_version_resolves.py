@@ -12,11 +12,12 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+import pytest
 from check_helpers import REPORTS, MakeContext, claim
 
 from nikasha.checks.base import CheckContext, run_checks
 from nikasha.checks.c01_version_resolves import VersionResolves
-from nikasha.code.gitio import TagRef
+from nikasha.code.gitio import GitRepo, TagRef
 from nikasha.extract.versions import parse_version
 from nikasha.ingest import load_report
 from nikasha.model.claims import VersionClaim
@@ -128,9 +129,12 @@ class TestGapInReleases:
         assert evidence.outcome == "REFUTES"
         assert evidence.strength == -1.0
 
-    def test_a_missing_fix_release_inside_the_line_refutes(self, make_ctx: MakeContext) -> None:
+    def test_a_missing_fix_release_inside_the_line_is_neutral(self, make_ctx: MakeContext) -> None:
+        """P4: a fix version named in advance may ship under another number."""
         c = _version("1.1.5", relation="fixed_in")
-        assert _one(make_ctx, c).outcome == "REFUTES"
+        evidence = _one(make_ctx, c)
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.details["outcome"] == "fix_release_not_cut"
 
     def test_a_version_above_every_release_is_not_a_gap(self, make_ctx: MakeContext) -> None:
         evidence = _one(make_ctx, _version("9.9.9"))
@@ -329,3 +333,127 @@ def test_registered_and_runnable_through_the_runner(make_ctx: MakeContext) -> No
     assert run.error is None
     assert run.seconds >= 0.0
     assert sorted(e.outcome for e in run.evidence) == ["REFUTES", "SUPPORTS"]
+
+
+def _retag(ctx: CheckContext, extra: list[TagRef], *, drop: str = "", epoch_of: Any = None) -> None:
+    rel = ctx.resolution.releases
+    tags = [
+        TagRef(r.name, r.commit, epoch_of(r) if epoch_of else r.epoch)
+        for r in rel.releases
+        if r.name != drop
+    ]
+    ctx.resolution.releases = ReleaseList.from_tags([*tags, *extra])
+
+
+class TestReviewFindings:
+    """Regressions for false refutations and determinism found in review (P4, P2, P7)."""
+
+    def test_a_next_release_candidate_is_not_a_future_release(self, make_ctx: MakeContext) -> None:
+        evidence = _one(make_ctx, _version("1.3.0-rc1"), report=_dated())
+        assert evidence.outcome == "NEUTRAL"
+
+    def test_a_pre_release_tagged_before_the_report_resolves(self, make_ctx: MakeContext) -> None:
+        ctx = make_ctx(claims=[_version("1.3.0-rc1")], report=_dated())
+        base = ctx.resolution.releases.releases[2]
+        _retag(ctx, [TagRef("v1.3.0-rc1", base.commit, base.epoch)])
+        (evidence,) = VersionResolves().run(ctx, list(ctx.claims))
+        assert evidence.outcome == "SUPPORTS"
+
+    def test_a_variant_final_tagged_before_the_report_resolves(self, make_ctx: MakeContext) -> None:
+        ctx = make_ctx(claims=[_version("1.4.0")], report=_dated())
+        _variant_line(ctx)
+        base = ctx.resolution.releases.releases[1]
+        tags = [TagRef(r.name, r.commit, r.epoch) for r in ctx.resolution.releases.releases]
+        tags.append(TagRef("libhdr-fips-1_4_0", base.commit, base.epoch))
+        ctx.resolution.releases = ReleaseList.from_tags(tags)
+        (evidence,) = VersionResolves().run(ctx, list(ctx.claims))
+        assert evidence.outcome == "SUPPORTS"
+
+    def test_a_tag_made_after_its_commit_is_not_refuted(self, make_ctx: MakeContext) -> None:
+        """The tag date is only a lower bound on the release date."""
+        ctx = make_ctx(claims=[_version("1.2.1")], report=_dated())
+        v120 = ctx.resolution.releases.releases[2]
+        _retag(ctx, [TagRef("v1.2.1", v120.commit, v120.epoch + 90 * 86_400)], drop="v1.2.1")
+        (evidence,) = VersionResolves().run(ctx, list(ctx.claims))
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.details["outcome"] == "tag_postdates_commit"
+
+    def test_a_shallow_clone_never_refutes(
+        self, make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(GitRepo, "is_shallow", lambda self: True)
+        gap = _one(make_ctx, _version("1.1.5"))
+        future = _one(make_ctx, _version("1.5.0"), report=_dated())
+        assert (gap.outcome, gap.details["outcome"]) == ("NEUTRAL", "tags_incomplete")
+        assert (future.outcome, future.details["outcome"]) == ("NEUTRAL", "tags_incomplete")
+
+    def test_an_unparsed_tag_naming_the_version_blocks_a_gap(self, make_ctx: MakeContext) -> None:
+        ctx = make_ctx(claims=[_version("1.1.5")])
+        base = ctx.resolution.releases.releases[1]
+        _retag(ctx, [TagRef("v1.1.5-hotfix", base.commit, base.epoch)])
+        assert "v1.1.5-hotfix" in ctx.resolution.releases.ignored
+        (evidence,) = VersionResolves().run(ctx, list(ctx.claims))
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.details["unparsed_tags"] == ["v1.1.5-hotfix"]
+
+    def test_a_version_of_another_shape_is_not_a_gap(self, make_ctx: MakeContext) -> None:
+        evidence = _one(make_ctx, _version("1.2.0.1"))
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.details["outcome"] == "version_shape_differs"
+
+    @pytest.mark.parametrize(
+        ("epoch", "shown"),
+        [(99_999_999_999_999, "an out-of-range date"), (253_402_300_799, "9999-12-31")],
+    )
+    def test_extreme_tag_dates_render_identically_and_never_raise(
+        self, make_ctx: MakeContext, epoch: int, shown: str
+    ) -> None:
+        ctx = make_ctx(claims=[_version("1.2.0")])
+        _retag(ctx, [], epoch_of=lambda r: epoch if r.name == "v1.2.0" else r.epoch)
+        (evidence,) = VersionResolves().run(ctx, list(ctx.claims))
+        assert evidence.outcome == "SUPPORTS"
+        assert evidence.details["tagged_at"] == shown
+
+    def test_summaries_do_not_carry_the_local_repository_path(self, make_ctx: MakeContext) -> None:
+        ctx = make_ctx(claims=[_version("0" * 40, commit="0" * 40)])
+        (evidence,) = VersionResolves().run(ctx, list(ctx.claims))
+        assert ctx.repo_url not in evidence.summary
+
+    def test_latest_before_the_first_release_is_labelled_honestly(
+        self, make_ctx: MakeContext
+    ) -> None:
+        c = _version("the latest release", relation="latest", special_ref="latest")
+        evidence = _one(make_ctx, c, report=_dated(date(2025, 1, 1)))
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.details["outcome"] == "no_release_by_report_date"
+
+    def test_one_missing_version_is_refuted_once(self, make_ctx: MakeContext) -> None:
+        a = _version("1.1.5")
+        b = _version(
+            "1.1.5",
+            relation="affected_range",
+            parsed=None,
+            upper=parse_version("1.1.5"),
+            upper_inclusive=True,
+        )
+        evidence = _run(make_ctx, [a, b])
+        assert len(evidence) == 1
+        assert evidence[0].outcome == "REFUTES"
+        assert set(evidence[0].claim_ids) == {a.id, b.id}
+
+    def test_a_tag_cut_the_day_after_the_report_is_not_refuted(self, make_ctx: MakeContext) -> None:
+        """Time-zone slack: the reporter's day and the tag's UTC day can differ."""
+        evidence = _one(make_ctx, _version("1.2.1"), report=_dated(date(2026, 3, 19)))
+        assert evidence.outcome != "REFUTES"
+
+    @pytest.mark.parametrize("raw", ["1.1.0", "1.5.0"])
+    def test_a_report_the_day_before_the_first_release_is_not_refuted(
+        self, make_ctx: MakeContext, raw: str
+    ) -> None:
+        """P4: v1.0.0 (2026-01-06) falls inside the slack, but nothing existed on the day."""
+        evidence = _one(make_ctx, _version(raw), report=_dated(date(2026, 1, 5)))
+        assert evidence.outcome != "REFUTES"
+
+    def test_the_future_summary_names_the_slack_day_truthfully(self, make_ctx: MakeContext) -> None:
+        evidence = _one(make_ctx, _version("1.3.0"), report=_dated())
+        assert "the latest release by 2026-03-19 was v1.2.0" in evidence.summary

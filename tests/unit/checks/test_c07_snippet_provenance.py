@@ -9,13 +9,23 @@ tree, not on a fixture built to agree with them.
 
 from __future__ import annotations
 
+import dataclasses
 from typing import Any
 
 import pytest
 from check_helpers import MakeContext, claim
 
+from nikasha.checks import c07_snippet_provenance as c07
 from nikasha.checks.base import CheckContext, run_checks
-from nikasha.checks.c07_snippet_provenance import SnippetProvenance
+from nikasha.checks.c07_snippet_provenance import (
+    ALIGN_WINDOW_TOKENS,
+    SnippetProvenance,
+    _narrow,
+    _prepare,
+    _Scan,
+    _Snippet,
+)
+from nikasha.code.fingerprint import Token
 from nikasha.code.generated import GeneratedMatch
 from nikasha.code.gitio import HistoryTimeoutError
 from nikasha.model.claims import SnippetClaim
@@ -138,7 +148,7 @@ def test_a_snippet_only_in_later_releases_refutes_weakly(make_ctx: MakeContext) 
     assert evidence.outcome == "REFUTES"
     assert evidence.strength == -0.5
     assert evidence.details["outcome_key"] == "other_release_only"
-    assert evidence.details["containment"] == 0.0
+    assert evidence.details["containment"] == 0.071  # src/util.c at v1.0.0, re-aligned directly
     assert evidence.details["elsewhere"]["ref"] == "v1.1.0"
     assert evidence.details["elsewhere"]["containment"] == 1.0
     assert evidence.details["sampled_releases"] == ["v1.1.0", "v1.2.0", "v1.2.1", "v1.3.0"]
@@ -337,3 +347,117 @@ def test_registered_and_runnable_through_the_runner(make_ctx: MakeContext) -> No
     assert run.error is None
     assert run.seconds >= 0.0
     assert [e.outcome for e in run.evidence] == ["REFUTES"]
+
+
+# --- review fixes: P4 safeguards, budget determinism, bounded work --------------------------
+
+
+class TestReviewFixes:
+    def test_a_shallow_clone_is_never_called_absent(
+        self, make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ctx = make_ctx(claims=[_snippet(FABRICATED)])
+        monkeypatch.setattr(ctx.resolution.repo, "is_shallow", lambda: True)
+
+        def never(text: str, **_: object) -> str | None:
+            raise AssertionError("a shallow clone must not be pickaxed")
+
+        monkeypatch.setattr(ctx.resolution.repo, "pickaxe_first", never)
+        (evidence,) = SnippetProvenance().run(ctx, list(ctx.claims))
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.strength == 0.0
+        assert evidence.details["history_complete"] is False
+        assert "shallow" in evidence.summary
+
+    def test_the_pickaxe_gets_the_contexts_history_timeout(
+        self, make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ctx = make_ctx(claims=[_snippet(FABRICATED)])
+        ctx.history_timeout = 3.0
+        seen: list[object] = []
+
+        def pickaxe(text: str, **kwargs: object) -> str | None:
+            seen.append(kwargs.get("timeout"))
+            return None
+
+        monkeypatch.setattr(ctx.resolution.repo, "pickaxe_first", pickaxe)
+        SnippetProvenance().run(ctx, list(ctx.claims))
+        assert seen == [3.0]
+
+    def test_a_budget_cut_at_any_point_gives_one_identical_neutral(
+        self, make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ids = set()
+        for allowed in range(0, 12):
+            ctx = make_ctx(claims=[_snippet(FABRICATED)])
+            calls = iter(range(10_000))
+            monkeypatch.setattr(ctx, "expired", lambda calls=calls, n=allowed: next(calls) >= n)
+            (evidence,) = SnippetProvenance().run(ctx, list(ctx.claims))
+            assert evidence.outcome == "NEUTRAL", allowed
+            assert evidence.strength == 0.0
+            ids.add(evidence.id)
+        assert len(ids) == 1
+
+    def test_a_located_snippet_cut_short_is_not_scored(
+        self, make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ctx = make_ctx(claims=[_snippet(REFLOWED)])
+        calls = iter(range(10_000))
+        monkeypatch.setattr(ctx, "expired", lambda: next(calls) >= 2)
+        (evidence,) = SnippetProvenance().run(ctx, list(ctx.claims))
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.details["outcome"] == "budget_spent"
+
+    def test_a_release_match_in_a_generated_file_is_not_judged(
+        self, make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ctx = make_ctx(claims=[_snippet(AT_V120)], tag="v1.0.0")
+        monkeypatch.setattr(
+            ctx,
+            "generated",
+            lambda path: (
+                GeneratedMatch(path, "release-only", f"matches {path!r}")
+                if path == "src/util.c"
+                else None
+            ),
+        )
+        (evidence,) = SnippetProvenance().run(ctx, list(ctx.claims))
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.strength == 0.0
+        assert evidence.details["outcome"] == "generated"
+
+    def test_a_capped_search_at_the_ref_does_not_refute(
+        self, make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        real = c07.literal_search
+
+        def capped(*args: Any, **kwargs: Any) -> Any:
+            result = real(*args, **kwargs)
+            return None if result is None else dataclasses.replace(result, truncated=True)
+
+        monkeypatch.setattr(c07, "literal_search", capped)
+        (evidence,) = _run(make_ctx, [_snippet(AT_V120)], tag="v1.0.0")
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.details["outcome"] == "ref_search_capped"
+
+    def test_an_oversized_snippet_is_refused_not_aligned(self, make_ctx: MakeContext) -> None:
+        huge = "\n".join(f"x{i} = f(a, b);" for i in range(1000))
+        (evidence,) = _run(make_ctx, [_snippet(huge)])
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.details["outcome"] == "too_large"
+
+    def test_rarest_ignores_counts_from_other_snippets(self, make_ctx: MakeContext) -> None:
+        ctx = make_ctx(claims=[_snippet(FABRICATED)])
+        scan = _Scan(ctx)
+        snippet = _prepare(_snippet(FABRICATED))
+        assert snippet is not None
+        scan._hits[(ctx.commit, "state")] = 1  # left behind by an earlier snippet's grep
+        assert scan.rarest(snippet) == "hdr_validate_charset"
+
+    def test_small_quote_past_the_window_is_aligned_at_its_grep_line(self) -> None:
+        n = ALIGN_WINDOW_TOKENS * 2
+        tokens = tuple(Token("t", i + 1) for i in range(n))
+        snip = _Snippet((Token("t", 1),), (), frozenset(), 1, (), ())
+        window = _narrow(tokens, (), snip, anchor=n - 10)
+        assert window[-1].line == n
+        assert len(window) == ALIGN_WINDOW_TOKENS

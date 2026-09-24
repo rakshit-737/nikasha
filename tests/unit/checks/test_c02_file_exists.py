@@ -4,21 +4,26 @@
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 import time
 from dataclasses import replace
+from pathlib import Path
 
 from check_helpers import TAGS, MakeContext, claim
 
 from nikasha.checks.base import CheckContext, run_checks
 from nikasha.checks.c02_file_exists import FileExists
-from nikasha.model.claims import FileClaim, Frame, LineClaim, Stack, TraceClaim
+from nikasha.code.gitio import GitRepo
+from nikasha.model.claims import Claim, FileClaim, Frame, LineClaim, Stack, TraceClaim
 from nikasha.model.evidence import Evidence
+from nikasha.resolve.refs import ReleaseList
 
 #: A path that no vulnlab release has and whose name appears in no commit.
 INVENTED = "src/hdr_crypto.c"
 
 
-def _run(make_ctx: MakeContext, claims: list, tag: str = "v1.2.0") -> list[Evidence]:
+def _run(make_ctx: MakeContext, claims: list[Claim], tag: str = "v1.2.0") -> list[Evidence]:
     ctx = make_ctx(claims=claims, tag=tag)
     return FileExists().run(ctx, claims)
 
@@ -175,8 +180,12 @@ class TestP4AbsenceIsNeverAssumed:
         ctx = make_ctx(claims=[claim(FileClaim, path=INVENTED)])
         ctx.history_timeout = 1e-6  # no git process can finish in a microsecond
         (evidence,) = FileExists().run(ctx, list(ctx.claims))
-        assert evidence.outcome == "REFUTES"
-        assert evidence.strength == -0.8
+        # Was REFUTES -0.8 keyed "missing_here_present_elsewhere", which fusion reads as a
+        # version mismatch although no other version was found. A timeout establishes
+        # nothing, so it carries no weight and a label that is not a table key.
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.strength == 0.0
+        assert evidence.details["outcome"] == "absence_not_established"
         assert evidence.details["history_complete"] is False
         assert "never_in_history" not in evidence.details
         assert "absence is not established" in evidence.summary
@@ -186,11 +195,16 @@ class TestP4AbsenceIsNeverAssumed:
         ctx = make_ctx(claims=[claim(FileClaim, path=INVENTED)])
         ctx.deadline = time.monotonic() - 1.0
         (evidence,) = FileExists().run(ctx, list(ctx.claims))
-        assert evidence.outcome == "REFUTES"
-        assert evidence.strength == -0.8
-        assert evidence.details["history_complete"] is False
-        assert "the release scan did not finish" in evidence.details["history_note"]
-        assert "absence is not established" in evidence.summary
+        # Was REFUTES -0.8 with a version-mismatch key (see the test above). How far a cut
+        # scan got depends on the clock, so the finding says so and nothing else (P2).
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.strength == 0.0
+        assert evidence.details == {
+            "outcome": "budget_expired",
+            "path": INVENTED,
+            "release_scan_complete": False,
+        }
+        assert "time budget ran out" in evidence.summary
 
     def test_a_name_history_knows_is_not_called_never_existed(self, make_ctx: MakeContext) -> None:
         # build/libhdr.a is in no release tree, but the Makefile names it, so log -S finds
@@ -242,3 +256,108 @@ def test_registered_and_runnable_through_the_runner(make_ctx: MakeContext) -> No
     assert run.error is None
     assert run.seconds >= 0.0
     assert [e.outcome for e in run.evidence] == ["REFUTES"]
+
+
+def _git(repo: Path, *args: str, stdin: bytes | None = None) -> str:
+    """Test-only plumbing on a private copy of vulnlab (never on the shared fixture)."""
+    out = subprocess.run(
+        ["git", f"--git-dir={repo}", *args], input=stdin, capture_output=True, check=True
+    )
+    return out.stdout.decode().strip()
+
+
+def _on_copy(ctx: CheckContext, vulnlab_repo: Path, tmp_path: Path) -> tuple[CheckContext, Path]:
+    copy = tmp_path / "copy.git"
+    shutil.copytree(vulnlab_repo, copy)
+    resolution = replace(ctx.resolution, repo=GitRepo(copy))
+    return replace(ctx, resolution=resolution), copy
+
+
+class TestHistoryIsSearchedByPath:
+    """log -S reads file contents only; a file whose name nothing spells out is still real."""
+
+    def test_a_file_only_on_a_branch_is_not_called_never_existed(
+        self, make_ctx: MakeContext, vulnlab_repo: Path, tmp_path: Path
+    ) -> None:
+        c = claim(FileClaim, path="src/zz_dev_only.c", role="core")
+        ctx, copy = _on_copy(make_ctx(claims=[c]), vulnlab_repo, tmp_path)
+        blob = _git(copy, "hash-object", "-w", "--stdin", stdin=b"int x;\n")
+        tree = _git(copy, "mktree", stdin=f"100644 blob {blob}\tzz_dev_only.c\n".encode())
+        commit = _git(copy, "commit-tree", tree, "-m", "dev")
+        _git(copy, "update-ref", "refs/heads/dev", commit)
+        (evidence,) = FileExists().run(ctx, [c])
+        assert evidence.details["outcome"] != "never_in_history"
+        assert evidence.strength == -0.8
+        assert evidence.details["first_commit_with_name"] == commit
+
+    def test_a_failed_history_search_is_not_a_complete_one(
+        self, make_ctx: MakeContext, vulnlab_repo: Path, tmp_path: Path
+    ) -> None:
+        c = claim(FileClaim, path=INVENTED, role="core")
+        ctx, copy = _on_copy(make_ctx(claims=[c]), vulnlab_repo, tmp_path)
+        (copy / "refs" / "heads" / "broken").write_text("1" * 40 + "\n")
+        (evidence,) = FileExists().run(ctx, [c])
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.details["outcome"] == "absence_not_established"
+        assert evidence.details["history_complete"] is False
+        assert "failed" in evidence.details["history_note"]
+
+
+def test_a_system_header_frame_is_not_refuted(make_ctx: MakeContext) -> None:
+    header = "/usr/include/x86_64-linux-gnu/bits/string_fortified.h"
+    trace = claim(
+        TraceClaim,
+        format="asan",
+        bug_type="heap-buffer-overflow",
+        frames=(
+            Frame(index=0, function="memcpy", path=header, line=29, raw="#0"),
+            Frame(index=1, function="util_copy_value", path="src/util.c", line=15, raw="#1"),
+        ),
+    )
+    evidence = _run(make_ctx, [trace])
+    assert [e.outcome for e in evidence] == ["NEUTRAL", "SUPPORTS"]
+    assert evidence[0].details["outcome"] == "outside_repository"
+    assert evidence[0].strength == 0.0
+
+
+def test_an_oversized_frame_name_does_not_reach_the_argv(make_ctx: MakeContext) -> None:
+    long_path = "/build/" + "a" * 140_000 + ".c"
+    trace = claim(
+        TraceClaim,
+        format="asan",
+        bug_type="heap-buffer-overflow",
+        frames=(Frame(index=0, function="f", path=long_path, line=1, raw="#0"),),
+    )
+    (evidence,) = _run(make_ctx, [trace])
+    assert evidence.outcome == "NEUTRAL"
+    assert evidence.details["outcome"] == "absence_not_established"
+    assert "cannot be searched" in evidence.details["history_note"]
+
+
+def test_no_final_release_means_no_never_existed(make_ctx: MakeContext) -> None:
+    c = claim(FileClaim, path=INVENTED, role="core")
+    ctx = make_ctx(claims=[c])
+    ctx = replace(ctx, resolution=replace(ctx.resolution, releases=ReleaseList.from_tags([])))
+    (evidence,) = FileExists().run(ctx, [c])
+    assert evidence.outcome == "NEUTRAL"
+    assert evidence.details["sampled_releases"] == 0
+    assert "never_in_history" not in evidence.details
+
+
+def test_a_basename_match_elsewhere_is_not_called_the_cited_path(
+    make_ctx: MakeContext,
+) -> None:
+    c = claim(FileClaim, path="docs/README")
+    ctx = _before_the_first_release(make_ctx(claims=[c]))
+    (evidence,) = FileExists().run(ctx, [c])
+    assert evidence.details["present_as"] == ["README"]
+    assert "but a file named README is in" in evidence.summary
+    assert evidence.details["version_note"].startswith("a file named README exists in")
+
+
+def test_one_path_cited_by_two_claims_is_one_finding(make_ctx: MakeContext) -> None:
+    file_claim = claim(FileClaim, path=INVENTED)
+    line_claim = claim(LineClaim, path=INVENTED, line=10)
+    (evidence,) = _run(make_ctx, [file_claim, line_claim])
+    assert evidence.claim_ids == tuple(sorted({file_claim.id, line_claim.id}))
+    assert evidence.strength == -2.0

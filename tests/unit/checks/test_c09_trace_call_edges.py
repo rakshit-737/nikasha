@@ -10,12 +10,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from check_helpers import ROOT, MakeContext, claim
 
 from nikasha.checks.base import run_checks
-from nikasha.checks.c09_trace_call_edges import TraceCallEdges, file_is_certain, score_edges
+from nikasha.checks.c09_trace_call_edges import (
+    MAX_APP_FRAMES,
+    TraceCallEdges,
+    file_is_certain,
+    score_edges,
+)
 from nikasha.checks.strengths import default_strengths
-from nikasha.code.facts import FileFacts
+from nikasha.code.facts import FileFacts, SymbolDef
 from nikasha.extract.traces import parse_traces
 from nikasha.model.claims import Frame, TraceClaim
 
@@ -291,7 +297,9 @@ class TestScoreEdges:
     def test_a_truncated_walk_cannot_claim_every_edge_is_real(self) -> None:
         strengths = default_strengths()
         assert score_edges(["direct"], strengths, truncated=True) == ("NEUTRAL", 0.0)
-        assert score_edges(["direct", "none"], strengths, truncated=True) == ("REFUTES", -1.0)
+        # A truncated walk refuted with however many missing edges the clock allowed, so the
+        # strength (and evidence id) varied between runs (P2): it is now NEUTRAL too.
+        assert score_edges(["direct", "none"], strengths, truncated=True) == ("NEUTRAL", 0.0)
 
 
 # --- the framework's rules ------------------------------------------------------------------
@@ -340,3 +348,67 @@ def test_the_chain_still_holds_at_the_next_release(make_ctx: MakeContext) -> Non
     (evidence,) = run(make_ctx, real_trace(GENUINE), tag="v1.2.1")
     assert evidence.outcome == "SUPPORTS"
     assert [e["kind"] for e in evidence.details["edges"]] == ["direct", "direct", "direct"]
+
+
+# --- review fixes ---------------------------------------------------------------------------
+
+
+def test_an_unparsed_file_elsewhere_keeps_a_missing_edge_unknown(
+    make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """P4: a callee of the caller defined in a file that did not parse can hide the call."""
+    trace = real_trace(FABRICATED)
+    ctx = make_ctx(claims=[trace])
+    real_definitions = ctx.index.definitions
+
+    def definitions(commit: str, name: str) -> list[tuple[str, SymbolDef]]:
+        out = list(real_definitions(commit, name))
+        if name == "hdr_find_line":
+            out.append(("include/unparsed.h", SymbolDef(name, name, "macro", 1, 1)))
+        return out
+
+    monkeypatch.setattr(ctx.index, "definitions", definitions)
+    (evidence,) = TraceCallEdges().run(ctx, [trace])
+    # Before the fix both fabricated edges refuted (-2.0); hdr_get's is no longer certain.
+    assert evidence.details["n_missing"] == 1
+    assert evidence.strength == -1.0
+    assert [(e["caller"], e["callee"]) for e in evidence.details["edges"]] == [("main", "hdr_get")]
+    reasons = [r for record in evidence.details["unknown"] for r in record["reasons"]]
+    assert any("include/unparsed.h did not parse cleanly" in r for r in reasons)
+
+
+def test_an_expired_budget_says_so_identically(make_ctx: MakeContext) -> None:
+    """P2: nothing partial from a clock-cut walk, and no refutation scaled by the clock."""
+    trace = real_trace(FABRICATED)
+    ctx = make_ctx(claims=[trace])
+    ctx.deadline = 0.0
+    (evidence,) = TraceCallEdges().run(ctx, [trace])
+    assert (evidence.outcome, evidence.strength) == ("NEUTRAL", 0.0)
+    assert evidence.details["outcome"] == "truncated"
+    assert evidence.details["truncated_by"] == "deadline"
+    assert "edges" not in evidence.details
+    assert "ran out of time" in evidence.summary
+    assert "()" not in evidence.summary
+    ctx2 = make_ctx(claims=[trace])
+    ctx2.deadline = 0.0
+    assert TraceCallEdges().run(ctx2, [trace]) == [evidence]
+
+
+def test_a_huge_trace_is_capped_not_walked(make_ctx: MakeContext) -> None:
+    frames = [frame(i, f"fn_{i}", "/work/libhdr/src/hdr.c", 10) for i in range(MAX_APP_FRAMES + 1)]
+    (evidence,) = run(make_ctx, stack(*frames))
+    assert (evidence.outcome, evidence.strength) == ("NEUTRAL", 0.0)
+    assert evidence.details["truncated_by"] == "frame_cap"
+    assert evidence.details["n_pairs"] == MAX_APP_FRAMES
+
+
+def test_a_huge_function_name_is_bounded_in_the_evidence(make_ctx: MakeContext) -> None:
+    long_name = "x" * 5000
+    trace = stack(
+        frame(0, "util_copy_value", "/work/libhdr/src/util.c", 15),
+        frame(1, long_name, "/work/libhdr/src/hdr.c", 412),
+    )
+    (evidence,) = run(make_ctx, trace)
+    (record,) = evidence.details["unknown"]
+    assert len(record["caller"]) <= 120
+    assert all(len(r) < 400 for r in record["reasons"])

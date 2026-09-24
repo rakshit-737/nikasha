@@ -98,7 +98,9 @@ def test_a_symbol_that_is_only_called_here_is_neutral(make_ctx: MakeContext) -> 
     assert evidence.details["references"][0]["path"] == "src/hdr.c"
     assert evidence.details["n_references"] == 3
     assert evidence.details["command"].startswith("git grep")
-    assert "not defined in this repository" in evidence.summary
+    # Only "no parsed definition" is established: an unparsed file may hold it (P4).
+    assert "no definition of it was found in the files that could be parsed" in evidence.summary
+    assert "not defined in this repository" not in evidence.summary
 
 
 def test_an_external_symbol_is_not_judged(make_ctx: MakeContext) -> None:
@@ -306,3 +308,64 @@ def test_registered_and_runnable_through_the_runner(make_ctx: MakeContext) -> No
     assert run.error is None
     assert run.seconds >= 0.0
     assert [e.outcome for e in run.evidence] == ["REFUTES"]
+
+
+# --- review fixes -----------------------------------------------------------------------------
+
+
+def test_claims_left_when_the_budget_runs_out_are_recorded_identically(
+    make_ctx: MakeContext,
+) -> None:
+    claims = [claim(SymbolClaim, name="util_copy_value"), claim(SymbolClaim, name=NEVER)]
+    ctx = make_ctx(claims=claims)
+    ctx.deadline = 0.0  # already spent
+    evidence = SymbolExists().run(ctx, claims)
+    assert [e.outcome for e in evidence] == ["NEUTRAL", "NEUTRAL"]
+    assert [e.details["outcome"] for e in evidence] == ["budget_expired"] * 2
+    assert all(e.strength == 0.0 for e in evidence)
+    assert (
+        evidence[1].summary == f"{NEVER} was not checked: the check's time budget ran out before it"
+    )
+
+
+def test_text_found_by_a_completed_history_search_is_not_refuted(make_ctx: MakeContext) -> None:
+    c = claim(SymbolClaim, name=NEVER, role="core")
+    ctx = make_ctx(claims=[c])
+    real = ctx.timeline(NEVER)
+    ctx._timelines[NEVER] = Timeline(
+        symbol=real.symbol,
+        strategy=real.strategy,
+        presence=real.presence,
+        history_complete=True,
+        never_in_history=False,
+        first_commit_with_text=ctx.commit,
+    )
+    (evidence,) = SymbolExists().run(ctx, [c])
+    assert evidence.outcome == "NEUTRAL"
+    assert evidence.strength == 0.0
+    assert evidence.details["outcome"] == "in_history_not_released"
+    assert evidence.details["history_complete"] is True
+    assert evidence.details["first_commit_with_text"] == ctx.commit
+    assert "did not run" not in evidence.summary
+
+
+def test_a_qualified_spelling_finds_the_bare_definition(make_ctx: MakeContext) -> None:
+    for spelling in ("Util::util_copy_value", "util.util_copy_value", "Util#util_copy_value"):
+        (evidence,) = _run(make_ctx, [claim(SymbolClaim, name=spelling, role="core")])
+        assert evidence.outcome == "SUPPORTS", spelling
+        assert evidence.details["definitions"][0]["path"] == "src/util.c"
+
+
+def test_a_qualified_spelling_of_an_existing_name_is_never_called_absent(
+    make_ctx: MakeContext,
+) -> None:
+    (evidence,) = _run(make_ctx, [claim(SymbolClaim, name="std::memcpy", role="core")])
+    assert evidence.outcome == "NEUTRAL"
+    assert evidence.details["outcome"] == "referenced_only"
+
+
+def test_a_definition_wins_over_a_generated_context_path(make_ctx: MakeContext) -> None:
+    c = claim(SymbolClaim, name="util_copy_value", context_path="src/config.h")
+    (evidence,) = _run(make_ctx, [c])
+    assert evidence.outcome == "SUPPORTS"
+    assert evidence.details["definitions"][0]["path"] == "src/util.c"

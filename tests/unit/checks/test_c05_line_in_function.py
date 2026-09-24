@@ -20,8 +20,12 @@ from check_helpers import MakeContext, claim
 from nikasha.checks.base import CheckContext, run_checks
 from nikasha.checks.c05_line_in_function import LineInFunction
 from nikasha.code.facts import FileFacts
+from nikasha.extract.registry import make_claim
+from nikasha.ingest import load_report
 from nikasha.model.claims import Claim, Frame, LineClaim, TraceClaim
 from nikasha.model.evidence import Evidence
+from nikasha.model.report import Span
+from nikasha.resolve.refs import parse_tag
 
 
 def _run(make_ctx: MakeContext, claims: list[Claim], tag: str = "v1.2.0") -> list[Evidence]:
@@ -140,7 +144,7 @@ class TestConservatism:
         assert evidence.outcome == "NEUTRAL"
         assert evidence.strength == 0.0
         assert evidence.details["function_defined"] is False
-        assert "not defined in src/util.c" in evidence.summary
+        assert "no function named hdr_find() is defined in src/util.c" in evidence.summary
 
     def test_a_file_that_did_not_parse_cleanly_is_neutral(
         self, make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
@@ -258,3 +262,120 @@ def test_registered_and_runnable_through_the_runner(make_ctx: MakeContext) -> No
     assert run.error is None
     assert run.seconds >= 0.0
     assert [e.outcome for e in run.evidence] == ["REFUTES"]
+
+
+class TestReviewFindings:
+    """Regressions for the reviewed P4, P2 and P7 gaps."""
+
+    def test_an_expired_budget_never_leaves_a_full_refutation(
+        self, make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ctx = make_ctx(claims=[_line(line=20, function_hint="util_copy_value")])
+        monkeypatch.setattr(CheckContext, "expired", lambda self: True)
+        (evidence,) = LineInFunction().run(ctx, list(ctx.claims))
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.details["outcome"] == "budget_expired"
+
+    def test_a_search_cut_short_is_neutral_not_outside_function(
+        self, make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ctx = make_ctx(claims=[_line(line=20, function_hint="util_copy_value")])
+        calls = iter([False, True])  # run() sees time left; the nearby search does not
+        monkeypatch.setattr(CheckContext, "expired", lambda self: next(calls, True))
+        (evidence,) = LineInFunction().run(ctx, list(ctx.claims))
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.strength == 0.0
+        assert evidence.details["outcome"] == "nearby_search_incomplete"
+
+    def test_an_unparsed_neighbour_makes_the_search_incomplete(
+        self, make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ctx = make_ctx(claims=[_line(line=20, function_hint="util_copy_value")])
+        original = ctx.index.facts_at
+        commit = ctx.commit
+
+        def patched(rev: str, path: str) -> FileFacts | None:
+            facts = original(rev, path)
+            if facts is None or rev == commit:
+                return facts
+            return dataclasses.replace(facts, parsed_ok=False)
+
+        monkeypatch.setattr(ctx.index, "facts_at", patched)
+        (evidence,) = LineInFunction().run(ctx, list(ctx.claims))
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.details["outcome"] == "nearby_search_incomplete"
+
+    def test_a_range_reaching_into_the_function_is_not_refuted(self, make_ctx: MakeContext) -> None:
+        # Lines 6-12 start above util_copy_value() (8-18) but cover it.
+        c = _line(line=6, end_line=12, function_hint="util_copy_value")
+        (evidence,) = _run(make_ctx, [c])
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.details["outcome"] == "range_overlaps_function"
+
+    def test_a_line_past_the_end_is_left_to_c04(self, make_ctx: MakeContext) -> None:
+        (evidence,) = _run(make_ctx, [_line(line=9999, function_hint="util_copy_value")])
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.details["outcome"] == "line_past_end"
+
+    def test_the_enclosing_function_named_in_the_sentence_is_not_contradicted(
+        self, make_ctx: MakeContext, tmp_path: Any
+    ) -> None:
+        text = "The call to `util_copy_value()` in `is_ws()` at src/util.c:20 overflows.\n"
+        path = tmp_path / "r.md"
+        path.write_text(text, encoding="utf-8")
+        report = load_report(path)
+        start = report.body.index("src/util.c:20")
+        c = make_claim(
+            LineClaim,
+            spans=[Span(start=start, end=start + 13, text="src/util.c:20")],
+            extractor="test",
+            confidence=1.0,
+            role="supporting",
+            provenance="project_attributed",
+            path="src/util.c",
+            line=20,
+            function_hint="util_copy_value",
+        )
+        ctx = make_ctx(claims=[c], report=report)
+        (evidence,) = LineInFunction().run(ctx, [c])
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.details["outcome"] == "enclosing_function_named"
+
+    def test_an_absurdly_long_frame_name_is_not_normalized(self, make_ctx: MakeContext) -> None:
+        c = _trace([_frame(0, "f" * 5000 + "(int)", 15)])
+        (evidence,) = _run(make_ctx, [c])
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.details["outcome"] == "function_name_too_long"
+
+    def test_support_records_whether_the_parse_was_clean(self, make_ctx: MakeContext) -> None:
+        (evidence,) = _run(make_ctx, [_line(line=15, function_hint="util_copy_value")])
+        assert evidence.details["parsed_ok"] is True
+
+    def test_a_prerelease_claimed_release_is_not_a_full_refutation(
+        self, make_ctx: MakeContext
+    ) -> None:
+        # A prerelease (or variant-family) tag is not in the final-release window, so no
+        # neighbour is searched: "fits nowhere nearby" is not established (P4).
+        ctx = make_ctx(claims=[_line(line=20, function_hint="util_copy_value")])
+        release = ctx.resolution.release
+        assert release is not None
+        rc_tag = parse_tag(release.name + "-rc1")
+        assert rc_tag is not None and rc_tag.raw != release.name
+        rc = dataclasses.replace(release, tag=rc_tag)
+        assert ctx.resolution.releases.window(rc, 2) == []
+        ctx.resolution.release = rc
+        (evidence,) = LineInFunction().run(ctx, list(ctx.claims))
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.strength == 0.0
+        assert evidence.details["outcome"] == "nearby_search_incomplete"
+        assert evidence.details["nearby_search_complete"] is False
+
+    def test_a_bare_commit_target_searches_as_complete(self, make_ctx: MakeContext) -> None:
+        # With no claimed release there is no neighbourhood, so the refutation stands.
+        ctx = make_ctx(claims=[_line(line=20, function_hint="util_copy_value")])
+        ctx.resolution.release = None
+        (evidence,) = LineInFunction().run(ctx, list(ctx.claims))
+        assert evidence.outcome == "REFUTES"
+        assert evidence.strength == -0.8
+        assert evidence.details["outcome"] == "outside_function"
+        assert evidence.details["nearby_search_complete"] is True

@@ -70,6 +70,19 @@ def normalize(text: str) -> str:
     return " ".join(text.split())
 
 
+def git_lines(text: str) -> list[str]:
+    """``text`` split into lines the way git, permalinks and C04 number them: on LF only.
+
+    ``str.splitlines`` also breaks on form feeds, the file/group/record separators, NEL
+    and U+2028, which GNU sources use as page breaks; that would shift every later line
+    number. A trailing CR is whitespace and disappears in :func:`normalize`.
+    """
+    lines = text.split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    return lines
+
+
 def line_similarity(quote: str, line: str) -> float:
     """How much a normalized ``quote`` looks like a normalized ``line``, in ``[0, 1]``.
 
@@ -144,7 +157,7 @@ class LineContent(BaseCheck):
         blob = ctx.resolution.repo.read_file(ctx.commit, path)
         if blob is None or b"\0" in blob[:4096]:
             return None  # absent, oversized or binary: there is nothing to compare
-        lines = [normalize(line) for line in blob.decode("utf-8", "replace").splitlines()]
+        lines = [normalize(line) for line in git_lines(blob.decode("utf-8", "replace"))]
         where = ctx.ref_name or ctx.commit[:12]
         stated = claim.line
 
@@ -248,10 +261,25 @@ class LineContent(BaseCheck):
         # pickaxe below go through ``GitRepo`` directly and yield real records (P6).
         at_ref = literal_search(ctx.resolution.repo, text, ctx.commit)
         if at_ref is not None and at_ref.hits:
-            return self._at_ref(ctx, claim, path, at_ref.hits, {**base, "command": at_ref.command})
+            hits = at_ref.hits
+            if at_ref.truncated and path is not None and all(h.path != path for h in hits):
+                # The capped listing stopped before the claimed file: ask about that file
+                # alone rather than conclude the text is not in it.
+                in_path = literal_search(ctx.resolution.repo, text, ctx.commit, pathspecs=[path])
+                if in_path is not None and in_path.hits:
+                    hits = in_path.hits
+            return self._at_ref(
+                ctx,
+                claim,
+                path,
+                hits,
+                {**base, "command": at_ref.command, "hits_truncated": at_ref.truncated},
+            )
 
         records: list[CommandRecord] = []
-        found_in = self._other_releases(ctx, text, records)
+        releases_searched = not ctx.expired()
+        found_in = self._other_releases(ctx, text, records) if releases_searched else []
+        base["releases_searched"] = releases_searched
         if found_in:
             return self._evidence(
                 claim,
@@ -342,15 +370,14 @@ class LineContent(BaseCheck):
         self, ctx: CheckContext, text: str, records: list[CommandRecord]
     ) -> list[str]:
         """Release names whose tree holds ``text``, sorted; empty when the budget is spent."""
-        by_commit = {
-            release.commit: release.name
-            for release in ctx.resolution.releases.finals()
-            if release.commit != ctx.commit
-        }
+        by_commit: dict[str, list[str]] = {}
+        for release in ctx.resolution.releases.finals():
+            if release.commit != ctx.commit:
+                by_commit.setdefault(release.commit, []).append(release.name)
         if not by_commit or ctx.expired():
             return []
         hits = ctx.resolution.repo.grep(text, sorted(by_commit), files_only=True, record=records)
-        return sorted({by_commit[hit.rev] for hit in hits if hit.rev in by_commit})
+        return sorted({name for hit in hits for name in by_commit.get(hit.rev, ())})
 
     def _history(
         self,
@@ -370,9 +397,11 @@ class LineContent(BaseCheck):
                 first = ctx.resolution.repo.pickaxe_first(
                     text, timeout=self._budget(ctx), record=records
                 )
+                if first is None:
+                    reason = self._spacing_doubt(ctx, text, records)
             except HistoryTimeoutError:
                 reason = "the history search timed out"
-            else:
+            if reason is None:
                 return self._searched_history(ctx, claim, first, base, records)
         # P4: an inconclusive search is not evidence of invention. Say what was and was not
         # searched; the fuser sees the withheld strength without being able to count it.
@@ -380,8 +409,9 @@ class LineContent(BaseCheck):
             claim,
             outcome="NEUTRAL",
             strength=self.strengths.get(CHECK_ID, "nowhere_in_history"),
-            summary=f"the quoted line is not at {where} or in any other release,"
-            f" but {reason}, so it is not called absent",
+            summary=f"the quoted line is not at {where}"
+            + (" or in any other release" if base.get("releases_searched") else "")
+            + f", but {reason}, so it is not called absent",
             details={
                 **base,
                 "outcome": "nowhere_in_history",
@@ -408,7 +438,7 @@ class LineContent(BaseCheck):
                 outcome="REFUTES",
                 strength=self.strengths.get(CHECK_ID, "other_release_only"),
                 summary=f"the quoted line is in no release tree, including {where};"
-                f" history has it only in {first[:12]} and its neighbours",
+                f" the newest commit that adds or removes it is {first[:12]}",
                 details={
                     **base,
                     "outcome": "other_release_only",
@@ -431,6 +461,26 @@ class LineContent(BaseCheck):
             },
             commands=records,
         )
+
+    @staticmethod
+    def _spacing_doubt(ctx: CheckContext, text: str, records: list[CommandRecord]) -> str | None:
+        """Why an exact-bytes miss may still be a re-spaced real line, or ``None``.
+
+        The file rungs compare after whitespace normalization but ``git grep -F`` and
+        ``git log -S`` match bytes, so a quote whose spacing was collapsed by a mail client
+        misses everywhere. The longest whitespace-free token must be absent too before the
+        text is called never written (P4).
+        """
+        token = max(text.split(), key=len)
+        if token == text:
+            return None
+        if LineContent._budget(ctx) < MIN_HISTORY_BUDGET_S:
+            return "there was no time left to search history"
+        if ctx.resolution.repo.pickaxe_first(
+            token, timeout=LineContent._budget(ctx), record=records
+        ):
+            return "history has its longest token, so only its spacing may differ"
+        return None
 
     @staticmethod
     def _history_blocker(ctx: CheckContext, path: str | None, text: str) -> str | None:

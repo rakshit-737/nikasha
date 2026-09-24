@@ -49,6 +49,14 @@ NEARBY_RADIUS = 3
 #: Only definitions with a body can contain a line; a macro or a type cannot.
 FUNCTION_KINDS = frozenset({"function", "method"})
 
+#: A function name longer than this is not a name anybody wrote by hand; normalizing it
+#: against every symbol of up to seven parsed files is attacker-sized work (P7).
+MAX_FUNCTION_NAME = 1024
+
+#: How far either side of a prose line reference the report is searched for the name of
+#: the function that really encloses the line (``X() is called from Y() at f.c:30``).
+HINT_WINDOW = 300
+
 
 @dataclass(frozen=True, slots=True)
 class _Site:
@@ -58,6 +66,7 @@ class _Site:
     line: int
     function: str
     frame: int | None = None
+    end_line: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,12 +117,32 @@ class LineInFunction(BaseCheck):
         out: list[Evidence] = []
         for claim in claims:
             for site in _sites(claim):
+                if ctx.expired():
+                    # The budget is spent: say so, identically, instead of judging.
+                    out.append(
+                        self._neutral(
+                            claim,
+                            site,
+                            summary=f"the time budget ran out before line {site.line}"
+                            f" of {site.path} was judged",
+                            details={"outcome": "budget_expired"},
+                        )
+                    )
+                    continue
                 evidence = self._one(ctx, claim, site)
                 if evidence is not None:
                     out.append(evidence)
         return out
 
     def _one(self, ctx: CheckContext, claim: Claim, site: _Site) -> Evidence | None:
+        if len(site.function) > MAX_FUNCTION_NAME:
+            return self._neutral(
+                claim,
+                site,
+                summary=f"the function name at {site.path}:{site.line} is longer than"
+                f" {MAX_FUNCTION_NAME} characters, so it is not judged",
+                details={"outcome": "function_name_too_long"},
+            )
         candidates = ctx.resolve_path(site.path)
         # A path that does not resolve may still be generated (an amalgamation is not in
         # the tree at all), and §11.5 says those are never judged.
@@ -135,7 +164,9 @@ class LineInFunction(BaseCheck):
         where = ctx.ref_name or ctx.commit[:12]
         inside = _contains(defs, site.line)
         if inside is not None:
-            return self._supports(ctx, claim, site, path=path, inside=inside, where=where)
+            return self._supports(
+                ctx, claim, site, path=path, inside=inside, where=where, parsed_ok=facts.parsed_ok
+            )
         return self._negative(ctx, claim, site, path=path, facts=facts, defs=defs, where=where)
 
     def _negative(
@@ -150,6 +181,31 @@ class LineInFunction(BaseCheck):
         where: str,
     ) -> Evidence:
         """The line is not in the function *as parsed here* — so P4 comes first."""
+        if site.line > facts.n_lines:
+            # C04 owns a line past the end of the file; refuting it here too would count
+            # one wrong number twice in the same group (SPEC 14.1).
+            return self._neutral(
+                claim,
+                site,
+                summary=f"{path} has {facts.n_lines} lines at {where}, so line {site.line}"
+                " is left to C04",
+                details={"outcome": "line_past_end", "path": path, "n_lines": facts.n_lines},
+            )
+        overlap = _overlapping(defs, site)
+        if overlap is not None:
+            # A cited range that reaches into the function (from a doc comment above it,
+            # say) is not a contradiction.
+            return self._neutral(
+                claim,
+                site,
+                summary=f"lines {site.line}-{site.end_line} of {path} overlap"
+                f" {overlap.name}() (lines {overlap.start_line}-{overlap.end_line}) at {where}",
+                details={
+                    "outcome": "range_overlaps_function",
+                    "path": path,
+                    "function_span": _span(overlap),
+                },
+            )
         if not facts.parsed_ok:
             return self._neutral(
                 claim,
@@ -160,16 +216,32 @@ class LineInFunction(BaseCheck):
             )
         if not defs:
             # A function that is missing altogether is C03's finding, not a second
-            # refutation from the lines group.
+            # refutation from the lines group. The name may still be a macro or a type, so
+            # the summary says only that no *function* of that name was found.
             return self._neutral(
                 claim,
                 site,
-                summary=f"{site.function}() is not defined in {path} at {where},"
+                summary=f"no function named {site.function}() is defined in {path} at {where},"
                 f" so line {site.line} is not judged against it",
                 details={
                     "outcome": "function_not_defined",
                     "path": path,
                     "function_defined": False,
+                },
+            )
+        actual = facts.enclosing(site.line)
+        if isinstance(claim, LineClaim) and actual is not None and _named_near(ctx, claim, actual):
+            # A prose hint is only the first ``name()`` in the sentence; when the function
+            # that really holds the line is named there too, the report may well say so.
+            return self._neutral(
+                claim,
+                site,
+                summary=f"{path}:{site.line} is inside {actual.name}(), which the report also"
+                f" names next to this line, so {site.function}() is not taken as its container",
+                details={
+                    "outcome": "enclosing_function_named",
+                    "path": path,
+                    "actual_function": actual.qname,
                 },
             )
         return self._refutes(ctx, claim, site, path=path, facts=facts, defs=defs, where=where)
@@ -185,6 +257,7 @@ class LineInFunction(BaseCheck):
         path: str,
         inside: SymbolDef,
         where: str,
+        parsed_ok: bool,
     ) -> Evidence:
         return make_evidence(
             check_id=CHECK_ID,
@@ -197,7 +270,13 @@ class LineInFunction(BaseCheck):
                 f"{path}:{site.line} is inside {inside.name}()"
                 f" (lines {inside.start_line}-{inside.end_line}) at {where}",
             ),
-            details=_details(site, path=path, function_span=_span(inside), outcome="in_function"),
+            details=_details(
+                site,
+                path=path,
+                function_span=_span(inside),
+                outcome="in_function",
+                parsed_ok=parsed_ok,
+            ),
             locations=[ctx.location(path, site.line)],
         )
 
@@ -227,6 +306,21 @@ class LineInFunction(BaseCheck):
                 f" {site.function}() spans lines {spans}"
             )
         fit, searched_all = self._nearby_fit(ctx, path, site)
+        if fit is None and not searched_all:
+            # The neighbourhood was not fully examined (budget, or a neighbour that did not
+            # parse cleanly): "it fits nowhere nearby" is not established (P4). The details
+            # hold nothing that depends on how far the search got (P2).
+            return self._neutral(
+                claim,
+                site,
+                summary=f"{summary}; the neighbouring releases could not all be examined,"
+                " so this is not judged",
+                details={
+                    "outcome": "nearby_search_incomplete",
+                    "path": path,
+                    "nearby_search_complete": False,
+                },
+            )
         details = _details(
             site,
             path=path,
@@ -300,15 +394,22 @@ class LineInFunction(BaseCheck):
         """The nearest release where ``site.line`` *is* inside the function, if any.
 
         Returns the fit and whether the whole window was searched: a search cut short by
-        the check's deadline must not be reported as "it fits nowhere nearby" (P4).
+        the check's deadline, or a neighbour that did not parse cleanly, must not be reported
+        as "it fits nowhere nearby" (P4). With no claimed release there is no neighbourhood
+        to search (the target is a bare commit), which counts as complete. A claimed release
+        that is absent from its own window (a prerelease or variant tag) was not searched
+        around, which counts as incomplete.
         """
         claimed = ctx.resolution.release
         if claimed is None:
-            return None, False
+            return None, True
         window = ctx.resolution.releases.window(claimed, NEARBY_RADIUS)
         here = next((i for i, r in enumerate(window) if r.name == claimed.name), None)
         if here is None:
+            # The claimed release is outside the main-line window (a prerelease or a variant
+            # family tag), so no neighbour was searched: that is not "fits nowhere" (P4).
             return None, False
+        complete = True
         found: list[tuple[int, int, Release, SymbolDef]] = []
         for i, release in enumerate(window):
             if ctx.expired():
@@ -321,7 +422,9 @@ class LineInFunction(BaseCheck):
             inside = _contains(_function_defs(facts, site.function), site.line)
             if inside is not None:
                 found.append((abs(i - here), i, release, inside))
-        return _best(found), True
+            elif not facts.parsed_ok:
+                complete = False
+        return _best(found), complete
 
 
 def _best(found: Sequence[tuple[int, int, Release, SymbolDef]]) -> _Fit | None:
@@ -350,7 +453,8 @@ def _sites(claim: Claim) -> list[_Site]:
     if isinstance(claim, LineClaim):
         if claim.path is None or claim.function_hint is None or claim.line < 1:
             return []
-        return [_Site(claim.path, claim.line, claim.function_hint)]
+        end = claim.end_line if claim.end_line is not None and claim.end_line > claim.line else None
+        return [_Site(claim.path, claim.line, claim.function_hint, end_line=end)]
     if not isinstance(claim, TraceClaim):
         return []
     sites: list[_Site] = []
@@ -364,6 +468,26 @@ def _sites(claim: Claim) -> list[_Site]:
         seen.add(key)
         sites.append(_Site(frame.path, frame.line, frame.function, frame.index))
     return sites
+
+
+def _overlapping(defs: Sequence[SymbolDef], site: _Site) -> SymbolDef | None:
+    """For a cited range, the first definition the range reaches into."""
+    end = site.end_line
+    if end is None:
+        return None
+    return next((s for s in defs if s.start_line <= end and site.line <= s.end_line), None)
+
+
+def _named_near(ctx: CheckContext, claim: LineClaim, actual: SymbolDef) -> bool:
+    """Whether ``actual()`` is written within :data:`HINT_WINDOW` of the claim's text."""
+    body = ctx.report.body
+    needle = f"{actual.name}("
+    for span in claim.spans:
+        lo = max(0, span.start - HINT_WINDOW)
+        hi = min(len(body), span.end + HINT_WINDOW)
+        if body.find(needle, lo, hi) != -1:
+            return True
+    return False
 
 
 def _say(site: _Site, text: str) -> str:

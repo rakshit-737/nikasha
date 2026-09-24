@@ -18,10 +18,19 @@ never existed.
 
 Where the symbol lives is not this check's business: a symbol defined in a different file
 from the one the report names still *exists*, and C05 owns the location question.
+
+This check emits no ``CommandRecord`` (ADR 0007 decision 4), because no git invocation of
+its own reaches it as a :class:`~nikasha.code.gitio.GitResult`: the literal fallback is
+:func:`~nikasha.code.literal.literal_search`, which surfaces only the equivalent command as
+a string (kept in ``details['command']``), and the release sweep and the pickaxe belong to
+:mod:`nikasha.code.timeline`, which reports what it found and not the commands it ran. An
+exit code or output hash this check never saw would be an invention, and P6 asks for the
+real record or none.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from typing import Any
 
@@ -40,6 +49,20 @@ GROUP = "locus"
 #: Definitions and references quoted in the evidence. A symbol defined in fifty places is
 #: no more "existing" than one defined in three, and the locations are for a human to read.
 MAX_LOCATIONS = 3
+
+#: The separators the extractor's ``QUALIFIED`` grammar accepts (``Class::method``,
+#: ``obj.method``, ``Class#method``). Parsers qualify differently (namespaces, nesting),
+#: so a qualified spelling is also looked up, and searched for, by its last component.
+_QUALIFIER_RE = re.compile(r"::|\.|#")
+
+#: The fixed sentence for claims the budget did not reach. It carries no timing, so two
+#: runs that are cut at different claims still say the same thing about each (P2).
+BUDGET_SUMMARY = "{name} was not checked: the check's time budget ran out before it"
+
+
+def _bare(name: str) -> str:
+    """``Foo::bar`` / ``pkg.Foo.bar`` / ``Foo#bar`` -> ``bar``; a plain name unchanged."""
+    return _QUALIFIER_RE.split(name)[-1] or name
 
 
 def _where(ctx: CheckContext) -> str:
@@ -63,10 +86,9 @@ class SymbolExists(BaseCheck):
         for claim in claims:
             if not isinstance(claim, SymbolClaim):
                 continue
-            if ctx.expired():
-                # A timeline greps every release; stop rather than overrun the budget.
-                break
-            evidence = self._one(ctx, claim)
+            # A timeline greps every release; stop rather than overrun the budget, but say
+            # so for every claim left behind instead of dropping it silently (P6).
+            evidence = self._budget_spent(claim) if ctx.expired() else self._one(ctx, claim)
             if evidence is not None:
                 out.append(evidence)
         return out
@@ -85,6 +107,11 @@ class SymbolExists(BaseCheck):
                 details={"outcome": "referenced_only", "symbol": name, "external": True},
                 strength=self.strengths.get(CHECK_ID, "referenced_only"),
             )
+        definitions = self._definitions(ctx, claim, name)
+        if definitions:
+            # A definition found in git source stands even when the report's (heuristic)
+            # context path is generated: where it lives is C05's question.
+            return self._defined(ctx, claim, name, definitions)
         generated = self._generated_context(ctx, claim)
         if generated is not None:
             # SPEC §11.5: generated and release-only files are never judged (P4).
@@ -99,9 +126,6 @@ class SymbolExists(BaseCheck):
                     "generated": generated.reason,
                 },
             )
-        definitions = self._definitions(ctx, claim, name)
-        if definitions:
-            return self._defined(ctx, claim, name, definitions)
         referenced = self._referenced(ctx, claim, name)
         if referenced is not None:
             return referenced
@@ -129,9 +153,14 @@ class SymbolExists(BaseCheck):
             facts = ctx.facts(path)
             if facts is not None:
                 found = [(path, symbol) for symbol in facts.definitions(name)]
+                if not found and _bare(name) != name:
+                    found = [(path, symbol) for symbol in facts.definitions(_bare(name))]
                 if found:
                     return sorted(found, key=lambda item: (item[0], item[1].start_line))
-        return ctx.index.definitions(ctx.commit, name)
+        found = ctx.index.definitions(ctx.commit, name)
+        if not found and _bare(name) != name:
+            found = ctx.index.definitions(ctx.commit, _bare(name))
+        return found
 
     def _defined(
         self,
@@ -178,20 +207,23 @@ class SymbolExists(BaseCheck):
         P4 safety net: a name that appears in a file the parser could not read reaches this
         branch, so an unparsed definition can never become an absence.
         """
-        result = literal_search(ctx.resolution.repo, name, ctx.commit, word=True)
+        result = literal_search(ctx.resolution.repo, _bare(name), ctx.commit, word=True)
         if result is None or not result.hits:
             return None
         shown = result.hits[:MAX_LOCATIONS]
         return self._neutral(
             claim,
             summary=f"{name} is used at {_where(ctx)} (first in {shown[0].path}:{shown[0].line})"
-            " but is not defined in this repository, so its definition is not judged here",
+            " but no definition of it was found in the files that could be parsed, so its"
+            " definition is not judged here",
             details={
                 "outcome": "referenced_only",
                 "symbol": name,
                 "n_references": len(result.hits),
                 "references": [{"path": hit.path, "line": hit.line} for hit in shown],
                 "truncated": result.truncated,
+                # The re-runnable command as a string: ``literal_search`` hands back no
+                # ``GitResult``, so there is no exit code or output hash to record (P6).
                 "command": result.command,
             },
             strength=self.strengths.get(CHECK_ID, "referenced_only"),
@@ -201,7 +233,9 @@ class SymbolExists(BaseCheck):
     # --- absence, in decreasing order of certainty ---------------------------------------
 
     def _absent(self, ctx: CheckContext, claim: SymbolClaim, name: str) -> Evidence:
-        timeline = ctx.timeline(name)
+        # The bare component is what source text contains: ``log -S'Foo::bar'`` finds
+        # nothing for a method written inside ``class Foo { ... bar() ... }`` (P4).
+        timeline = ctx.timeline(_bare(name))
         sampled = [presence.release for presence in timeline.presence]
         details: dict[str, Any] = {"symbol": name, "releases_searched": sampled}
 
@@ -238,6 +272,24 @@ class SymbolExists(BaseCheck):
 
         suggestions = ctx.suggest_symbols(name)
         details = details | {"suggestions": suggestions}
+        if timeline.history_complete and timeline.never_in_history is False:
+            # The pickaxe ran to completion and *found* the text in some commit: the name
+            # did exist, just not as a definition in any sampled release. Neither "never
+            # existed" nor "history incomplete" is true, and nothing is refuted (P4).
+            return self._neutral(
+                claim,
+                summary=f"{name} is defined in none of the {len(sampled)} sampled releases,"
+                f" but the name does appear in this repository's history (first in commit"
+                f" {(timeline.first_commit_with_text or '')[:12]}), so its absence is not"
+                " established" + _did_you_mean(suggestions),
+                details=details
+                | {
+                    "outcome": "in_history_not_released",
+                    "history_complete": True,
+                    "never_in_history": False,
+                    "first_commit_with_text": timeline.first_commit_with_text,
+                },
+            )
         gap = self._history_gap(ctx, timeline)
         if gap is None:
             key = "never_in_history_core" if claim.role == "core" else "never_in_history_supporting"
@@ -290,6 +342,16 @@ class SymbolExists(BaseCheck):
         if ctx.resolution.repo.is_shallow():
             return "the repository is a shallow clone"
         return None
+
+    def _budget_spent(self, claim: SymbolClaim) -> Evidence | None:
+        name = claim.name.strip()
+        if not name:
+            return None
+        return self._neutral(
+            claim,
+            summary=BUDGET_SUMMARY.format(name=name),
+            details={"outcome": "budget_expired", "symbol": name},
+        )
 
     # --- helpers --------------------------------------------------------------------------
 

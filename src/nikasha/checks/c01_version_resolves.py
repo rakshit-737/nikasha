@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 from nikasha.checks.base import BaseCheck, CheckContext, make_evidence, register
@@ -57,6 +57,12 @@ _SHA_RE = re.compile(r"\A[0-9a-fA-F]{7,40}\Z")
 _BRANCH_REFS = frozenset({"HEAD", "main", "master", "trunk"})
 #: Subject roles that assert the version was actually released (see the module docstring).
 _ASSERTS_RELEASE = frozenset({"named", "upper", "lower"})
+#: Slack after the report date before a tag counts as "later": the report's calendar day is
+#: the reporter's local day, and tag dates are UTC (P4).
+_DATE_SLACK = 86_400
+#: Digit runs in a tag name ``parse_tag`` could not read; bounded, so linear-time.
+_DIGITS_RE = re.compile(r"\d{1,6}")
+_EPOCH0 = datetime(1970, 1, 1, tzinfo=UTC)
 
 
 def _report_epoch(day: date) -> int:
@@ -70,7 +76,23 @@ def _report_epoch(day: date) -> int:
 
 def _tagged_on(release: Release) -> str:
     """The UTC date a release was tagged, for a summary a reporter can check."""
-    return datetime.fromtimestamp(release.epoch, UTC).date().isoformat()
+    return _day_of(release.epoch)
+
+
+def _day_of(epoch: int) -> str:
+    """``epoch`` as a UTC date by pure arithmetic: identical on every platform (P2), and a
+    hostile out-of-range tag date never raises (P7)."""
+    try:
+        return (_EPOCH0 + timedelta(seconds=epoch)).date().isoformat()
+    except OverflowError:
+        return "an out-of-range date"
+
+
+def _trim(nums: Sequence[int]) -> tuple[int, ...]:
+    out = list(nums)
+    while len(out) > 1 and out[-1] == 0:
+        out.pop()
+    return tuple(out)
 
 
 def _subject(claim: VersionClaim) -> tuple[VersionSpec, str] | None:
@@ -101,12 +123,34 @@ class VersionResolves(BaseCheck):
 
     def run(self, ctx: CheckContext, claims: Sequence[Claim]) -> list[Evidence]:
         out: list[Evidence] = []
+        # One refutation per (outcome, version): "1.1.5" and "1.1.5 and earlier" are one fact.
+        refuted: dict[tuple[Any, ...], tuple[int, list[VersionClaim]]] = {}
         for claim in claims:
             if not isinstance(claim, VersionClaim):
                 continue
             evidence = self._one(ctx, claim)
-            if evidence is not None:
-                out.append(evidence)
+            if evidence is None:
+                continue
+            subject = _subject(claim)
+            if evidence.outcome == "REFUTES" and subject is not None:
+                fp = (evidence.details.get("outcome"), spec_to_key(subject[0]))
+                if fp in refuted:
+                    refuted[fp][1].append(claim)
+                    continue
+                refuted[fp] = (len(out), [claim])
+            out.append(evidence)
+        for position, cited in refuted.values():
+            if len(cited) > 1:
+                first = out[position]
+                out[position] = make_evidence(
+                    check_id=CHECK_ID,
+                    group=GROUP,
+                    claims=cited,
+                    outcome=first.outcome,
+                    strength=first.strength,
+                    summary=first.summary,
+                    details=dict(first.details),
+                )
         return out
 
     # --- one claim ----------------------------------------------------------------------
@@ -121,7 +165,7 @@ class VersionResolves(BaseCheck):
             return self._say(
                 claim,
                 "NEUTRAL",
-                f"{ctx.repo_url} has no release tags, so {spec.raw} cannot be matched to one",
+                f"the repository has no release tags, so {spec.raw} cannot be matched to one",
                 {"version": spec.raw},
                 key="no_tags",
             )
@@ -164,8 +208,20 @@ class VersionResolves(BaseCheck):
         day = ctx.report.reported_at
         if day is None:
             return None  # P4: undated reports make "newer than the latest release" unknowable
-        current = ctx.resolution.releases.latest_before(_report_epoch(day))
-        if current is None or spec_to_key(spec)[0] <= current.tag.trimmed:
+        if spec.qualifier:
+            return None  # P4: pre-releases are judged by match() and _absent, never as future
+        cutoff = _report_epoch(day) + _DATE_SLACK
+        if any(m.epoch <= cutoff for m in matches):
+            return None  # a matching tag (pre-release or variant line) already existed
+        releases = ctx.resolution.releases
+        # P4: with no release by the report day itself (no slack) there is nothing to compare
+        # to. The slack stays on ``current``: the most generous comparison release there is.
+        current = releases.latest_before(cutoff)
+        if (
+            releases.latest_before(_report_epoch(day)) is None
+            or current is None
+            or spec_to_key(spec)[0] <= current.tag.trimmed
+        ):
             return None
         details: dict[str, Any] = {
             "version": spec.raw,
@@ -178,19 +234,16 @@ class VersionResolves(BaseCheck):
             details["tag"] = matches[0].name
             details["tagged_at"] = _tagged_on(matches[0])
             note = f"; {matches[0].name} was not tagged until {_tagged_on(matches[0])}"
-        if claim.relation == "fixed_in":
-            return self._say(
-                claim,
-                "NEUTRAL",
-                f"{spec.raw} is newer than {current.name}, the latest release on"
-                f" {day.isoformat()}, but a fix release need not have been cut yet{note}",
-                details,
-                label="fix_release_not_cut",
-            )
+        doubt = self._future_doubt(
+            ctx, claim, spec, matches, cutoff=cutoff, current=current, note=note
+        )
+        if doubt is not None:
+            label, summary, extra = doubt
+            return self._say(claim, "NEUTRAL", summary, {**details, **extra}, label=label)
         return self._say(
             claim,
             "REFUTES",
-            f"the latest release on {day.isoformat()} was {current.name}"
+            f"the latest release by {(day + timedelta(days=1)).isoformat()} was {current.name}"
             f" ({_tagged_on(current)}); the report names {spec.raw}{note}",
             details,
             key="future_release",
@@ -244,6 +297,10 @@ class VersionResolves(BaseCheck):
                 details,
                 label="range_boundary",
             )
+        doubt = self._gap_doubt(ctx, claim, spec, below, above)
+        if doubt is not None:
+            label, summary, extra = doubt
+            return self._say(claim, "NEUTRAL", summary, {**details, **extra}, label=label)
         return self._say(
             claim,
             "REFUTES",
@@ -252,6 +309,92 @@ class VersionResolves(BaseCheck):
             details,
             key="gap_in_releases",
         )
+
+    def _future_doubt(
+        self,
+        ctx: CheckContext,
+        claim: VersionClaim,
+        spec: VersionSpec,
+        matches: Sequence[Release],
+        *,
+        cutoff: int,
+        current: Release,
+        note: str,
+    ) -> tuple[str, str, dict[str, Any]] | None:
+        """Why a "future release" cannot be asserted after all (P4), or ``None``."""
+        day = ctx.report.reported_at
+        when = (day + timedelta(days=1)).isoformat() if day is not None else "the report date"
+        if claim.relation == "fixed_in":
+            return (
+                "fix_release_not_cut",
+                f"{spec.raw} is newer than {current.name}, the latest release by"
+                f" {when}, but a fix release need not have been cut yet{note}",
+                {},
+            )
+        if matches:
+            committed = ctx.resolution.repo.commit_epoch(matches[0].commit)
+            if committed is not None and committed <= cutoff:
+                # The tag may have been (re)created after the release shipped.
+                return (
+                    "tag_postdates_commit",
+                    f"{matches[0].name} was tagged after {when}, but its commit predates the"
+                    f" report, so the tag may have been made after the release",
+                    {"commit_date": _day_of(committed)},
+                )
+        if ctx.resolution.repo.is_shallow():
+            return (
+                "tags_incomplete",
+                f"{spec.raw} is newer than {current.name}, but this clone is shallow, so its"
+                f" tag list may be incomplete{note}",
+                {},
+            )
+        return None
+
+    def _gap_doubt(
+        self,
+        ctx: CheckContext,
+        claim: VersionClaim,
+        spec: VersionSpec,
+        below: Release,
+        above: Release,
+    ) -> tuple[str, str, dict[str, Any]] | None:
+        """Why "never cut" cannot be asserted after all (P4), or ``None``."""
+        if claim.relation == "fixed_in":
+            return (
+                "fix_release_not_cut",
+                f"no release {spec.raw} exists, but a fix release named in advance need not"
+                f" have been cut under that number",
+                {},
+            )
+        width = len(spec.numbers)
+        if width != len(below.tag.numbers) or width != len(above.tag.numbers):
+            return (
+                "version_shape_differs",
+                f"{spec.raw} has a different number of components from the releases either"
+                f" side of it ({below.name}, {above.name}), so it may name a series or a"
+                f" downstream build rather than a missing release",
+                {},
+            )
+        nums = spec_to_key(spec)[0]
+        unread = [
+            name
+            for name in ctx.resolution.releases.ignored
+            if _trim([int(d) for d in _DIGITS_RE.findall(name)]) == nums
+        ]
+        if unread:
+            return (
+                "unparsed_tag_may_match",
+                f"no release tag parses as {spec.raw}, but {unread[0]} may name it",
+                {"unparsed_tags": unread[:5]},
+            )
+        if ctx.resolution.repo.is_shallow():
+            return (
+                "tags_incomplete",
+                f"no tag matches {spec.raw}, but this clone is shallow, so its tag list may be"
+                f" incomplete",
+                {},
+            )
+        return None
 
     # --- claims that name something other than a version --------------------------------
 
@@ -272,14 +415,15 @@ class VersionResolves(BaseCheck):
             return self._say(
                 claim,
                 "NEUTRAL",
-                f"commit {text} is not in this clone of {ctx.repo_url}",
+                f"commit {text} does not resolve to exactly one commit in this clone"
+                f" (absent, or an ambiguous prefix)",
                 {"commit": text},
                 label="commit_not_in_clone",
             )
         return self._say(
             claim,
             "SUPPORTS",
-            f"commit {text} exists in {ctx.repo_url} ({resolved[:12]})",
+            f"commit {text} exists in this clone ({resolved[:12]})",
             {"commit": resolved},
             key="resolves",
         )
@@ -293,6 +437,14 @@ class VersionResolves(BaseCheck):
                 if day is not None
                 else (finals[-1] if finals else None)
             )
+            if newest is None and finals:
+                return self._say(
+                    claim,
+                    "NEUTRAL",
+                    'the report says "latest", and no release was tagged by the report date',
+                    {"special_ref": ref},
+                    label="no_release_by_report_date",
+                )
             if newest is None:
                 return self._say(
                     claim,

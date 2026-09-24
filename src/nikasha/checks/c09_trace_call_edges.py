@@ -26,7 +26,6 @@ moment in the program's life, and C11 owns their consistency.
 
 from __future__ import annotations
 
-import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -37,6 +36,7 @@ from nikasha.code.callgraph import EdgeKind, edge
 from nikasha.code.callgraph import Evidence as CallSite
 from nikasha.code.facts import FileFacts
 from nikasha.code.trace_forensics import app_frames, bare_function
+from nikasha.errors import NikashaError
 from nikasha.model.claims import Claim, ClaimKind, Frame, TraceClaim
 from nikasha.model.evidence import CodeLocation, Evidence, Outcome
 
@@ -51,6 +51,16 @@ MAX_SITES = 5
 MAX_CALLER_CALLS = 20
 MAX_LOCATIONS = 10
 MAX_NAMED = 3
+#: Caps on attacker-sized input: frames walked per trace, records kept per details list, and
+#: characters of a frame's function text echoed into the summary and details.
+MAX_APP_FRAMES = 200
+MAX_RECORDS = 50
+MAX_DISPLAY = 120
+#: ``git grep`` hit cap for the address-taken recheck; reaching it means absence is unproven.
+MAX_ADDR_HITS = 200
+#: The ``details['outcome']`` label of a walk cut short. It is deliberately not a strengths
+#: key: a truncated walk is NEUTRAL at 0.0, whatever it had classified so far.
+TRUNCATED_OUTCOME = "truncated"
 
 #: Why one endpoint cannot take part in a checkable edge. ``outside_repo`` is a skip (the
 #: trace left the repository); the rest are *unknown*, which never counts against a report.
@@ -75,9 +85,11 @@ def score_edges(
     Isolated from the walk so the arithmetic — in particular the ``missing_edge_cap``, which
     stops a long fabricated stack from dominating a verdict on its own — is auditable and
     directly testable. ``truncated`` means the budget ran out before every pair was looked
-    at, which blocks the "every edge is real" support but leaves each classified missing
-    edge standing on its own.
+    at (or the trace had more frames than :data:`MAX_APP_FRAMES`). How far a clock-bounded
+    walk got is not deterministic (P2), so a truncated walk neither supports nor refutes.
     """
+    if truncated:
+        return "NEUTRAL", 0.0
     missing = sum(1 for kind in kinds if kind == "none")
     if missing:
         per_edge = strengths.get(CHECK_ID, "missing_edge")
@@ -125,6 +137,8 @@ class _Walk:
     locations: list[CodeLocation] = field(default_factory=list)
     pairs: int = 0
     truncated: bool = False
+    #: ``"deadline"`` or ``"frame_cap"`` when :attr:`truncated`.
+    truncated_by: str = ""
 
 
 @register
@@ -154,19 +168,42 @@ class TraceCallEdges(BaseCheck):
             # Fewer than two application frames: the trace asserts no call edge at all.
             return None
         outcome, strength = score_edges(walk.kinds, self.strengths, truncated=walk.truncated)
+        if walk.truncated:
+            # Nothing partial is kept: how far the walk got depends on the clock (P2), so the
+            # evidence says only that it was cut short, identically on every run.
+            return make_evidence(
+                check_id=CHECK_ID,
+                group=GROUP,
+                claims=[claim],
+                outcome=outcome,
+                strength=strength,
+                summary=_summary(ctx, walk, outcome),
+                details={
+                    "outcome": TRUNCATED_OUTCOME,
+                    "truncated": True,
+                    "truncated_by": walk.truncated_by,
+                    "n_pairs": walk.pairs,
+                    "trace_format": claim.format,
+                },
+            )
         details: dict[str, Any] = {
             "outcome": edge_outcome_key(outcome),
-            "edges": walk.checked,
-            "skipped": walk.skipped,
-            "unknown": walk.unknown,
+            "edges": walk.checked[:MAX_RECORDS],
+            "skipped": walk.skipped[:MAX_RECORDS],
+            "unknown": walk.unknown[:MAX_RECORDS],
             "n_pairs": walk.pairs,
             "n_checked": len(walk.kinds),
             "n_missing": sum(1 for kind in walk.kinds if kind == "none"),
             "n_indirect": sum(1 for kind in walk.kinds if kind == "indirect_possible"),
             "trace_format": claim.format,
         }
-        if walk.truncated:
-            details["truncated"] = True
+        for key, records in (
+            ("edges", walk.checked),
+            ("skipped", walk.skipped),
+            ("unknown", walk.unknown),
+        ):
+            if len(records) > MAX_RECORDS:
+                details[f"{key}_omitted"] = len(records) - MAX_RECORDS
         return make_evidence(
             check_id=CHECK_ID,
             group=GROUP,
@@ -182,13 +219,25 @@ class TraceCallEdges(BaseCheck):
 def _walk(ctx: CheckContext, trace: TraceClaim) -> _Walk:
     """Classify every consecutive pair of application frames, innermost first."""
     walk = _Walk()
-    endpoints = [_endpoint(ctx, frame) for frame in app_frames(trace)]
-    walk.pairs = max(0, len(endpoints) - 1)
+    frames = list(app_frames(trace))
+    walk.pairs = max(0, len(frames) - 1)
+    if len(frames) > MAX_APP_FRAMES:
+        walk.truncated, walk.truncated_by = True, "frame_cap"
+        return walk
+    # Endpoints are resolved lazily, so the deadline bounds that work too.
+    resolved: dict[int, _Endpoint] = {}
+
+    def endpoint(i: int) -> _Endpoint:
+        if i not in resolved:
+            resolved[i] = _endpoint(ctx, frames[i])
+        return resolved[i]
+
     # Stacks are innermost-first, so in each pair the caller is the *later* frame.
-    for callee, caller in itertools.pairwise(endpoints):
+    for i in range(walk.pairs):
         if ctx.expired():
-            walk.truncated = True
-            break
+            walk.truncated, walk.truncated_by = True, "deadline"
+            return walk
+        callee, caller = endpoint(i), endpoint(i + 1)
         blocked = [end for end in (caller, callee) if end.status != "checkable"]
         if blocked:
             record = _pair(caller, callee)
@@ -197,6 +246,13 @@ def _walk(ctx: CheckContext, trace: TraceClaim) -> _Walk:
             (walk.skipped if left_repo else walk.unknown).append(record)
             continue
         found = edge(ctx.index, ctx.commit, caller.function, callee.function)
+        if found.kind == "none":
+            doubt = _absence_doubt(ctx, caller.function, callee.function, found.caller_calls)
+            if doubt:
+                record = _pair(caller, callee)
+                record["reasons"] = [doubt]
+                walk.unknown.append(record)
+                continue
         sites = sorted(f"{e.path}:{e.line} {e.note}" for e in found.evidence)
         record = _pair(caller, callee)
         record["kind"] = found.kind
@@ -213,6 +269,50 @@ def _walk(ctx: CheckContext, trace: TraceClaim) -> _Walk:
     return walk
 
 
+def _absence_doubt(ctx: CheckContext, caller: str, callee: str, calls: Sequence[str]) -> str:
+    """Why a ``none`` edge is not proven absent, or ``""`` when it is (P4).
+
+    :func:`edge` reads facts from every file defining the caller, from the macros and small
+    functions the caller calls, and from address-taken sites of the callee. A cut-short parse
+    in *any* of them can hide the call, not only in the frame's own file.
+    """
+    ref = _ref(ctx)
+    consulted: set[str] = set()
+    caller_paths: set[str] = set()
+    for name in (caller, *calls):
+        for path, sym in ctx.index.definitions(ctx.commit, name):
+            if sym.kind in ("function", "method", "macro"):
+                consulted.add(path)
+            if name == caller and sym.kind in ("function", "method"):
+                caller_paths.add(path)
+    makes_indirect_calls = any(
+        call.indirect
+        for path in sorted(caller_paths)
+        if (facts := ctx.facts(path)) is not None
+        for call in facts.calls
+    )
+    if makes_indirect_calls:
+        target = bare_function(callee)
+        try:
+            hits = ctx.index.repo.grep(
+                target, [ctx.commit], word=True, files_only=True, max_hits=MAX_ADDR_HITS
+            )
+        except NikashaError:
+            return f"the search for where {_short(target)} is address-taken failed at {ref}"
+        if len(hits) >= MAX_ADDR_HITS:
+            return f"too many mentions of {_short(target)} at {ref} to rule out an indirect call"
+        consulted.update(hit.path for hit in hits)
+    for path in sorted(consulted):
+        if not file_is_certain(ctx.facts(path)):
+            return f"{path} did not parse cleanly at {ref}, so a missing call is not certain"
+    return ""
+
+
+def _short(text: str) -> str:
+    """``text`` bounded to :data:`MAX_DISPLAY` characters for summaries and details."""
+    return text if len(text) <= MAX_DISPLAY else text[: MAX_DISPLAY - 3] + "..."
+
+
 def _pair(caller: _Endpoint, callee: _Endpoint) -> dict[str, Any]:
     return {
         "caller": caller.display,
@@ -227,7 +327,7 @@ def _pair(caller: _Endpoint, callee: _Endpoint) -> dict[str, Any]:
 def _endpoint(ctx: CheckContext, frame: Frame) -> _Endpoint:
     """Resolve one frame's file and function, and say whether an edge through it is judgeable."""
     name = bare_function(frame.function or "")
-    display = frame.function or name
+    display = _short(frame.function or name)
     ref = _ref(ctx)
     path = _resolve(ctx, frame, name)
     generated = ctx.generated(path if path is not None else frame.path or "")
@@ -235,7 +335,7 @@ def _endpoint(ctx: CheckContext, frame: Frame) -> _Endpoint:
         reason = f"{generated.path} is {generated.kind} ({generated.reason}), so it is not judged"
         return _Endpoint(frame.index, display, name, path, "generated", reason)
     if path is None:
-        where = frame.path or "a frame with no file"
+        where = _short(frame.path or "a frame with no file")
         return _Endpoint(
             frame.index, display, name, None, "outside_repo", f"{where} is not in the tree at {ref}"
         )
@@ -243,7 +343,7 @@ def _endpoint(ctx: CheckContext, frame: Frame) -> _Endpoint:
         reason = f"{path} did not parse cleanly at {ref}, so a missing call is not certain"
         return _Endpoint(frame.index, display, name, path, "unparsed", reason)
     if not _defined(ctx, name):
-        reason = f"no function {name} is defined at {ref} (C03 owns that finding)"
+        reason = f"no function {_short(name)} is defined at {ref} (C03 owns that finding)"
         return _Endpoint(frame.index, display, name, path, "undefined", reason)
     return _Endpoint(frame.index, display, name, path, "checkable")
 
@@ -310,6 +410,16 @@ def _summary(ctx: CheckContext, walk: _Walk, outcome: Outcome) -> str:
         )
     if outcome == "SUPPORTS":
         return f"all {len(checked)} call edges in the trace exist at {ref}: {_join(checked)}"
+    if walk.truncated:
+        why = (
+            f"the trace has more than {MAX_APP_FRAMES} application frames"
+            if walk.truncated_by == "frame_cap"
+            else "the check ran out of time"
+        )
+        return (
+            f"the {walk.pairs} call edges in the trace were not judged at {ref}: {why},"
+            " so the trace is neither confirmed nor contradicted"
+        )
     if checked:
         indirect = [r for r in checked if r["kind"] == "indirect_possible"]
         return (
@@ -321,7 +431,5 @@ def _summary(ctx: CheckContext, walk: _Walk, outcome: Outcome) -> str:
         parts.append(f"{len(walk.skipped)} leave the repository")
     if walk.unknown:
         parts.append(f"{len(walk.unknown)} are unknown")
-    if walk.truncated:
-        parts.append("the check ran out of time")
     reason = "; ".join(parts) if parts else "nothing was checkable"
     return f"no call edge in the trace could be checked at {ref}: {reason}"

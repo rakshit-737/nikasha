@@ -32,6 +32,7 @@ Two conservative rules shape everything below (P4):
 from __future__ import annotations
 
 import shlex
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
@@ -85,6 +86,11 @@ MIN_IDENT_CHARS = 4
 #: shared fingerprints are scattered through a multi-megabyte file (``difflib`` is quadratic).
 ALIGN_WINDOW_TOKENS = 20_000
 _HEAD_BYTES = 4096
+#: The most snippet tokens one alignment takes. ``difflib`` is quadratic in both sides and
+#: cannot be interrupted, so an attacker-sized fence is refused rather than aligned (P7).
+MAX_SNIPPET_TOKENS = 4000
+#: Below this many seconds left, a pickaxe is not started: it could only time out (P4).
+MIN_HISTORY_BUDGET_S = 1.0
 
 #: Keywords make terrible probes: they are in every file, so they narrow nothing. This is a
 #: cross-language stoplist, not a grammar — a name missing from it only costs one grep.
@@ -246,6 +252,21 @@ class _Scan:
     #: invocations made through :class:`~nikasha.code.gitio.GitRepo` itself.
     commands: list[str] = field(default_factory=list)
     records: list[CommandRecord] = field(default_factory=list)
+    #: Set when a search for the current snippet stopped at the deadline: whatever it had
+    #: found by then depends on the clock, so it must not be scored (P2).
+    cut_short: bool = False
+    #: Commits at which a probe hit the grep cap, so a candidate may have been missed.
+    capped: set[str] = field(default_factory=set)
+    #: The probes run for the current snippet: :meth:`rarest` may only use their counts.
+    probed: set[str] = field(default_factory=set)
+
+    def reset(self) -> None:
+        """Forget the per-snippet state; file tokens stay cached."""
+        self.commands.clear()
+        self.records.clear()
+        self.cut_short = False
+        self.capped.clear()
+        self.probed.clear()
 
     def file(self, commit: str, path: str) -> tuple[tuple[Token, ...], tuple[Fingerprint, ...]]:
         """The tokens and fingerprints of ``path`` at ``commit`` (empty when unreadable)."""
@@ -262,16 +283,19 @@ class _Scan:
         self._files[(commit, path)] = result
         return result
 
-    def candidates(self, commit: str, snippet: _Snippet) -> list[tuple[str, int]]:
+    def candidates(self, commit: str, snippet: _Snippet) -> list[tuple[str, int, int]]:
         """Paths at ``commit`` holding one of the snippet's probes, with the probe's rank.
 
         The rank matters: a file holding the snippet's most distinctive *line* is a better
         candidate than one that merely mentions an identifier from it, and only the best few
         candidates are aligned.
         """
-        found_at: dict[str, int] = {}
+        found_at: dict[str, tuple[int, int]] = {}
         for rank, probe in enumerate(snippet.probes):
-            if self.ctx.expired() or len(found_at) >= MAX_CANDIDATES:
+            if len(found_at) >= MAX_CANDIDATES:
+                break
+            if self.ctx.expired():
+                self.cut_short = True
                 break
             result = literal_search(
                 self.ctx.resolution.repo, probe, commit, max_hits=MAX_LITERAL_HITS
@@ -281,9 +305,12 @@ class _Scan:
             if result.command not in self.commands:
                 self.commands.append(result.command)
             self._hits[(commit, probe)] = len(result.hits)
-            for path in result.paths:
-                found_at.setdefault(path, rank)
-        return list(found_at.items())[:MAX_CANDIDATES]
+            self.probed.add(probe)
+            if result.truncated:
+                self.capped.add(commit)
+            for hit in result.hits:
+                found_at.setdefault(hit.path, (rank, hit.line))
+        return [(path, rank, line) for path, (rank, line) in found_at.items()][:MAX_CANDIDATES]
 
     def best_at(self, commit: str, ref: str, snippet: _Snippet) -> _Match | None:
         """The best-containing file for ``snippet`` at ``commit``, aligned for line numbers.
@@ -292,22 +319,33 @@ class _Scan:
         top few exactly, because a file can share fingerprints with a snippet without
         containing it as a run.
         """
-        ranked: list[tuple[float, int, str]] = []
-        for path, rank in self.candidates(commit, snippet):
+        ranked: list[tuple[float, int, str, int]] = []
+        for path, rank, line in self.candidates(commit, snippet):
             tokens, fingerprints = self.file(commit, path)
             if tokens:
-                ranked.append((containment(snippet.fingerprints, fingerprints), rank, path))
+                ranked.append((containment(snippet.fingerprints, fingerprints), rank, path, line))
         ranked.sort(key=lambda item: (-item[0], item[1], item[2]))
         best: _Match | None = None
-        for _, _, path in ranked[:MAX_ALIGNED]:
-            if self.ctx.expired():
+        for _, _, path, line in ranked[:MAX_ALIGNED]:
+            found = self.align_in(commit, ref, path, snippet, line)
+            if found is None:
                 break
-            tokens, fingerprints = self.file(commit, path)
-            aligned = align(snippet.tokens, _narrow(tokens, fingerprints, snippet))
-            found = _Match(ref, path, aligned.containment, aligned.start_line, aligned.end_line)
             if best is None or found.key() < best.key():
                 best = found
         return best
+
+    def align_in(
+        self, commit: str, ref: str, path: str, snippet: _Snippet, anchor: int | None = None
+    ) -> _Match | None:
+        """Align ``snippet`` against ``path`` at ``commit``; ``None`` once out of time."""
+        if self.ctx.expired():
+            self.cut_short = True
+            return None
+        tokens, fingerprints = self.file(commit, path)
+        if not tokens:
+            return _Match(ref, path, 0.0, None, None)
+        aligned = align(snippet.tokens, _narrow(tokens, fingerprints, snippet, anchor))
+        return _Match(ref, path, aligned.containment, aligned.start_line, aligned.end_line)
 
     def elsewhere(self, snippet: _Snippet) -> tuple[_Match | None, list[str], bool]:
         """The best match across the sampled releases, their names, and whether all ran."""
@@ -315,9 +353,12 @@ class _Scan:
         scanned: list[str] = []
         for release in _sampled(self.ctx):
             if self.ctx.expired():
+                self.cut_short = True
                 return best, scanned, False
-            scanned.append(release.name)
             found = self.best_at(release.commit, release.name, snippet)
+            if self.cut_short:
+                return best, scanned, False  # this release was not searched to the end
+            scanned.append(release.name)
             if found is not None and (best is None or found.key() < best.key()):
                 best = found
         return best, scanned, True
@@ -330,10 +371,14 @@ class _Scan:
         """
         if not snippet.identifiers:
             return None
+        # Only this snippet's own probes: a count left by another snippet in the same report
+        # would make the term (and the outcome) depend on the report's other claims.
         return min(
             snippet.identifiers,
             key=lambda name: (
-                self._hits.get((self.ctx.commit, name), MAX_LITERAL_HITS + 1),
+                self._hits.get((self.ctx.commit, name), MAX_LITERAL_HITS + 1)
+                if name in self.probed
+                else MAX_LITERAL_HITS + 1,
                 -len(name),
                 name,
             ),
@@ -346,7 +391,9 @@ class _Scan:
         output to hash, and a fabricated one would be worse than none (P6).
         """
         try:
-            first = self.ctx.resolution.repo.pickaxe_first(term, record=self.records)
+            first = self.ctx.resolution.repo.pickaxe_first(
+                term, timeout=self.history_budget(), record=self.records
+            )
         except HistoryTimeoutError:
             return None
         command = shlex.join(["git", "log", "--all", "-1", "--format=%H", f"-S{term}"])
@@ -354,9 +401,19 @@ class _Scan:
             self.commands.append(command)
         return first is None
 
+    def history_budget(self) -> float:
+        """Seconds the pickaxe may take: its own cap, inside whatever the check has left."""
+        if self.ctx.deadline is None:
+            return self.ctx.history_timeout
+        left = self.ctx.deadline - time.monotonic()
+        return min(self.ctx.history_timeout, max(0.0, left))
+
 
 def _narrow(
-    tokens: tuple[Token, ...], fingerprints: tuple[Fingerprint, ...], snippet: _Snippet
+    tokens: tuple[Token, ...],
+    fingerprints: tuple[Fingerprint, ...],
+    snippet: _Snippet,
+    anchor: int | None = None,
 ) -> Sequence[Token]:
     """The region of a file whose fingerprints ``snippet`` shares, padded by its length.
 
@@ -368,12 +425,19 @@ def _narrow(
     tokens, so the range stays correct.
 
     A snippet with no fingerprints (or none in common) is aligned against the whole file:
-    that is the documented fallback for snippets shorter than one window.
+    that is the documented fallback for snippets shorter than one window. When the file is
+    longer than one alignment window, the window is centred on ``anchor`` (the line the grep
+    found a probe on) rather than on the top of the file, which would miss a quote that sits
+    past the window's end.
     """
     span = max(len(snippet.tokens), MIN_FINGERPRINT_TOKENS)
     positions = sorted(fp.position for fp in fingerprints if fp.hash in snippet.hashes)
     if not positions:
-        return tokens[:ALIGN_WINDOW_TOKENS]
+        if len(tokens) <= ALIGN_WINDOW_TOKENS or anchor is None:
+            return tokens[:ALIGN_WINDOW_TOKENS]
+        at = next((i for i, token in enumerate(tokens) if token.line >= anchor), len(tokens))
+        low = max(0, min(at - ALIGN_WINDOW_TOKENS // 2, len(tokens) - ALIGN_WINDOW_TOKENS))
+        return tokens[low : low + ALIGN_WINDOW_TOKENS]
     first, last = _cluster(positions, 2 * span)
     low = max(0, first - span)
     high = min(len(tokens), last + span + DEFAULT_K, low + ALIGN_WINDOW_TOKENS)
@@ -434,13 +498,22 @@ class SnippetProvenance(BaseCheck):
 
     # -- one snippet ----------------------------------------------------------------------
 
-    def _one(self, scan: _Scan, claim: SnippetClaim) -> Evidence | None:
+    def _one(self, scan: _Scan, claim: SnippetClaim) -> Evidence | None:  # noqa: PLR0911
         ctx = scan.ctx
-        scan.commands.clear()
-        scan.records.clear()
+        scan.reset()
         snippet = _prepare(claim)
         if snippet is None:
             return None  # comments and prose only: there is nothing to look for
+        if len(snippet.tokens) > MAX_SNIPPET_TOKENS:
+            return self._neutral(
+                claim,
+                snippet,
+                scan,
+                f"the snippet has more than {MAX_SNIPPET_TOKENS} tokens, too many to align"
+                " within the check's bounds, so it is not searched",
+                {},
+                label="too_large",
+            )
         if claim.attributed_path is not None:
             generated = ctx.generated(claim.attributed_path)
             if generated is not None:
@@ -455,6 +528,8 @@ class SnippetProvenance(BaseCheck):
                 )
         ref = ctx.ref_name or ctx.commit[:12]
         here = scan.best_at(ctx.commit, ref, snippet)
+        if scan.cut_short:
+            return self._out_of_time(claim, snippet, scan)
         if here is not None:
             generated = ctx.generated(here.path)
             if generated is not None:
@@ -473,14 +548,27 @@ class SnippetProvenance(BaseCheck):
                 return self._located(claim, snippet, scan, here, "partial")
         return self._not_here(scan, claim, snippet, here)
 
-    def _not_here(
+    def _not_here(  # noqa: PLR0911, PLR0912 - one branch per P4 safeguard
         self, scan: _Scan, claim: SnippetClaim, snippet: _Snippet, here: _Match | None
     ) -> Evidence:
         """Below :data:`PARTIAL_AT` at the ref: look at the other releases, then at history."""
         ctx = scan.ctx
         ref = ctx.ref_name or ctx.commit[:12]
-        found = here.containment if here is not None else 0.0
         other, scanned, complete = scan.elsewhere(snippet)
+        if not complete:
+            return self._out_of_time(claim, snippet, scan)
+        if other is not None and other.containment >= CONTAINED_AT:
+            # The release copy's file is the natural place to look at the ref too: the capped
+            # greps report in tree order and may simply not have reached it there.
+            again = scan.align_in(ctx.commit, ref, other.path, snippet)
+            if scan.cut_short:
+                return self._out_of_time(claim, snippet, scan)
+            if again is not None and (here is None or again.key() < here.key()):
+                here = again
+                if here.containment >= PARTIAL_AT and ctx.generated(here.path) is None:
+                    key = "contained" if here.containment >= CONTAINED_AT else "partial"
+                    return self._located(claim, snippet, scan, here, key)
+        found = here.containment if here is not None else 0.0
         base: dict[str, object] = {
             "here": here.as_details() if here is not None else None,
             "containment": round(found, 3),
@@ -488,6 +576,28 @@ class SnippetProvenance(BaseCheck):
             "elsewhere": other.as_details() if other is not None else None,
         }
         if other is not None and other.containment >= CONTAINED_AT:
+            generated = ctx.generated(other.path)
+            if generated is not None:
+                return self._neutral(
+                    claim,
+                    snippet,
+                    scan,
+                    f"the snippet matches {other.path} in {other.ref}, which is"
+                    f" {generated.kind}, so it is not judged",
+                    {**base, "generated": generated.reason},
+                    label="generated",
+                )
+            if ctx.commit in scan.capped:
+                return self._neutral(
+                    claim,
+                    snippet,
+                    scan,
+                    f"the snippet matches {other.path} in {other.ref}, but a search at {ref}"
+                    f" hit its cap of {MAX_LITERAL_HITS} matches, so the file it came from"
+                    " may not have been reached there",
+                    base,
+                    label="ref_search_capped",
+                )
             return self._emit(
                 claim,
                 snippet,
@@ -501,24 +611,28 @@ class SnippetProvenance(BaseCheck):
             )
         best_other = other.containment if other is not None else 0.0
         if max(found, best_other) >= ABSENT_BELOW:
+            if found >= best_other or other is None:
+                where = f"in the tree at {ref} (containment {found:.2f})"
+            else:
+                where = f"in {other.path} in {other.ref} (containment {best_other:.2f})"
             return self._neutral(
                 claim,
                 snippet,
                 scan,
-                f"parts of the snippet are in the tree at {ref} (containment {found:.2f}),"
-                " but not enough of it to say where it came from",
+                f"parts of the snippet are {where}, but not enough of it to say where it came from",
                 base,
                 label="insufficient_containment",
             )
         term = scan.rarest(snippet)
-        never = scan.never_in_history(term) if complete and term is not None else None
+        blocker = self._history_blocker(scan, term)
+        never = scan.never_in_history(term) if blocker is None and term is not None else None
         details = {**base, "history_term": term, "history_complete": never is not None}
         if never is None:
             return self._neutral(
                 claim,
                 snippet,
                 scan,
-                self._incomplete(ref, complete, term),
+                self._incomplete(ref, blocker, term),
                 details,
                 label="search_incomplete",
             )
@@ -545,15 +659,39 @@ class SnippetProvenance(BaseCheck):
         )
 
     @staticmethod
-    def _incomplete(ref: str, complete: bool, term: str | None) -> str:
+    def _history_blocker(scan: _Scan, term: str | None) -> str | None:
+        """Why history may not be searched at all, or ``None`` if it may (P4)."""
+        if term is None:
+            return "the snippet has no identifier distinctive enough to search history for"
+        if scan.ctx.resolution.repo.is_shallow():
+            return "the clone is shallow, so its history is incomplete"
+        if scan.ctx.expired() or scan.history_budget() < MIN_HISTORY_BUDGET_S:
+            return "there was no time left to search history"
+        return None
+
+    @staticmethod
+    def _incomplete(ref: str, blocker: str | None, term: str | None) -> str:
         """Why absence was not claimed although nothing was found (P4)."""
-        if not complete:
-            reason = "the release search did not finish"
-        elif term is None:
-            reason = "the snippet has no identifier distinctive enough to search history for"
-        else:
-            reason = f"the history search for {term!r} did not finish"
-        return f"the snippet is not in the tree at {ref}, but {reason}, so it is not called absent"
+        reason = blocker or f"the history search for {term!r} did not finish"
+        return f"the snippet was not found at {ref}, but {reason}, so it is not called absent"
+
+    def _out_of_time(self, claim: SnippetClaim, snippet: _Snippet, scan: _Scan) -> Evidence:
+        """The check's budget ran out mid-search: say so, identically however far it got.
+
+        What a cut-short search found depends on the clock, so none of it is reported: not
+        the partial match, not the releases reached, not the commands run (P2).
+        """
+        scan.commands.clear()
+        scan.records.clear()
+        return self._neutral(
+            claim,
+            snippet,
+            scan,
+            "the search for the snippet did not finish within the check's time budget,"
+            " so it is not located and not called absent",
+            {"sampled_releases": [], "history_complete": False},
+            label="budget_spent",
+        )
 
     # -- evidence -------------------------------------------------------------------------
 
