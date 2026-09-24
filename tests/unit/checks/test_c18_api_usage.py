@@ -14,8 +14,8 @@ from dataclasses import replace
 from typing import Any
 
 import pytest
+from check_helpers import MakeContext, claim
 
-from conftest import MakeContext, claim
 from nikasha.checks.base import CheckContext, run_checks
 from nikasha.checks.c18_api_usage import ApiUsage, Site, absence_uncertainty, calls_inside
 from nikasha.code.facts import CallSite

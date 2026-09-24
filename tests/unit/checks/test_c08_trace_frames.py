@@ -16,8 +16,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from check_helpers import ROOT, MakeContext, claim
 
-from conftest import ROOT, MakeContext, claim
 from nikasha.checks.base import run_checks
 from nikasha.checks.c08_trace_frames import GENERATED_NOTE, TraceFrames
 from nikasha.code.index import CodeIndex

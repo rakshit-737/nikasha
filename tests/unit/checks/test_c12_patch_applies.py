@@ -14,7 +14,8 @@ import subprocess
 import time
 from pathlib import Path
 
-from conftest import REPORTS, MakeContext, claim
+from check_helpers import REPORTS, MakeContext, claim
+
 from nikasha.checks.base import run_checks
 from nikasha.checks.c12_patch_applies import (
     OFFSET_RADIUS,

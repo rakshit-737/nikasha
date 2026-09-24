@@ -15,7 +15,8 @@ import shutil
 import time
 from pathlib import Path
 
-from conftest import MakeContext, claim
+from check_helpers import MakeContext, claim
+
 from nikasha.checks.base import CheckContext, run_checks
 from nikasha.checks.c14_option_exists import OptionExists, generated_reasons, is_doc
 from nikasha.code.gitio import GitRepo

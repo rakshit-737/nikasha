@@ -12,8 +12,8 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from check_helpers import MakeContext, claim
 
-from conftest import MakeContext, claim
 from nikasha.checks.base import CheckContext, run_checks
 from nikasha.checks.c07_snippet_provenance import SnippetProvenance
 from nikasha.code.generated import GeneratedMatch

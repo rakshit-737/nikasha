@@ -12,7 +12,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from conftest import REPORTS, MakeContext, claim
+from check_helpers import REPORTS, MakeContext, claim
+
 from nikasha.checks.base import CheckContext, run_checks
 from nikasha.checks.c01_version_resolves import VersionResolves
 from nikasha.code.gitio import TagRef

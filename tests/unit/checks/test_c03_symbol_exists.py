@@ -14,7 +14,8 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from conftest import MakeContext, claim
+from check_helpers import MakeContext, claim
+
 from nikasha.checks.base import CheckContext, run_checks
 from nikasha.checks.c03_symbol_exists import SymbolExists
 from nikasha.code.gitio import GitRepo

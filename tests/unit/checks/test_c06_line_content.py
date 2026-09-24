@@ -12,8 +12,8 @@ from __future__ import annotations
 import time
 
 import pytest
+from check_helpers import MakeContext, claim
 
-from conftest import MakeContext, claim
 from nikasha.checks.base import run_checks
 from nikasha.checks.c06_line_content import LineContent, line_similarity, normalize
 from nikasha.code.generated import GeneratedMatch

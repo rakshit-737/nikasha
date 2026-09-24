@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import time
 
-from conftest import MakeContext, claim
+from check_helpers import MakeContext, claim
+
 from nikasha.checks.base import run_checks
 from nikasha.checks.c10_trace_version_fit import TraceVersionFit
 from nikasha.model.claims import Frame, TraceClaim

@@ -7,7 +7,8 @@ from __future__ import annotations
 import time
 from dataclasses import replace
 
-from conftest import TAGS, MakeContext, claim
+from check_helpers import TAGS, MakeContext, claim
+
 from nikasha.checks.base import CheckContext, run_checks
 from nikasha.checks.c02_file_exists import FileExists
 from nikasha.model.claims import FileClaim, Frame, LineClaim, Stack, TraceClaim

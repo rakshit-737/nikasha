@@ -11,7 +11,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from conftest import MakeContext, claim
+from check_helpers import MakeContext, claim
+
 from nikasha.checks.base import CheckContext, run_checks
 from nikasha.checks.c16_version_range_consistency import VersionRangeConsistency
 from nikasha.code.timeline import ReleasePresence

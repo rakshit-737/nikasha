@@ -20,8 +20,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from check_helpers import MakeContext, claim
 
-from conftest import MakeContext, claim
 from nikasha.checks.base import run_checks
 from nikasha.checks.c11_sanitizer_sanity import RULES, SanitizerSanity
 from nikasha.extract import extract_claims

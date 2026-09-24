@@ -10,7 +10,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from conftest import ROOT, MakeContext, claim
+from check_helpers import ROOT, MakeContext, claim
+
 from nikasha.checks.base import run_checks
 from nikasha.checks.c09_trace_call_edges import TraceCallEdges, file_is_certain, score_edges
 from nikasha.checks.strengths import default_strengths

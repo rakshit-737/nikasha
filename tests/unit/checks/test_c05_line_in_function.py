@@ -15,8 +15,8 @@ import dataclasses
 from typing import Any
 
 import pytest
+from check_helpers import MakeContext, claim
 
-from conftest import MakeContext, claim
 from nikasha.checks.base import CheckContext, run_checks
 from nikasha.checks.c05_line_in_function import LineInFunction
 from nikasha.code.facts import FileFacts

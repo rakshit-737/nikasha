@@ -7,7 +7,8 @@ from __future__ import annotations
 import re
 from typing import Any, get_args
 
-from conftest import MakeContext, claim
+from check_helpers import MakeContext, claim
+
 from nikasha.checks.base import run_checks
 from nikasha.checks.c21_report_hygiene import CATEGORIES, FLAGGED, ReportHygiene
 from nikasha.model.claims import (

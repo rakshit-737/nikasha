@@ -8,7 +8,8 @@ vulnlab's ``main`` is linear, so at ``v1.2.0`` exactly two later commits touch
 
 from __future__ import annotations
 
-from conftest import MakeContext, claim
+from check_helpers import MakeContext, claim
+
 from nikasha.checks.base import run_checks
 from nikasha.checks.c13_fix_status import FixStatus
 from nikasha.model.claims import Claim, FileClaim, LineClaim, SymbolClaim

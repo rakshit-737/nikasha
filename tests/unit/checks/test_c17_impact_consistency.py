@@ -13,8 +13,8 @@ import math
 from pathlib import Path
 
 import pytest
+from check_helpers import MakeContext, claim
 
-from conftest import MakeContext, claim
 from nikasha.checks.base import run_checks
 from nikasha.checks.c17_impact_consistency import (
     ImpactConsistency,
