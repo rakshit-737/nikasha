@@ -1,0 +1,26 @@
+From: Alice Reporter <alice.reporter@example.org>
+To: security@libhdr.example
+Cc: Bob Triager <bob.triager@example.net>
+Reply-To: alice.reporter@example.org
+Sender: alice.reporter@example.org
+Message-ID: <20260115102030.1234@mail.example.org>
+Date: Thu, 15 Jan 2026 10:20:30 +0100
+Subject: Heap overflow in hdr_decode_chunked_value() (libhdr 1.2.0)
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+X-Mailer: Example Mailer 1.0
+
+Hello libhdr maintainers,
+
+libhdr 1.2.0 has a heap buffer overflow in `hdr_decode_chunked_value()` in src/hdr.c line 412:
+the chunk length is copied with memcpy() without a bounds check.
+
+Steps to reproduce:
+
+```
+$ hdrcat --unsafe-fold poc.hdr
+==4121==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x606000000051
+```
+
+Regards

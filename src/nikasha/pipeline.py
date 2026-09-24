@@ -109,6 +109,7 @@ def check_report(
     thresholds: Thresholds | None = None,
     check_timeout: float = 10.0,
     index_path: Path | None = None,
+    llm: object | None = None,
 ) -> CheckReport:
     """Run the whole pipeline over one report and return its :class:`CheckReport`."""
     timer = _Timer()
@@ -149,6 +150,7 @@ def check_report(
                 resolution=resolution,
                 index=index,
                 online=online,
+                llm=llm,
             )
             with timer.stage("checks"):
                 load_checks()

@@ -4,11 +4,12 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Protocol
 
 import typer
 from rich.console import Console
@@ -17,6 +18,7 @@ from rich.table import Table
 from nikasha.doctor import run_doctor
 
 if TYPE_CHECKING:
+    from nikasha.fuse.verdict import Thresholds
     from nikasha.pipeline import CheckReport
     from nikasha.resolve.target import Resolution
 from nikasha.errors import NikashaError
@@ -398,6 +400,15 @@ def check(  # noqa: PLR0917 - a CLI command's options are its signature
     record_svg: Annotated[
         str | None, typer.Option("--record-svg", hidden=True, help="Also save the view as SVG.")
     ] = None,
+    config: Annotated[
+        str | None, typer.Option("--config", help="A nikasha.toml to use instead of the nearest.")
+    ] = None,
+    llm: Annotated[
+        str | None,
+        typer.Option(
+            "--llm", help="Optional model review: ollama:MODEL, anthropic:MODEL, openai:MODEL."
+        ),
+    ] = None,
 ) -> None:
     """Fact-check a vulnerability report against the code at the version it names.
 
@@ -414,8 +425,17 @@ def check(  # noqa: PLR0917 - a CLI command's options are its signature
     if output_format not in ("terminal", "json", "markdown", "html"):
         raise typer.BadParameter("must be terminal, json, markdown or html", param_hint="--format")
     try:
+        settings = _load_settings(config)
         checked = check_report(
-            report, repo=repo, ref=ref, version=version, product=product, online=online
+            report,
+            repo=repo,
+            ref=ref,
+            version=version,
+            product=product,
+            online=online,
+            thresholds=settings.thresholds() if settings is not None else None,
+            prior=settings.prior() if settings is not None else 0.0,
+            llm=_llm_provider(llm, settings),
         )
     except NikashaError as exc:
         _fail(exc)
@@ -562,6 +582,78 @@ def _emit_utf8(text: str) -> None:
 def _fail(exc: NikashaError) -> typer.Exit:
     Console(stderr=True).print(f"[red]error:[/] {exc}", markup=True, highlight=False)
     raise typer.Exit(code=1)
+
+
+class _SettingsLike(Protocol):
+    """The two things the CLI needs from ``nikasha.settings.Settings`` (SPEC §16.1)."""
+
+    def thresholds(self) -> Thresholds: ...
+    def prior(self) -> float: ...
+
+
+def _load_settings(explicit: str | None) -> _SettingsLike | None:
+    """The nearest ``nikasha.toml`` (SPEC §16.1), or ``None`` before M7's settings land."""
+    try:
+        settings_module = importlib.import_module("nikasha.settings")
+    except ModuleNotFoundError:  # pragma: no cover - only while M7 is in flight
+        return None
+    loaded: _SettingsLike = settings_module.load_settings(
+        explicit=Path(explicit) if explicit else None
+    )
+    return loaded
+
+
+def _llm_provider(spec: str | None, settings: _SettingsLike | None) -> object | None:
+    """An LLM provider for ``--llm``, honouring ``llm.allow_cloud`` from the settings (P3).
+
+    Nothing here is enabled by an environment variable: the spec comes from the flag or
+    the config file, and cloud providers need ``allow_cloud = true`` in the file.
+    """
+    chosen = spec or (
+        getattr(getattr(settings, "llm", None), "provider", None) if settings else None
+    )
+    if not chosen or chosen == "none":
+        return None
+    # By name: the [llm] layer is optional and may be absent from a minimal install.
+    llm_module = importlib.import_module("nikasha.llm")
+    allow_cloud = bool(getattr(getattr(settings, "llm", None), "allow_cloud", False))
+    provider: object = llm_module.provider_for(chosen, allow_cloud=allow_cloud)
+    return provider
+
+
+#: Integration commands (SPEC §16). Each module exposes ``register(app)``. A module whose
+#: optional extra is missing still imports — it fails lazily, inside the command, with an
+#: "install nikasha[...]" message — so a *missing module* here is a packaging fault, which
+#: ``tests/unit/test_cli.py`` turns into a failure rather than a silently shorter CLI.
+INTEGRATIONS = (
+    "nikasha.integrations.lint",
+    "nikasha.integrations.cve",
+    "nikasha.integrations.h1",
+    "nikasha.integrations.gh_advisories",
+    "nikasha.integrations.mcp_server",
+    "nikasha.integrations.web",
+)
+
+
+def _register_integrations(target: typer.Typer) -> tuple[str, ...]:
+    missing: list[str] = []
+    for name in INTEGRATIONS:
+        try:
+            module = importlib.import_module(name)
+        except ModuleNotFoundError as exc:
+            if exc.name and exc.name.startswith("nikasha."):
+                missing.append(name)
+                continue
+            raise
+        register = getattr(module, "register", None)
+        if register is None:
+            missing.append(name)
+            continue
+        register(target)
+    return tuple(missing)
+
+
+MISSING_INTEGRATIONS = _register_integrations(app)
 
 
 def main() -> None:

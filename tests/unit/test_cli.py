@@ -6,7 +6,7 @@ import pytest
 from typer.testing import CliRunner
 
 from nikasha import __version__
-from nikasha.cli import app, status_symbols
+from nikasha.cli import INTEGRATIONS, MISSING_INTEGRATIONS, app, status_symbols
 from nikasha.code import gitio
 
 runner = CliRunner()
@@ -72,3 +72,23 @@ def test_doctor_table_survives_cp1252_stdout(tmp_path, monkeypatch):
     result = CliRunner(charset="cp1252").invoke(app, ["doctor"])
     assert result.exception is None or isinstance(result.exception, SystemExit)
     assert "doctor" in result.output
+
+
+# --- integration hooks (SPEC §16) --------------------------------------------------------
+
+
+def test_every_integration_registered_itself() -> None:
+    """A missing integration module is a packaging fault, not a shorter CLI (SPEC §16).
+
+    `cli.py` tolerates an absent or half-written module while a milestone is in flight so
+    the rest of the CLI keeps working; this test is what makes that tolerance safe.
+    """
+    assert MISSING_INTEGRATIONS == (), f"not registered: {MISSING_INTEGRATIONS}"
+    assert len(INTEGRATIONS) == 6
+
+
+@pytest.mark.parametrize("command", ["lint", "cve", "h1", "gh-advisories", "mcp", "serve"])
+def test_integration_commands_have_help(command: str) -> None:
+    result = CliRunner().invoke(app, [command, "--help"])
+    assert result.exit_code == 0, result.output
+    assert "Example" in result.output or "Usage" in result.output

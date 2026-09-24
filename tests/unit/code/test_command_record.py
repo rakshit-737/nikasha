@@ -12,6 +12,7 @@ the clock or from where the clone happens to live.
 from __future__ import annotations
 
 import hashlib
+import json
 import shutil
 from pathlib import Path
 
@@ -19,13 +20,16 @@ import pytest
 
 from nikasha.checks.base import make_evidence
 from nikasha.code.gitio import (
+    DURATION_NOT_MEASURED,
     EMPTY_SHA256,
     REDACTED_PATH,
+    REDACTED_USERINFO,
     GitRepo,
     GitResult,
     build_argv,
     command_record,
     record_command,
+    redact_argv,
 )
 from nikasha.model.claims import FileClaim
 from nikasha.model.evidence import CommandRecord
@@ -51,6 +55,21 @@ def result(
     return GitResult(
         argv=argv, returncode=returncode, stdout=stdout, stderr=stderr, duration_ms=duration_ms
     )
+
+
+def looks_absolute(arg: str) -> bool:
+    """A POSIX, UNC or drive-letter path, judged the same way on every platform."""
+    return arg.startswith(("/", "\\\\")) or arg[1:3] in (":/", ":\\")
+
+
+def json_spellings(local: Path) -> tuple[str, ...]:
+    """Every form in which ``local`` could appear inside serialized JSON.
+
+    ``model_dump_json`` escapes backslashes, so on Windows ``str(path)`` never matches its
+    own JSON form and an assertion on it alone would be vacuous; the JSON-encoded spelling
+    and the forward-slash spelling are checked too.
+    """
+    return (str(local), json.dumps(str(local))[1:-1], local.as_posix())
 
 
 # --- redaction -------------------------------------------------------------------------------
@@ -167,6 +186,129 @@ def test_an_empty_argv_redacts_to_nothing() -> None:
     assert command_record(result(())).argv == ()
 
 
+def test_redaction_is_idempotent() -> None:
+    """A redacted argv is a fixed point, so re-recording stored evidence changes nothing."""
+    argv = (
+        "/usr/bin/git",
+        "--no-pager",
+        "-c",
+        "safe.directory=/home/rakshit/.cache/nikasha/repos/libhdr.git",
+        "--git-dir=/home/rakshit/.cache/nikasha/repos/libhdr.git",
+        "grep",
+        "--no-textconv",
+        "-e",
+        "hdr_decode",
+        "v1.2.0",
+        "--",
+        "/home/rakshit/pathspec",
+    )
+    once = redact_argv(argv)
+    assert once == (
+        "git",
+        "grep",
+        "--no-textconv",
+        "-e",
+        "hdr_decode",
+        "v1.2.0",
+        "--",
+        REDACTED_PATH,
+    )
+    assert redact_argv(once) == once
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        (
+            "https://rakshit:ghp_secret_token@github.com/libhdr/libhdr.git",
+            f"https://{REDACTED_USERINFO}@github.com/libhdr/libhdr.git",
+        ),
+        (
+            "https://x-access-token:ghs_secret_token@github.com/libhdr/libhdr.git",
+            f"https://{REDACTED_USERINFO}@github.com/libhdr/libhdr.git",
+        ),
+        # An ``@`` inside the password: everything up to the *last* one is the userinfo.
+        (
+            "https://rakshit:p@ss_secret_token@host.example/libhdr.git",
+            f"https://{REDACTED_USERINFO}@host.example/libhdr.git",
+        ),
+        # Even a harmless login is not the reader's business; ``git@`` goes too.
+        (
+            "ssh://git@github.com/libhdr/libhdr.git",
+            f"ssh://{REDACTED_USERINFO}@github.com/libhdr/libhdr.git",
+        ),
+    ],
+)
+def test_url_credentials_never_survive_redaction(url: str, expected: str) -> None:
+    """A clone or fetch is never recorded today; the helper does not rely on that."""
+    argv = (
+        "/usr/bin/git",
+        "--no-pager",
+        "clone",
+        "--bare",
+        "--quiet",
+        url,
+        "/home/rakshit/.cache/nikasha/repos/github.com/libhdr/libhdr.git",
+    )
+    redacted = redact_argv(argv)
+    assert redacted == ("git", "clone", "--bare", "--quiet", expected, REDACTED_PATH)
+    assert "secret" not in " ".join(redacted)
+    assert redact_argv(redacted) == redacted
+
+
+def test_a_url_without_credentials_is_left_alone() -> None:
+    argv = ("git", "clone", "--bare", "https://github.com/libhdr/libhdr.git")
+    assert redact_argv(argv) == argv
+
+
+def test_credentials_inside_a_search_term_are_scrubbed_too() -> None:
+    """Report text may quote ``http://admin:admin@device/``; the record still carries none."""
+    term = "-Shttp://admin:admin@192.168.1.1/cgi-bin/luci and https://a:b@x.example/?q=1#f"
+    redacted = redact_argv(("git", "log", "--no-ext-diff", "--all", "-1", term))
+    assert redacted == (
+        "git",
+        "log",
+        "--no-ext-diff",
+        "--all",
+        "-1",
+        f"-Shttp://{REDACTED_USERINFO}@192.168.1.1/cgi-bin/luci"
+        f" and https://{REDACTED_USERINFO}@x.example/?q=1#f",
+    )
+    assert "admin" not in " ".join(redacted)
+
+
+@needs_git
+def test_a_record_inside_evidence_serializes_with_no_local_path(tmp_path: Path) -> None:
+    """P3 at the level that matters: the JSON someone forwards names no directory here."""
+    clone = tmp_path / "cache" / "nikasha" / "repos" / "libhdr.git"
+    clone.mkdir(parents=True)
+    argv = build_argv(["log", "--all", "-1", "--format=%H", "-Shdr_decode"], git_dir=clone)
+    evidence = make_evidence(
+        check_id="C06",
+        group="code_quotes",
+        claims=[_claim()],
+        outcome="NEUTRAL",
+        strength=0.0,
+        summary="the quoted line is not at v1.2.0",
+        commands=[command_record(result(tuple(argv), returncode=0))],
+    )
+    text = evidence.model_dump_json()
+    for local in (clone.resolve(), tmp_path):
+        for spelling in json_spellings(local):
+            assert spelling not in text
+    assert clone.name not in text  # the one path segment every platform spells alike
+    for arg in evidence.commands[0].argv:
+        assert not arg.startswith(("/", "\\\\")), arg
+        assert arg[1:3] not in (":/", ":\\"), arg
+    for leak in ("--git-dir", "safe.directory", "--no-pager"):
+        assert leak not in text
+    assert "-Shdr_decode" in text
+    # And the parsed record, independent of how JSON happens to escape a path.
+    recorded = evidence.commands[0].argv
+    assert "-c" not in recorded
+    assert not any(looks_absolute(arg) for arg in recorded), recorded
+
+
 # --- hashes ----------------------------------------------------------------------------------
 
 
@@ -194,6 +336,15 @@ def test_a_hash_is_over_bytes_not_decoded_text() -> None:
     assert record.stdout_sha256 == hashlib.sha256(payload).hexdigest()
 
 
+def test_stdout_and_stderr_are_hashed_separately() -> None:
+    """A change on one stream moves only that stream's hash."""
+    quiet = command_record(result(("git", "log"), stdout=b"hello\n", stderr=b"a\n"))
+    noisy = command_record(result(("git", "log"), stdout=b"hello\n", stderr=b"b\n"))
+    assert quiet.stdout_sha256 == noisy.stdout_sha256 == HELLO_SHA256
+    assert quiet.stderr_sha256 != noisy.stderr_sha256
+    assert len(quiet.stderr_sha256) == len(noisy.stderr_sha256) == 64
+
+
 # --- determinism -----------------------------------------------------------------------------
 
 
@@ -201,7 +352,10 @@ def test_the_duration_is_not_recorded_by_default() -> None:
     """P2: wall-clock time differs between two runs, and a record is serialized as evidence."""
     fast = command_record(result(("git", "log"), duration_ms=3))
     slow = command_record(result(("git", "log"), duration_ms=9001))
-    assert fast.duration_ms == 0
+    # No measured figure survives: the sentinel is what the model admits for "not measured".
+    assert fast.duration_ms is None
+    assert fast.duration_ms is DURATION_NOT_MEASURED
+    assert '"duration_ms":null' in fast.model_dump_json()
     assert fast == slow
 
 
@@ -219,7 +373,7 @@ def test_two_runs_of_the_same_command_produce_the_same_record(vulnlab_repo: Path
         repo.run(["rev-parse", "--verify", "--quiet", "--end-of-options", "v1.2.0"], record=first)
         repo.run(["rev-parse", "--verify", "--quiet", "--end-of-options", "v1.2.0"], record=second)
     assert first == second
-    assert first[0].duration_ms == 0
+    assert first[0].duration_ms is None
     assert first[0].argv[:2] == ("git", "rev-parse")
 
 

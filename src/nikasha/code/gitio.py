@@ -115,6 +115,15 @@ CommandSink = MutableSequence[CommandRecord]
 #: What replaces an argument that named an absolute location on this machine.
 REDACTED_PATH = "<path>"
 
+#: What replaces the ``user:token`` part of any URL an argument carries.
+REDACTED_USERINFO = "<credentials>"
+_URL_SCHEME_SEP = "://"
+_AUTHORITY_END = "/?#"
+
+#: What ``CommandRecord.duration_ms`` carries when the clock was not consulted: no figure
+#: at all, so a renderer shows no duration rather than an unmeasured ``0 ms`` (P6).
+DURATION_NOT_MEASURED: None = None
+
 #: Global options that point git at one particular clone. Dropped **with their value**.
 _LOCAL_PATH_OPTIONS: frozenset[str] = frozenset({"-C", "--git-dir", "--work-tree", "--exec-path"})
 _LOCAL_PATH_PREFIXES: tuple[str, ...] = ("--git-dir=", "--work-tree=", "--exec-path=")
@@ -138,6 +147,36 @@ def _is_absolute_path(arg: str) -> bool:
     return len(drive) == _DRIVE_LETTER_LEN and drive[0].isalpha() and drive[1:] in (":/", ":\\")
 
 
+def _redact_userinfo(arg: str) -> str:
+    """Replace the userinfo of every URL inside ``arg``: ``https://user:token@host/…``
+    becomes ``https://<credentials>@host/…``.
+
+    A remote URL reaches an argv through ``clone`` and ``fetch``, whose results no check
+    records today; this keeps a credential out of every future recorder without relying on
+    that. The scan is a plain left-to-right walk (no regex), linear in ``len(arg)``, and
+    its output is a fixed point of itself.
+    """
+    if _URL_SCHEME_SEP not in arg:
+        return arg
+    out: list[str] = []
+    rest = arg
+    while True:
+        head, sep, tail = rest.partition(_URL_SCHEME_SEP)
+        out.append(head)
+        if not sep:
+            return "".join(out)
+        out.append(sep)
+        end = len(tail)
+        for offset, ch in enumerate(tail):
+            if ch in _AUTHORITY_END or ch.isspace():
+                end = offset
+                break
+        authority, rest = tail[:end], tail[end:]
+        if "@" in authority:
+            authority = f"{REDACTED_USERINFO}@{authority.rsplit('@', 1)[-1]}"
+        out.append(authority)
+
+
 def redact_argv(argv: Sequence[str]) -> tuple[str, ...]:
     """Rewrite a git argv into the machine-independent form that goes into evidence.
 
@@ -153,10 +192,13 @@ def redact_argv(argv: Sequence[str]) -> tuple[str, ...]:
       name the clone cache directory, and ``--no-pager``, which only affects a terminal.
 
     Any remaining argument that is *entirely* an absolute path becomes
-    :data:`REDACTED_PATH`. That is deliberately conservative: it can blunt a search term
-    that happens to be nothing but a path, but it guarantees that a record forwarded with a
-    report carries no filesystem layout, and that two machines checking the same report
-    produce the same bytes (P2, P3).
+    :data:`REDACTED_PATH`, and the ``user:token@`` part of any URL inside an argument
+    becomes :data:`REDACTED_USERINFO` (``https://<credentials>@host/…``). Both are
+    deliberately conservative: they can blunt a search term that happens to be nothing but
+    a path, or one that quotes a URL with a login in it, but they guarantee that a record
+    forwarded with a report carries neither this machine's filesystem layout nor a
+    credential, and that two machines checking the same report produce the same bytes
+    (P2, P3, P7).
 
     What survives is the subcommand, its guards (``--no-ext-diff``, ``--no-textconv``) and
     its arguments — revisions, ``--format``, the ``-e`` pattern, pathspecs — which is what a
@@ -179,7 +221,9 @@ def redact_argv(argv: Sequence[str]) -> tuple[str, ...]:
             break
         out.append(arg)
         index += 1
-    out += [REDACTED_PATH if _is_absolute_path(arg) else arg for arg in rest[index:]]
+    out += [
+        REDACTED_PATH if _is_absolute_path(arg) else _redact_userinfo(arg) for arg in rest[index:]
+    ]
     return tuple(out)
 
 
@@ -192,13 +236,15 @@ def command_record(
     sha256 rather than stored: the bytes may be megabytes of a hostile repository's
     contents, while the hash is enough to prove that a re-run produced the same output.
 
-    ``duration_ms`` is **0 unless ``include_duration`` is asked for**. Wall-clock time
-    differs between two runs on the same input, and a record lives inside ``Evidence``,
-    which ``Result.to_json`` must serialize byte-identically (P2); ``Result.timings`` is
-    where a duration belongs. It is not part of the evidence identity either — see
-    ``checks/base.make_evidence``, which hashes claims, outcome, strength, summary, details
-    and locations, and never ``commands`` — so recording a command can never move an
-    evidence ID.
+    ``duration_ms`` carries **no measurement unless ``include_duration`` is asked for**.
+    Wall-clock time differs between two runs on the same input, and a record lives inside
+    ``Evidence``, which ``Result.to_json`` must serialize byte-identically (P2);
+    ``Result.timings`` is where a duration belongs. "Not measured" is ``None``
+    (:data:`DURATION_NOT_MEASURED`), which renderers show as no duration at all rather
+    than as an invented ``0 ms`` (P6). The duration is not part of the evidence identity
+    either — see ``checks/base.make_evidence``, which hashes claims, outcome, strength,
+    summary, details and locations, and never ``commands`` — so recording a command can
+    never move an evidence ID.
 
     ``truncated`` says that the caller stopped reading before the search was exhausted (a
     hit cap), not that the hashed bytes are partial.
@@ -208,7 +254,7 @@ def command_record(
         exit_code=result.returncode,
         stdout_sha256=hashlib.sha256(result.stdout).hexdigest(),
         stderr_sha256=hashlib.sha256(result.stderr).hexdigest(),
-        duration_ms=result.duration_ms if include_duration else 0,
+        duration_ms=result.duration_ms if include_duration else DURATION_NOT_MEASURED,
         truncated=truncated,
     )
 

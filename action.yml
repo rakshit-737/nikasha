@@ -1,0 +1,423 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Nikasha as a composite GitHub Action (SPEC §16.2). It installs Nikasha from this very
+# checkout (`pip install "$GITHUB_ACTION_PATH"`), so the action ref and the tool version are
+# always the same, and then runs `nikasha check` on a report taken from the issue that
+# triggered the workflow or from a file in the checkout.
+#
+# Script-injection rule (SPEC §19.2): event text such as the issue body or title reaches a
+# shell only through `env:`, and every input does the same. No `${{ ... }}` expression is
+# ever interpolated into a `run:` script; `tests/unit/test_action_yaml.py` enforces it.
+#
+# PUBLIC ISSUES ONLY. Actions logs, job summaries and artifacts of a public repository are
+# public. Private or embargoed reports belong to a local `nikasha check` run.
+name: Nikasha
+description: >-
+  Fact-check the claims in a vulnerability report against the source code at the exact
+  version it names. Public issues only: Actions logs on public repositories are public.
+author: The Nikasha Authors
+branding:
+  icon: check-square
+  color: green
+
+inputs:
+  mode:
+    description: >-
+      Where the report comes from. `issue` takes the title and body of the issue in the
+      event payload (`issues` events only); `file` reads `report-path` from the checkout.
+    required: false
+    default: issue
+  report-path:
+    description: The report to check when `mode` is `file` (Markdown, text or HTML).
+    required: false
+    default: ""
+  repo-path:
+    description: >-
+      The repository the report is about, as a local path. Check it out with
+      `fetch-depth: 0` so the release tags Nikasha resolves versions against are present.
+    required: false
+    default: "."
+  version:
+    description: >-
+      The release the report is about, for example `1.2.0`. When empty, the version the
+      report names is used.
+    required: false
+    default: ""
+  fail-on:
+    description: >-
+      Fail the job when the verdict is this label or worse (`nikasha check --fail-on`):
+      `mixed`, `ungrounded` or `insufficient`. `none` never fails the job on a verdict;
+      an error in the check itself always does.
+    required: false
+    default: none
+  comment:
+    description: >-
+      What to post on the issue (`issue` mode only). `none`; `summary`, the verdict line,
+      the target, the verdict notes and the questions for the reporter; or `full`, the
+      whole Markdown report. Needs `issues: write`. The comment is updated in place on
+      later runs.
+    required: false
+    default: summary
+  labels:
+    description: >-
+      `true` labels the issue `nikasha:<verdict>` (for example `nikasha:mixed`), replacing
+      any earlier `nikasha:` label. `issue` mode only; needs `issues: write`.
+    required: false
+    default: "false"
+  nikasha-version:
+    description: >-
+      Empty installs Nikasha from this action's own checkout, so the action ref is the tool
+      version. A PyPI version such as `0.1.0` installs that release instead.
+    required: false
+    default: ""
+  artifact-name:
+    description: >-
+      Name of the uploaded artifact holding the JSON and Markdown results. Empty skips the
+      upload.
+    required: false
+    default: nikasha-result
+  token:
+    description: >-
+      The token used to comment and label; it needs `issues: write`.
+    required: false
+    default: ${{ github.token }}
+  comment-author:
+    description: >-
+      The login `token` posts as, which the in-place update of the comment requires
+      together with the marker: `github-actions[bot]` for the workflow's own
+      `GITHUB_TOKEN`, `<app>[bot]` for a GitHub App token, the account's login for a
+      personal access token. A comment that carries the marker but another author is
+      never updated.
+    required: false
+    default: github-actions[bot]
+
+outputs:
+  verdict:
+    description: REPRODUCED, GROUNDED, MIXED, UNGROUNDED or INSUFFICIENT.
+    value: ${{ steps.check.outputs.verdict }}
+  score:
+    description: The grounding score, 0 to 100.
+    value: ${{ steps.check.outputs.score }}
+  confidence:
+    description: low, medium or high.
+    value: ${{ steps.check.outputs.confidence }}
+  json:
+    description: Path of the JSON result, the complete evidence record.
+    value: ${{ steps.check.outputs.json }}
+  markdown:
+    description: Path of the Markdown result, which the job summary and the comment show.
+    value: ${{ steps.check.outputs.markdown }}
+
+runs:
+  using: composite
+  steps:
+    # Pinned by full commit SHA. Re-verify every SHA in this file with `gh api` (peeling
+    # annotated tags) before the first release; see docs/action.md.
+    - name: Set up Python
+      uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+      with:
+        python-version: "3.12"
+
+    - name: Install Nikasha
+      shell: bash
+      env:
+        NIKASHA_VERSION: ${{ inputs.nikasha-version }}
+      run: |
+        set -euo pipefail
+        if [ -n "$NIKASHA_VERSION" ]; then
+          python -m pip install --disable-pip-version-check --quiet "nikasha==$NIKASHA_VERSION"
+        else
+          # The action's own checkout: the action ref is the tool version.
+          python -m pip install --disable-pip-version-check --quiet "$GITHUB_ACTION_PATH"
+        fi
+        echo "nikasha $(nikasha version)"
+
+    - name: Write the report to a file
+      shell: bash
+      # The issue title and body are hostile input (P7). They arrive as environment
+      # variables and are written to a file with printf, never interpolated into a script.
+      env:
+        MODE: ${{ inputs.mode }}
+        REPORT_PATH: ${{ inputs.report-path }}
+        ISSUE_TITLE: ${{ github.event.issue.title }}
+        ISSUE_BODY: ${{ github.event.issue.body }}
+      run: |
+        set -euo pipefail
+        work="$RUNNER_TEMP/nikasha"
+        mkdir -p "$work"
+        case "$MODE" in
+          issue)
+            if [ -z "$ISSUE_BODY" ]; then
+              echo "::error::mode=issue needs an issues event whose issue has a body"
+              exit 1
+            fi
+            {
+              printf '# %s\n\n' "$ISSUE_TITLE"
+              printf '%s\n' "$ISSUE_BODY"
+            } > "$work/report.md"
+            ;;
+          file)
+            if [ -z "$REPORT_PATH" ] || [ ! -f "$REPORT_PATH" ]; then
+              echo "::error::mode=file needs report-path to name a file in the checkout"
+              exit 1
+            fi
+            cp -- "$REPORT_PATH" "$work/report.md"
+            ;;
+          *)
+            echo "::error::mode must be issue or file"
+            exit 1
+            ;;
+        esac
+
+    - name: Fact-check the report
+      id: check
+      shell: bash
+      env:
+        REPO_PATH: ${{ inputs.repo-path }}
+        VERSION: ${{ inputs.version }}
+        FAIL_ON: ${{ inputs.fail-on }}
+      run: |
+        set -euo pipefail
+        work="$RUNNER_TEMP/nikasha"
+        args=(--repo "$REPO_PATH")
+        if [ -n "$VERSION" ]; then
+          args+=(--version "$VERSION")
+        fi
+
+        # 1. JSON, the complete evidence record. Without --fail-on the exit code names the
+        #    verdict (0 GROUNDED/REPRODUCED, 10 MIXED, 20 UNGROUNDED, 30 INSUFFICIENT);
+        #    anything else is an error in the check itself and fails the job here.
+        status=0
+        nikasha check "$work/report.md" "${args[@]}" --format json --out "$work/result.json" \
+          || status=$?
+        case "$status" in
+          0|10|20|30) ;;
+          *)
+            echo "::error::nikasha check failed with exit code $status"
+            exit "$status"
+            ;;
+        esac
+
+        # 2. Markdown, for the job summary and the comment. The same deterministic run
+        #    (P2), now with --fail-on deciding the job status, which is applied by the last
+        #    step so the summary, the comment and the labels are always produced first.
+        exit_code=0
+        if [ -z "$FAIL_ON" ] || [ "$FAIL_ON" = "none" ]; then
+          status=0
+          nikasha check "$work/report.md" "${args[@]}" --format markdown --out "$work/result.md" \
+            || status=$?
+          case "$status" in
+            0|10|20|30) ;;
+            *)
+              echo "::error::nikasha check failed with exit code $status"
+              exit "$status"
+              ;;
+          esac
+        else
+          nikasha check "$work/report.md" "${args[@]}" --format markdown --out "$work/result.md" \
+            --fail-on "$FAIL_ON" || exit_code=$?
+          if [ "$exit_code" -gt 1 ]; then
+            echo "::error::nikasha check failed with exit code $exit_code (is fail-on valid?)"
+            exit "$exit_code"
+          fi
+        fi
+
+        # Outputs. The verdict label, score and confidence are validated against the
+        # closed sets they come from before they reach $GITHUB_OUTPUT.
+        python3 - "$work/result.json" >> "$GITHUB_OUTPUT" <<'PY'
+        import json
+        import sys
+
+        with open(sys.argv[1], encoding="utf-8") as handle:
+            verdict = json.load(handle).get("verdict") or {}
+        label = str(verdict.get("label", ""))
+        if label not in {"REPRODUCED", "GROUNDED", "MIXED", "UNGROUNDED", "INSUFFICIENT"}:
+            label = "ERROR"
+        score = verdict.get("score", 0)
+        score = score if isinstance(score, int) and 0 <= score <= 100 else 0
+        confidence = str(verdict.get("confidence", ""))
+        if confidence not in {"low", "medium", "high"}:
+            confidence = "low"
+        print(f"verdict={label}")
+        print(f"score={score}")
+        print(f"confidence={confidence}")
+        PY
+        {
+          echo "exit-code=$exit_code"
+          echo "json=$work/result.json"
+          echo "markdown=$work/result.md"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Write the job summary
+      shell: bash
+      run: |
+        set -euo pipefail
+        result="$RUNNER_TEMP/nikasha/result.md"
+        if [ ! -f "$result" ]; then
+          echo "::error::the check produced no Markdown result (see the step above)"
+          exit 1
+        fi
+        cat -- "$result" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload the results
+      if: inputs.artifact-name != ''
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: |
+          ${{ runner.temp }}/nikasha/result.json
+          ${{ runner.temp }}/nikasha/result.md
+        if-no-files-found: error
+
+    - name: Comment on the issue
+      if: inputs.mode == 'issue' && inputs.comment != 'none'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        COMMENT_MODE: ${{ inputs.comment }}
+        COMMENT_AUTHOR: ${{ inputs.comment-author }}
+        ARTIFACT_NAME: ${{ inputs.artifact-name }}
+        ISSUE_NUMBER: ${{ github.event.issue.number }}
+      run: |
+        set -euo pipefail
+        work="$RUNNER_TEMP/nikasha"
+        case "$ISSUE_NUMBER" in
+          ''|*[!0-9]*)
+            echo "::error::comment needs an issues event"
+            exit 1
+            ;;
+        esac
+        case "$COMMENT_MODE" in
+          summary|full) ;;
+          *)
+            echo "::error::comment must be none, summary or full"
+            exit 1
+            ;;
+        esac
+        if [ -z "$COMMENT_AUTHOR" ]; then
+          echo "::error::comment-author must name the login the token posts as"
+          exit 1
+        fi
+        run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+        # `summary` keeps the header (verdict, target, notes) and the questions for the
+        # reporter, and points at the run for the rest. The Markdown was rendered by
+        # Nikasha with every report- and code-derived string escaped; this only cuts lines.
+        python3 - "$work/result.md" "$work/comment.md" "$COMMENT_MODE" "$run_url" \
+          "$ARTIFACT_NAME" <<'PY'
+        import sys
+
+        source, target, mode, run_url, artifact = sys.argv[1:6]
+        with open(source, encoding="utf-8") as handle:
+            lines = handle.read().splitlines()
+        if mode == "full":
+            body = lines
+        else:
+            body = []
+            for line in lines:
+                if line.startswith("### "):
+                    break
+                body.append(line)
+            inside = False
+            for line in lines:
+                if line.startswith("### Questions for the reporter"):
+                    inside = True
+                elif inside and (line.startswith(("### ", "<details>")) or line == "---"):
+                    break
+                if inside:
+                    body.append(line)
+            where = f"the job summary of [this run]({run_url})"
+            if artifact:
+                where += f" and its `{artifact}` artifact"
+            body.append(f"The claims table, the evidence and the run context are in {where}.")
+        text = "<!-- nikasha:comment -->\n" + "\n".join(body).rstrip() + "\n"
+        with open(target, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        PY
+
+        # One comment per issue: an earlier Nikasha comment is updated in place, so an
+        # edited report does not pile up verdicts. The comment is recognised by its marker
+        # AND its author. Anyone can post the marker (this file is public) and the token
+        # can edit any comment, so the marker alone would let a comment the reporter
+        # controls receive, and then rewrite, every verdict. The author check is an exact
+        # string comparison in the shell; the login never enters the jq program.
+        marked=$(gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER/comments" --paginate \
+          --jq '.[] | select(.body | startswith("<!-- nikasha:comment -->"))
+                    | "\(.id) \(.user.login)"')
+        existing=""
+        while IFS=' ' read -r id login; do
+          if [ -n "$id" ] && [ "$login" = "$COMMENT_AUTHOR" ]; then
+            existing="$id"
+            break
+          fi
+        done <<< "$marked"
+        # The id is spliced into a URL: digits only, or no update at all.
+        case "$existing" in
+          *[!0-9]*) existing="" ;;
+        esac
+        if [ -n "$existing" ]; then
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" \
+            -F body=@"$work/comment.md" --silent
+        else
+          gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER/comments" \
+            -F body=@"$work/comment.md" --silent
+        fi
+
+    - name: Label the issue with the verdict
+      if: inputs.mode == 'issue' && inputs.labels == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        ISSUE_NUMBER: ${{ github.event.issue.number }}
+        VERDICT: ${{ steps.check.outputs.verdict }}
+      run: |
+        set -euo pipefail
+        case "$ISSUE_NUMBER" in
+          ''|*[!0-9]*)
+            echo "::error::labels needs an issues event"
+            exit 1
+            ;;
+        esac
+        # The label describes the claims, never the reporter (P1).
+        case "$VERDICT" in
+          REPRODUCED)
+            color=0e8a16; text="the reported crash was reproduced in the sandbox" ;;
+          GROUNDED)
+            color=0e8a16; text="the report's checkable claims match the code at the version it names" ;;
+          MIXED)
+            color=fbca04; text="some of the report's claims do not match the code at the version it names" ;;
+          UNGROUNDED)
+            color=b60205; text="the report's checkable claims do not match the code at the version it names" ;;
+          INSUFFICIENT)
+            color=ededed; text="the report has too few checkable claims for a verdict" ;;
+          *)
+            echo "::error::no verdict to label with"
+            exit 1
+            ;;
+        esac
+        label="nikasha:$(printf '%s' "$VERDICT" | tr '[:upper:]' '[:lower:]')"
+        gh label create "$label" --repo "$GITHUB_REPOSITORY" --color "$color" \
+          --description "Nikasha: $text" --force
+        args=(--add-label "$label")
+        while IFS= read -r name; do
+          case "$name" in
+            "$label") ;;
+            nikasha:*) args+=(--remove-label "$name") ;;
+          esac
+        done < <(gh issue view "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --json labels \
+          --jq '.labels[].name')
+        gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" "${args[@]}"
+
+    - name: Apply fail-on
+      shell: bash
+      env:
+        EXIT_CODE: ${{ steps.check.outputs.exit-code }}
+        VERDICT: ${{ steps.check.outputs.verdict }}
+        FAIL_ON: ${{ inputs.fail-on }}
+      run: |
+        set -euo pipefail
+        if [ "$EXIT_CODE" != "0" ]; then
+          echo "::error::verdict $VERDICT reached fail-on=$FAIL_ON"
+        fi
+        exit "$EXIT_CODE"

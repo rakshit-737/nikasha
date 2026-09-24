@@ -1,0 +1,73 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Example nikasha.toml for a project. Copy it to the root of your repository (next to
+# .git) and delete what you do not need: every key is optional, and a missing key means
+# the default given in its comment. The full reference is docs/configuration.md.
+#
+# Unknown keys are errors, so a typo cannot silently do nothing. Nothing in this file is
+# ever read from an environment variable.
+
+[project]
+# The product name reports use, and what the questions to reporters call it.
+name = "libhdr"
+# Where to clone from when a report does not say: an https://, ssh:// or git+ssh:// URL,
+# an scp-style user@host:path, or a local path. file:// and ext:: are refused.
+repo = "https://github.com/example/libhdr"
+# Other names reports use for the product. The name itself is always included.
+aliases = ["hdr", "libhdr-c"]
+# The sandbox recipe used with --repro (see `nikasha recipes list`). Default: none.
+recipe = "libhdr-asan"
+
+[thresholds]
+# The verdict ladder's numbers (SPEC 14.3). These are the calibrated defaults: the false
+# UNGROUNDED rate behind P4 was measured with them, so change them with the bench in hand.
+ungrounded_score = 15              # rule 3a: UNGROUNDED needs a score below this ...
+ungrounded_score_strict = 10       # rule 3b: ... or below this from strong refutations alone
+ungrounded_core_strength = -2.0    # a "never existed" finding is core at or below this
+ungrounded_core_groups = 2         # rule 3a: refutations from at least this many groups
+ungrounded_strong_strength = -1.5  # a refutation is strong at or below this strength
+ungrounded_strong_groups = 3       # rule 3b: strong refutations from at least this many groups
+grounded_score = 75                # rule 5: GROUNDED needs at least this score ...
+grounded_max_refutation = -1.2     # ... and no evidence at or below this strength
+min_checkable_claims = 2           # rule 2: fewer than this, with no trace, snippet, patch or PoC
+insufficient_total = 1.5           # rule 6: total evidence weight below this is INSUFFICIENT
+
+[scoring]
+# The log-odds the score starts from. 0.0 is "no opinion"; a program whose reports are
+# usually valid might use a small positive number. Range -10 to 10.
+prior = 0.0
+# A calibrated strengths table (SPEC 14.2), relative to this file. Default: the bundled
+# lr_defaults.yaml. The table's name is recorded in every result.
+# calibration = "calibration/calibration-v2.yaml"
+
+[questions]
+# Replace the wording of a question to the reporter, keyed "<check>.<outcome>" like the
+# bundled templates in src/nikasha/fuse/questions/. The text is a Jinja template with the
+# same variables, and the closing line is added for you. The same tone rules apply: name
+# the file, symbol or release, never the author. The template runs in a sandbox: no "__",
+# no include or extends, no reaching into Python internals.
+"C03.never_in_history_core" = """
+Could you point us to the commit or file where `{{ symbol }}` is defined? \
+We could not find it anywhere in the history of {{ target }}."""
+
+[ignore]
+# Repository paths that are never judged (generated code, vendored trees). Same glob
+# dialect as known_projects.yaml: * stays inside one path component, ** crosses components,
+# and a bare file name matches anywhere. Default: none.
+paths = ["vendor/**", "third_party/**", "build/**"]
+
+[llm]
+# The optional assistant (SPEC 16.6). Off by default, and it never decides a verdict.
+# One of none, ollama, anthropic, openai, optionally followed by :MODEL.
+provider = "none"
+# anthropic and openai send report text off this machine. They stay off unless this is
+# literally `true` in a file: no flag and no environment variable can switch it on (P3).
+allow_cloud = false
+# The model, when it is not given after the colon in provider. Default: none.
+# model = "llama3.1:8b"
+
+[hackerone]
+# The program handle whose reports `nikasha h1` checks against this repository.
+# Credentials never go here. Default: none.
+program = "libhdr"

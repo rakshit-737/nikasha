@@ -49,13 +49,18 @@ network module. That module enforces timeouts, response-size caps, `https`-only 
 logs every URL into `result.environment.fetched_urls`. This removes a dependency and
 avoids shipping both `httpx` and `httpx2`.
 
-## Optional extras (planned)
+## Optional extras
+
+`pyproject.toml` has carried empty `[project.optional-dependencies]` stubs since M0. They
+were filled with `uv add --optional` in M7. The M4 commit message that claims to add them
+is wrong: a hand edit guarded on the section *existing* found the empty stub, skipped,
+and the lock never learned about the extras until M7.
 
 | Extra | Contents | Notes |
 |---|---|---|
-| `[mcp]` | `mcp` ≥ 2.2, < 3 | **The SDK is now 2.x, and FastMCP was renamed:** `from mcp.server import MCPServer`, then `MCPServer("nikasha")`, `@server.tool()`, `server.run()` (stdio by default). The standalone `fastmcp` package is not used. |
-| `[web]` | `fastapi`, `uvicorn` | Local web UI (M7) |
-| `[llm]` | `anthropic`, `openai`; Ollama over plain HTTP | Off by default; no hard-coded model IDs |
+| `[mcp]` | `mcp` ≥ 2.2, < 3 (**added M7**: mcp 2.2.0, MIT) | **The SDK is now 2.x, and FastMCP was renamed:** `from mcp.server import MCPServer`, then `MCPServer("nikasha")`, `@server.tool()`, `server.run()` (stdio by default). The standalone `fastmcp` package is not used. |
+| `[web]` | `fastapi`, `uvicorn`, `python-multipart` (**added M7**: fastapi 0.141.1, uvicorn 0.53.0, python-multipart 0.0.32; all MIT/BSD) | Local web UI (M7) |
+| `[llm]` | `anthropic`, `openai`; Ollama over plain HTTP (**added M7**: anthropic 1.8.0, openai 3.19.2; MIT and Apache-2.0) | Off by default; no hard-coded model IDs |
 | `[bench]` | `numpy`, `scikit-learn`, `matplotlib` | Calibration and charts only; the core never imports them |
 
 ## Development tools

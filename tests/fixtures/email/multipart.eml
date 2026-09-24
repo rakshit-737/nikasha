@@ -1,0 +1,61 @@
+From: Carol Reporter <carol.reporter@example.org>
+To: security@libhdr.example
+Cc: dave.triager@example.net
+Message-ID: <multipart-0001@mail.example.org>
+Date: Fri, 16 Jan 2026 08:00:00 -0000
+Subject: PoC: crash in hdr_parse =?utf-8?b?4oCU?= libhdr 1.2.0
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="===============6967673933536090244=="
+
+--===============6967673933536090244==
+Content-Type: multipart/alternative;
+ boundary="===============2906492603939411802=="
+
+--===============2906492603939411802==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+Running the attached PoC against libhdr 1.2.0 crashes in hdr_parse():
+
+    hdrcat poc.hdr
+
+See asan.log for the sanitizer output. Café is fine here.
+
+--===============2906492603939411802==
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+MIME-Version: 1.0
+
+<html><body><p>Running the attached PoC against libhdr 1.2.0 crashes in <code=
+>hdr_parse()</code>.</p><script>alert(1)</script></body></html>
+
+--===============2906492603939411802==--
+
+--===============6967673933536090244==
+Content-Type: text/x-csrc
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="poc.c"
+MIME-Version: 1.0
+
+aW50IG1haW4odm9pZCkgeyByZXR1cm4gMDsgfQo=
+
+--===============6967673933536090244==
+Content-Type: application/zip
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="../../crash.zip"
+MIME-Version: 1.0
+
+UEsDBBQAAAAAAABAMFw2Y411QAAAAEAAAAAJAAAAY3Jhc2guaGRyAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFBLAQIUABQAAAAA
+AABAMFw2Y411QAAAAEAAAAAJAAAAAAAAAAAAAACAAQAAAABjcmFzaC5oZHJQSwUGAAAAAAEAAQA3
+AAAAZwAAAAAA
+
+--===============6967673933536090244==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+Content-Disposition: attachment; filename="asan.log"
+MIME-Version: 1.0
+
+==4121==ERROR: AddressSanitizer: heap-buffer-overflow in hdr_parse
+
+--===============6967673933536090244==--

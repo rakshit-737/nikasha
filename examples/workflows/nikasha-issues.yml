@@ -1,0 +1,67 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Fact-check a security report filed as a GitHub issue, and answer with the verdict, the
+# evidence and neutral questions for the reporter. Copy this file to
+# .github/workflows/nikasha-issues.yml in your repository and create the `security-report`
+# label (or set the NIKASHA_REPORT_LABEL repository variable to the label you use).
+#
+# PUBLIC ISSUES ONLY. Actions logs, job summaries and artifacts of a public repository are
+# public. Private or embargoed reports belong to a local `nikasha check` run, never here.
+#
+# The issue text never reaches a shell script: the action receives it through `env:` and
+# writes it to a file (SPEC §19.2). Actions are pinned by full commit SHA; re-verify the
+# SHAs with `gh api` before relying on them (see docs/action.md).
+name: Nikasha
+
+on:
+  issues:
+    types: [opened, edited, labeled]
+
+# Nothing here writes to the repository contents.
+permissions:
+  contents: read
+
+# One run per issue at a time; a newer edit supersedes a run still in progress.
+concurrency:
+  group: nikasha-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  fact-check:
+    name: Fact-check the report
+    # Only issues carrying the security-report label. A `labeled` event runs only when that
+    # label is the one being added, so the `nikasha:<verdict>` labels this job adds never
+    # trigger it again.
+    if: >-
+      (github.event.action == 'labeled'
+        && github.event.label.name == (vars.NIKASHA_REPORT_LABEL || 'security-report'))
+      || (github.event.action != 'labeled'
+        && contains(github.event.issue.labels.*.name, vars.NIKASHA_REPORT_LABEL || 'security-report'))
+    runs-on: ubuntu-latest
+    # A hard cap for a hostile or huge report (P7). Nikasha's own size and parse-time
+    # limits end a normal run in minutes; the cap is what bounds a runner in every case.
+    timeout-minutes: 30
+    # `issues: write` only because `comment` and `labels` are on below; drop it, and set
+    # `comment: none` and `labels: false`, for a summary-only run.
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Check out the repository with its tags
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fact-check the report
+        id: nikasha
+        # Pin to the release commit you audited; Dependabot (github-actions ecosystem) can
+        # keep the pin current.
+        uses: rakshit-737/nikasha@c782b769169c17a2916b35d23cfa7cd5661c7c2a # v0.1.0 (placeholder: re-pin to the release commit, see docs/action.md)
+        with:
+          mode: issue
+          repo-path: .
+          fail-on: none
+          comment: summary
+          labels: true

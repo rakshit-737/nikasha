@@ -1,0 +1,25 @@
+{#
+SPDX-FileCopyrightText: 2026 The Nikasha Authors
+SPDX-License-Identifier: Apache-2.0
+#}
+{% extends "base.html" %}
+{% block title %}{{ entry.outcome.verdict }} &middot; Nikasha{% endblock %}
+{% block content %}
+<h1><span class="pill {{ entry.outcome.css_class }}">{{ entry.outcome.verdict }}</span> {{ entry.outcome.source }}</h1>
+<section class="panel">
+  <dl class="facts">
+    <dt>Score</dt><dd>{{ entry.outcome.score if entry.outcome.score is not none else 'n/a' }} ({{ entry.outcome.confidence }} confidence)</dd>
+    <dt>Rule</dt><dd>{{ entry.outcome.rule or 'n/a' }}</dd>
+    <dt>Repository</dt><dd>{{ entry.outcome.repo or 'unresolved' }}</dd>
+    <dt>Ref</dt><dd>{{ entry.outcome.ref or 'unresolved' }}</dd>
+    <dt>Commit</dt><dd class="mono">{{ entry.outcome.commit or 'unresolved' }}</dd>
+  </dl>
+</section>
+<div class="actions">
+  <a href="{{ href('/results/' ~ entry.id ~ '/report') }}">Open the full report</a>
+  <a href="{{ href('/results/' ~ entry.id ~ '/report.html') }}" download="nikasha-result-{{ entry.id }}.html">Download HTML</a>
+  <a href="{{ href('/results/' ~ entry.id ~ '/result.json') }}" download="nikasha-result-{{ entry.id }}.json">Download JSON</a>
+  <a href="{{ href('/') }}">New check</a>
+</div>
+<iframe class="report" src="{{ href('/results/' ~ entry.id ~ '/report') }}" title="Fact-check report" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"></iframe>
+{% endblock %}

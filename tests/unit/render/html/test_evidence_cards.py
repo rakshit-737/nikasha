@@ -521,3 +521,15 @@ def test_it_fits_in_a_page_with_one_script():
     assert page.count("<script") == 1
     assert 'id="ev-abc123def456"' in page
     assert "script-src 'sha256-" in page
+
+
+def test_an_unmeasured_duration_is_not_shown_as_zero():
+    """P6: a record whose clock was never read prints no duration, not \"0 ms\"."""
+    unmeasured = CommandRecord(
+        argv=("git", "log"), exit_code=0, stdout_sha256="a" * 64, stderr_sha256="b" * 64
+    )
+    measured = unmeasured.model_copy(update={"duration_ms": 42})
+    assert " ms" not in render(make_evidence(commands=(unmeasured,)))
+    assert " ms" not in evidence_cards._command(unmeasured)
+    assert "exit 0 · stdout" in evidence_cards._command(unmeasured)
+    assert "42 ms" in evidence_cards._command(measured)

@@ -1,0 +1,14 @@
+{#
+SPDX-FileCopyrightText: 2026 The Nikasha Authors
+SPDX-License-Identifier: Apache-2.0
+#}
+{% extends "base.html" %}
+{% block title %}{{ title }} &middot; Nikasha{% endblock %}
+{% block content %}
+<h1>{{ title }}</h1>
+<section class="panel notice error" role="alert">
+  <p>{{ message }}</p>
+  <p class="muted">HTTP {{ code }}</p>
+</section>
+<p><a href="{{ href('/') }}">Back to New check</a></p>
+{% endblock %}

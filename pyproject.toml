@@ -66,9 +66,18 @@ dependencies = [
 
 [project.optional-dependencies]
 # Extras are filled in by the milestone that first needs them (ADR 0002).
-web = []
-mcp = []
-llm = []
+web = [
+    "fastapi>=0.115",
+    "python-multipart>=0.0.9",
+    "uvicorn>=0.30",
+]
+mcp = [
+    "mcp>=2.2,<3",
+]
+llm = [
+    "anthropic>=0.40",
+    "openai>=1.50",
+]
 bench = []
 
 [project.scripts]
@@ -157,7 +166,7 @@ skip_covered = true
 
 [tool.codespell]
 skip = "*.lock,*.svg,LICENSES/*,.git,.venv,SPEC.md,*/fixtures/tags/*"
-ignore-words-list = "nd"
+ignore-words-list = "nd,cna"
 
 [dependency-groups]
 dev = [

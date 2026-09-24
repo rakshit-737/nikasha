@@ -44,6 +44,7 @@ Two rules hold for every check:
 | [C16](#c16) | VERSION_RANGE_CONSISTENCY | `version` | `symbol`, `version` |
 | [C17](#c17) | IMPACT_CONSISTENCY | `meta` | `impact` |
 | [C18](#c18) | API_USAGE | `behavior` | `behavior` |
+| [C20](#c20) | LLM_REVIEW | `llm` | `behavior` |
 | [C21](#c21) | REPORT_HYGIENE | `info` | `behavior`, `file`, `impact`, `line`, `option`, `patch`, `poc`, `reference`, `snippet`, `symbol`, `trace`, `version` |
 
 ## C01
@@ -315,6 +316,18 @@ Applies to: `behavior`
 | `calls_api` | +0.80 |
 | `does_not_call_api` | -1.20 |
 | `other_predicate` | +0.00 |
+
+## C20
+
+**LLM_REVIEW** · group `llm`
+
+Asks the optional model whether the subject's code at the resolved commit shows the claimed behavior; capped at |0.5| and never decisive.
+
+Applies to: `behavior`
+
+| Outcome | Strength |
+|---|---|
+| `llm_cap` | +0.50 |
 
 ## C21
 

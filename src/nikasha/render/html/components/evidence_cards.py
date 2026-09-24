@@ -414,8 +414,9 @@ def _command(record: CommandRecord) -> str:
         argv = " ".join(record.argv)
     if len(argv) > MAX_ARGV_CHARS:
         argv = f"{argv[:MAX_ARGV_CHARS]} …"
+    duration = "" if record.duration_ms is None else f"{record.duration_ms} ms · "
     facts = (
-        f"exit {record.exit_code} · {record.duration_ms} ms · "
+        f"exit {record.exit_code} · {duration}"
         f"stdout {record.stdout_sha256[:12]} · stderr {record.stderr_sha256[:12]}"
     )
     if record.truncated:

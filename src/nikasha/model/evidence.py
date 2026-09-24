@@ -33,7 +33,9 @@ class CommandRecord(Model):
     exit_code: int
     stdout_sha256: str
     stderr_sha256: str
-    duration_ms: int = Field(ge=0)
+    #: Measured wall-clock time, or ``None`` when the clock was not consulted (the default,
+    #: so identical inputs serialize byte-identically, P2). Never a made-up figure (P6).
+    duration_ms: int | None = Field(default=None, ge=0)
     truncated: bool = False
 
 

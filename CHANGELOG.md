@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- M7 integrations:
+  - `nikasha lint`, a pre-submit mode for reporters with friendly wording and no verdict label.
+  - `nikasha cve` (CVE JSON 5.x), `nikasha h1` and `nikasha gh-advisories` (read-only; they
+    print Markdown and never post back), and `.eml` intake that never stores the sender.
+  - A GitHub Action and example workflow for public issues.
+  - An MCP server (`nikasha mcp`, stdio) and a local web UI (`nikasha serve`) bound to
+    127.0.0.1 with a per-run token, Host and Origin checks, and a strict CSP.
+  - An optional LLM review (C20): off by default, never decisive (strength capped at 0.5),
+    cloud providers only with `llm.allow_cloud = true`, and a guard against prompt injection.
+  - `nikasha.toml` configuration: thresholds, prior, question overrides, ignore globs, LLM.
+
 - M4 HTML report and media:
   - `nikasha check --format html`: one self-contained file that makes no network request
     at all, enforced by a Content-Security-Policy that pins the single inline script by

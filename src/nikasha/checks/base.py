@@ -77,6 +77,9 @@ class CheckContext:
     online: bool = False
     deadline: float | None = None
     history_timeout: float = 20.0
+    #: An optional LLM provider (SPEC §16.6). ``None`` by default and in every offline run:
+    #: only C20 reads it, and the framework never lets it be decisive (P2).
+    llm: object | None = None
     _timelines: dict[str, Timeline] = field(default_factory=dict, repr=False)
 
     # --- the resolved target ------------------------------------------------------------

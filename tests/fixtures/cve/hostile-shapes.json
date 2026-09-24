@@ -1,0 +1,56 @@
+{
+  "dataType": "SOMETHING_ELSE",
+  "dataVersion": 5,
+  "cveMetadata": {
+    "cveId": "cve-2026-00004",
+    "state": "published\u0007",
+    "datePublished": "not a date"
+  },
+  "containers": {
+    "cna": {
+      "title": "```\n<!-- hidden -->\u202e libhdr\u0000 title with `code` and\ttabs",
+      "descriptions": "not a list",
+      "affected": [
+        1,
+        "text",
+        {"vendor": "n/a", "product": "unspecified"},
+        {
+          "vendor": "```",
+          "product": "<!-- libhdr",
+          "packageName": "libhdr-dev\u0000",
+          "repo": "http://insecure.example.invalid/libhdr.git",
+          "defaultStatus": "sometimes",
+          "versions": [
+            {"version": "1.2.0 and all earlier versions", "status": "affected"},
+            {"version": "1.2.0", "status": "affected", "lessThan": "not a version!"},
+            {"version": "1.1.0", "status": "whatever"},
+            "1.0.0",
+            null
+          ]
+        },
+        {"product": "libfoo", "versions": "1.2.3"}
+      ],
+      "references": [
+        {"url": "javascript:alert(1)"},
+        {"url": "ftp://files.example.invalid/x"},
+        {"url": "https://ok.example.invalid/a", "tags": ["patch", "<script>", 7, "x_refsource_MISC"]},
+        {"url": "https://ok.example.invalid/a", "tags": ["duplicate"]},
+        {"url": "https://ok.example.invalid/with space"},
+        {"name": "no url at all"}
+      ],
+      "problemTypes": [
+        {"descriptions": [{"cweId": "CWE-abc", "description": ""}]},
+        {"descriptions": [{"cweId": "CWE-0122", "description": "CWE-122: Heap-based Buffer Overflow"}]},
+        {"descriptions": [{"description": "Free text only"}]},
+        {"descriptions": "nope"}
+      ],
+      "metrics": [
+        {"cvssV3_1": {"vectorString": "garbage", "baseScore": "9.8"}},
+        {"cvssV3_1": {"vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", "baseScore": 99, "baseSeverity": "ULTRA"}},
+        {"cvssV4_0": {"vectorString": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N", "baseScore": true, "baseSeverity": "high"}},
+        {"cvssV2_0": {"vectorString": "AV:N/AC:L/Au:N/C:P/I:P/A:P", "baseScore": 7.5}},
+        "not a metric"
+      ]
+    }
+  }
+}

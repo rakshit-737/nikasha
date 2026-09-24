@@ -1,0 +1,59 @@
+{#
+SPDX-FileCopyrightText: 2026 The Nikasha Authors
+SPDX-License-Identifier: Apache-2.0
+#}
+{% extends "base.html" %}
+{% block title %}New check &middot; Nikasha{% endblock %}
+{% block content %}
+<h1>Check a report against the code</h1>
+<p class="muted">Proof, not prose. The claims in the report are checked against the repository at
+the exact version it names. Nothing is sent anywhere unless you allow network access.</p>
+{% if error %}
+<section class="panel notice error" role="alert"><strong>Not started.</strong> {{ error }}</section>
+{% endif %}
+<form method="post" action="{{ href('/checks') }}" enctype="multipart/form-data" id="check-form" class="form-grid">
+  <div>
+    <label for="report_text">Report</label>
+    <textarea id="report_text" name="report_text" placeholder="Paste the report here (Markdown, plain text or HTML)">{{ form.report_text }}</textarea>
+    <p class="hint">Up to {{ '{:,}'.format(max_upload_bytes) }} bytes. The text stays in this process and is never logged.</p>
+  </div>
+  <div>
+    <label for="report_file">Or upload a file</label>
+    <input type="file" id="report_file" name="report_file" accept=".md,.markdown,.mdown,.txt,.text,.log,.html,.htm">
+    <p class="hint">One report, up to {{ '{:,}'.format(max_upload_bytes) }} bytes. Attachments and archives are not accepted here.</p>
+  </div>
+  <div>
+    <label for="input_format">Format</label>
+    <select id="input_format" name="input_format">
+      {% for fmt in ('auto', 'markdown', 'text', 'html') %}
+      <option value="{{ fmt }}"{% if form.input_format == fmt %} selected{% endif %}>{{ fmt }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="repo">Repository</label>
+    <input type="text" id="repo" name="repo" required maxlength="1024" value="{{ form.repo }}" placeholder="./libhdr.git or https://github.com/curl/curl" autocomplete="off" spellcheck="false">
+    <p class="hint">A local git directory or an https:// URL. A URL must already be in the cache unless network access is allowed below.</p>
+  </div>
+  <div>
+    <label for="version">Version</label>
+    <input type="text" id="version" name="version" maxlength="100" value="{{ form.version }}" placeholder="8.5.0 (optional: taken from the report when empty)" autocomplete="off" spellcheck="false">
+  </div>
+  <div>
+    <label for="ref">Git ref</label>
+    <input type="text" id="ref" name="ref" maxlength="100" value="{{ form.ref }}" placeholder="v1.2.0 or a commit (optional; overrides the version)" autocomplete="off" spellcheck="false">
+  </div>
+  <div>
+    <label for="product">Product</label>
+    <input type="text" id="product" name="product" maxlength="64" value="{{ form.product }}" placeholder="curl (optional)" autocomplete="off" spellcheck="false">
+  </div>
+  <div>
+    <label class="inline"><input type="checkbox" name="online" value="1"{% if form.online == '1' %} checked{% endif %}> Allow network access to clone or refresh the repository</label>
+    <label class="inline"><input type="checkbox" name="repro" value="1" disabled> Reproduce the proof of concept in a sandbox (arrives in M5)</label>
+  </div>
+  <div class="actions">
+    <button type="submit" id="submit" class="primary">Check</button>
+    <span class="muted" id="status" aria-live="polite"></span>
+  </div>
+</form>
+{% endblock %}

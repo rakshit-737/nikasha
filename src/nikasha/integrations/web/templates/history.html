@@ -1,0 +1,32 @@
+{#
+SPDX-FileCopyrightText: 2026 The Nikasha Authors
+SPDX-License-Identifier: Apache-2.0
+#}
+{% extends "base.html" %}
+{% block title %}History &middot; Nikasha{% endblock %}
+{% block content %}
+<h1>History</h1>
+<p class="muted">Results of this session, kept in memory only. They are gone when the server stops.</p>
+{% if entries %}
+<table class="history">
+  <thead><tr><th>#</th><th>Report</th><th>Repository</th><th>Ref</th><th>Verdict</th><th>Score</th></tr></thead>
+  <tbody>
+  {% for entry in entries %}
+    <tr>
+      <td>{{ entry.id }}</td>
+      <td><a href="{{ href('/results/' ~ entry.id) }}">{{ entry.outcome.source }}</a></td>
+      <td>{{ entry.outcome.repo or 'unresolved' }}</td>
+      <td>{{ entry.outcome.ref or 'unresolved' }}</td>
+      <td><span class="pill {{ entry.outcome.css_class }}">{{ entry.outcome.verdict }}</span></td>
+      <td>{{ entry.outcome.score if entry.outcome.score is not none else 'n/a' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<form method="post" action="{{ href('/history/purge') }}" id="purge-form" class="actions">
+  <button type="submit">Forget all results</button>
+</form>
+{% else %}
+<section class="panel"><p>No results yet. <a href="{{ href('/') }}">Start a check.</a></p></section>
+{% endif %}
+{% endblock %}

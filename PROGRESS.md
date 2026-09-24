@@ -17,7 +17,7 @@ The living build log. Milestones follow SPEC §22, plus **M3.5** from ADR 0003.
 | M4 HTML report and media v1 | **done** (PNG captures need Playwright; CI is the source of truth) |
 | M5 Sandbox reproduction | not started |
 | M6 NikashaBench | not started |
-| M7 Integrations | not started |
+| M7 Integrations | **done** (network paths tested with stubs only; see below) |
 | M8 Launch polish and v0.1.0 | not started |
 | M9 Stretch | not started |
 
@@ -281,6 +281,43 @@ The living build log. Milestones follow SPEC §22, plus **M3.5** from ADR 0003.
 - `Result.to_json` sorts keys, so C10's release-ordered `ratios` loses order on a JSON round
   trip. Record an ordered list alongside.
 - PNG captures and the web-UI capture need Playwright (network); `screenshots.yml` owns them.
+
+## M7: Integrations (2026-09-24)
+
+### Done
+- `nikasha lint` (reporter pre-submit mode, P8), `nikasha cve` (CVE JSON 5.x intake),
+  `nikasha h1` and `nikasha gh-advisories` (read-only, `--online` only), `.eml` intake,
+  the GitHub Action with an example workflow, the MCP server (`nikasha mcp`), the hardened
+  local web UI (`nikasha serve`), the optional LLM layer with its guard and C20, and
+  `nikasha.toml` settings wired into `check` (`--config`, `--llm`).
+- The `[mcp]`, `[web]` and `[llm]` extras, which had been empty stubs since M0 (ADR 0002).
+- README v1 and the CONTRIBUTING guides, each fact-checked claim by claim against the tree.
+- Every integration was built, then reviewed adversarially by a separate agent, then fixed.
+
+### Security fixes found by the M7 reviews
+- Web UI: the report iframe's sandbox was void (`allow-scripts allow-same-origin` on the UI's
+  own origin); a chunked POST bypassed the upload cap; UNC repository paths made Windows
+  offer NTLM credentials to an arbitrary host.
+- LLM guard: a run of 5+ brackets re-formed the untrusted-text delimiter; the Ollama provider
+  honoured `HTTP_PROXY` and followed redirects, so a prompt could leave the machine.
+- Intake: bounce and receipt parts stored the sender's identity (SPEC §7); credentials were
+  forwarded on redirect; pre-signed attachment URLs leaked into printed output.
+- Settings: an ignore glob from `nikasha.toml` could hang the matcher (now linear).
+- CVE intake: a record could vouch for itself by citing its own ID.
+- CommandRecord: an unmeasured duration was printed as "0 ms" (P6); it is now `None`.
+
+### Numbers
+- **Tests: 5,105 passing** before the last fixes (4,143 at M4); final count in the commit.
+
+### Open
+- Network paths (`--online` for cve, h1, gh-advisories; the cloud LLM SDKs) are tested with
+  stubbed transports only. Nothing here has talked to the real services.
+- The Action pins `actions/checkout` and `actions/setup-python` by SHAs written offline;
+  re-verify them with `gh api` before M8 (CLAUDE.md).
+- `[questions]` and `[ignore]` in `nikasha.toml` are validated but not yet consumed.
+- A line-level review of M3/M4 hit the session limit mid-run: 124 findings across C01-C09
+  were raised but never verified (27 high, 1 critical, mostly P4 conservatism), and the other
+  29 review targets were never examined. The findings are being verified and fixed next.
 
 ## Carry-overs to later milestones
 

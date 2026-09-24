@@ -255,9 +255,17 @@
           "type": "array"
         },
         "duration_ms": {
-          "minimum": 0,
-          "title": "Duration Ms",
-          "type": "integer"
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Duration Ms"
         },
         "exit_code": {
           "title": "Exit Code",
@@ -281,8 +289,7 @@
         "argv",
         "exit_code",
         "stdout_sha256",
-        "stderr_sha256",
-        "duration_ms"
+        "stderr_sha256"
       ],
       "title": "CommandRecord",
       "type": "object"

@@ -1,0 +1,16 @@
+From: Erin Reporter <erin.reporter@example.org>
+To: security@libhdr.example
+Message-ID: <html-0001@mail.example.org>
+Subject: Stack overflow in hdr_parse (libhdr 1.1.0)
+Date: Sat, 17 Jan 2026 09:00:00 +0000
+MIME-Version: 1.0
+Content-Type: text/html; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
+
+<html><head><title>Ignored by the Subject</title><style>p{color:red}</style></head>
+<body><h1>Stack overflow in <code>hdr_parse</code></h1>
+<p>libhdr 1.1.0 crashes in <code>hdr_parse()</code> when the header is long: r=E9sum=E9.</p>
+<script>alert(1)</script>
+<pre class=3D"language-c">char buf[32];
+strcpy(buf, in);</pre>
+</body></html>
