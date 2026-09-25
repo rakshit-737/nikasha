@@ -238,7 +238,9 @@ def test_scrub_container_empties_a_tree_the_host_cannot_delete(engine, tmp_path)
         limits=Limits(pids=PIDS),
     )
     assert sandbox.run_container(engine, spec, timeout_s=60).exit_code == 0
-    assert (out / "a" / "b" / "f").exists()
+    # Only the top level is checked: as a non-root host user (CI) the 0500 directories
+    # owned by uid 65534 cannot even be stat'ed into, which is the point of the test.
+    assert sorted(p.name for p in out.iterdir()) == ["..x", ".hidden", "a"]
     result = sandbox.run_container(engine, build.scrub_spec(IMAGE, out), timeout_s=60)
     assert result.exit_code == 0
     assert list(out.iterdir()) == []
