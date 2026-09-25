@@ -260,8 +260,12 @@ def test_registered_and_runnable_through_the_runner(make_ctx: MakeContext) -> No
 
 def _git(repo: Path, *args: str, stdin: bytes | None = None) -> str:
     """Test-only plumbing on a private copy of vulnlab (never on the shared fixture)."""
+    identity = ("-c", "user.name=Nikasha Tests", "-c", "user.email=tests@nikasha.invalid")
     out = subprocess.run(
-        ["git", f"--git-dir={repo}", *args], input=stdin, capture_output=True, check=True
+        ["git", *identity, f"--git-dir={repo}", *args],
+        input=stdin,
+        capture_output=True,
+        check=True,
     )
     return out.stdout.decode().strip()
 

@@ -13,6 +13,12 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def _no_forced_colour(monkeypatch: pytest.MonkeyPatch) -> None:
+    """CI sets FORCE_COLOR for readable logs; tests assert on plain CLI text."""
+    monkeypatch.delenv("FORCE_COLOR", raising=False)
+
+
 @pytest.fixture(scope="session")
 def vulnlab_repo(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """The deterministic vulnlab history, built once per test session (a bare repo)."""
