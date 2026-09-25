@@ -900,7 +900,8 @@ class TestOutputs:
         result = runner.invoke(make_app(), ["cve", str(GENUINE), "--repo", "unused", "--ascii"])
         assert result.exit_code == exit_code_for(self.genuine.verdict.label, None), result.output
         assert self.genuine.verdict.label in result.output
-        assert str(GENUINE) in result.output
+        # The terminal clips the source to 90 characters; a deep checkout must still pass.
+        assert str(GENUINE)[:87] in result.output
         quiet = runner.invoke(make_app(), ["cve", str(GENUINE), "--quiet", "--explain"])
         assert quiet.exit_code == result.exit_code
 

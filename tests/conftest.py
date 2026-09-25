@@ -15,8 +15,16 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.fixture(autouse=True)
 def _no_forced_colour(monkeypatch: pytest.MonkeyPatch) -> None:
-    """CI sets FORCE_COLOR for readable logs; tests assert on plain CLI text."""
-    monkeypatch.delenv("FORCE_COLOR", raising=False)
+    """CI forces colour for readable logs; tests assert on plain, unwrapped CLI text.
+
+    Typer decides at import time (GITHUB_ACTIONS, FORCE_COLOR, PY_COLORS), so its module
+    flag is reset as well as the environment. A wide terminal keeps long CI paths whole.
+    """
+    for name in ("FORCE_COLOR", "PY_COLORS", "GITHUB_ACTIONS"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("COLUMNS", "200")
+    rich_utils = importlib.import_module("typer.rich_utils")
+    monkeypatch.setattr(rich_utils, "FORCE_TERMINAL", None, raising=False)
 
 
 @pytest.fixture(scope="session")
