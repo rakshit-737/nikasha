@@ -134,3 +134,18 @@ def test_pickaxe_unsearchable_text_is_not_absence(vulnlab_repo, text):
 
 def test_pickaxe_allows_tab_indented_text(vulnlab_repo):
     assert gitio.GitRepo(vulnlab_repo).pickaxe_first("\tno-such-text-anywhere-42") is None
+
+
+def test_pickaxe_without_git_is_unavailable_not_a_timeout(vulnlab_repo, monkeypatch):
+    # A missing git binary did not time out; the reason must survive (P6).
+    repo = gitio.GitRepo(vulnlab_repo)
+    monkeypatch.setattr(gitio, "git_executable", lambda: None)
+    with pytest.raises(gitio.HistoryUnavailableError, match="not found"):
+        repo.pickaxe_first("foo")
+
+
+def test_pickaxe_timeout_is_a_timeout(vulnlab_repo):
+    with pytest.raises(gitio.HistoryTimeoutError) as info:
+        gitio.GitRepo(vulnlab_repo).pickaxe_first("foo", timeout=1e-6)
+    assert not isinstance(info.value, gitio.HistoryUnavailableError)
+    assert isinstance(info.value.__cause__, gitio.GitTimeoutError)

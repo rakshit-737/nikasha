@@ -324,3 +324,46 @@ def test_an_invented_flag_whose_name_is_nowhere_is_still_refuted(make_ctx: MakeC
     evidence = _one(make_ctx, INVENTED)
     assert evidence.details["outcome"] == "never_in_history"
     assert any("-e proxy_unsafe_fold " in c for c in evidence.details["commands"])
+
+
+def test_a_failed_grep_is_neutral_for_that_claim_only(
+    make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """P4: ``git grep`` exiting 128 is not "absent", and must not sink the other claims."""
+    bad, good = _flag(INVENTED), _flag("--fold")
+    ctx = make_ctx(claims=[bad, good])
+    repo = ctx.resolution.repo
+    real_run = type(repo).run
+
+    def run(self: GitRepo, argv: list[str], **kw: Any) -> GitResult:
+        if argv[:1] == ["grep"] and INVENTED in argv:
+            return GitResult(tuple(argv), 128, b"", b"fatal: bad object", 0)
+        return real_run(self, argv, **kw)
+
+    monkeypatch.setattr(type(repo), "run", run)
+    by_token = {e.details["token"]: e for e in OptionExists().run(ctx, [bad, good])}
+    failed = by_token[INVENTED]
+    assert failed.outcome == "NEUTRAL"
+    assert failed.strength == 0.0
+    assert failed.details["outcome"] == "search_failed"
+    assert "exit code 128" in failed.details["incomplete"]
+    assert by_token["--fold"].outcome == "SUPPORTS"
+
+
+def test_a_failed_release_sweep_is_neutral(
+    make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The batched sweep over other releases (``grep -l``) failing is not "in no release"."""
+    ctx = make_ctx(claims=[_flag(INVENTED)])
+    repo = ctx.resolution.repo
+    real_run = type(repo).run
+
+    def run(self: GitRepo, argv: list[str], **kw: Any) -> GitResult:
+        if argv[:1] == ["grep"] and "-l" in argv:
+            return GitResult(tuple(argv), 128, b"", b"fatal: bad object", 0)
+        return real_run(self, argv, **kw)
+
+    monkeypatch.setattr(type(repo), "run", run)
+    (evidence,) = OptionExists().run(ctx, list(ctx.claims))
+    assert evidence.outcome == "NEUTRAL"
+    assert evidence.details["outcome"] == "search_failed"

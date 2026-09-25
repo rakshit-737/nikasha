@@ -376,7 +376,7 @@ def run_git(
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
-        raise ExternalToolError(f"git {args[0]} timed out after {timeout:g}s") from exc
+        raise GitTimeoutError(f"git {args[0]} timed out after {timeout:g}s") from exc
     return GitResult(
         argv=tuple(argv),
         returncode=proc.returncode,
@@ -495,6 +495,10 @@ class GrepHit:
 #: Keep batched command lines well under Windows' ~8k character limit (SPEC §11.4).
 MAX_ARGV_CHARS = 6000
 _PICKAXE_TIMEOUT_S = 20.0
+
+
+class GitTimeoutError(ExternalToolError):
+    """git ran past its time budget and was killed; nothing it printed can be trusted."""
 
 
 class HistoryTimeoutError(ExternalToolError):
@@ -718,8 +722,11 @@ class GitRepo:
             result = self.run(
                 ["log", "--all", "-1", "--format=%H", f"-S{text}"], timeout=timeout, record=record
             )
-        except ExternalToolError as exc:
+        except GitTimeoutError as exc:
             raise HistoryTimeoutError(str(exc)) from exc
+        except ExternalToolError as exc:
+            # Not a timeout (git missing, say): keep the real reason for the report (P6).
+            raise HistoryUnavailableError(str(exc)) from exc
         if result.returncode != 0:
             # An empty stdout from a failed log is not "never in history" (P4).
             raise HistoryUnavailableError(f"git log -S failed with exit code {result.returncode}")

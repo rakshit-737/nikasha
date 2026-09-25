@@ -27,7 +27,7 @@ from nikasha.checks.c08_trace_frames import (
     TraceFrames,
     _skip_reason,
 )
-from nikasha.code.gitio import HistoryTimeoutError
+from nikasha.code.gitio import HistoryTimeoutError, HistoryUnavailableError
 from nikasha.code.index import CodeIndex
 from nikasha.code.trace_forensics import FrameCheck
 from nikasha.extract import extract_claims
@@ -376,6 +376,25 @@ class TestReviewFindings:
             frame = _by_function(evidence)["hdr_decode_chunked_value"]
             assert frame["status"] == "undecided"
             assert words in frame["reason"]
+
+    def test_a_failed_history_search_is_not_called_a_timeout(
+        self, make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """P6: a pickaxe git could not run did not time out; say what happened."""
+        trace = _trace(FABRICATED, extra=[INVENTED])
+
+        def pickaxe(name: str, **_: Any) -> str | None:
+            raise HistoryUnavailableError("git log -S failed with exit code 128")
+
+        ctx = make_ctx(claims=[trace])
+        monkeypatch.setattr(ctx.resolution.repo, "is_shallow", lambda: False)
+        monkeypatch.setattr(ctx.resolution.repo, "pickaxe_first", pickaxe)
+        (evidence,) = TraceFrames().run(ctx, [trace])
+        frame = _by_function(evidence)["hdr_decode_chunked_value"]
+        assert frame["status"] == "undecided"
+        assert "failed" in frame["reason"]
+        assert "exit code 128" in frame["reason"]
+        assert "timed out" not in frame["reason"]
 
     def test_an_expired_budget_gives_one_fixed_neutral(self, make_ctx: MakeContext) -> None:
         trace = _trace(FABRICATED)

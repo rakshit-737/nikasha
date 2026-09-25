@@ -111,7 +111,12 @@ class OptionExists(BaseCheck):
         for claim in claims:
             if not isinstance(claim, OptionClaim):
                 continue
-            evidence = self._one(ctx, claim)
+            try:
+                evidence = self._one(ctx, claim)
+            except ExternalToolError as exc:
+                # A grep that git could not finish is not "absent": say so for this claim
+                # alone and keep judging the others (P4).
+                evidence = _search_failed(claim, exc)
             if evidence is not None:
                 out.append(evidence)
         return out
@@ -435,6 +440,25 @@ class OptionExists(BaseCheck):
             "option_kind": claim.option_kind,
             "commands": [command for command in commands if command],
         }
+
+
+def _search_failed(claim: OptionClaim, exc: ExternalToolError) -> Evidence:
+    """NEUTRAL, with nothing withheld: a failed search holds no finding either way (P4)."""
+    return make_evidence(
+        check_id=CHECK_ID,
+        group=GROUP,
+        claims=[claim],
+        outcome="NEUTRAL",
+        strength=0.0,
+        summary=f"{claim.token} could not be searched for: {exc}, so nothing is concluded",
+        details={
+            "token": claim.token,
+            "option_kind": claim.option_kind,
+            "outcome": "search_failed",
+            "incomplete": str(exc),
+            "history_complete": False,
+        },
+    )
 
 
 def _where(ctx: CheckContext) -> str:
