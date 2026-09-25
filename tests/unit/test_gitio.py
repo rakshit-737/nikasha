@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 The Nikasha Authors
 # SPDX-License-Identifier: Apache-2.0
 import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -94,8 +95,6 @@ def test_run_git_executes_allowed_command(tmp_path):
 
 
 def _copy_repo(src: Path, dest: Path) -> Path:
-    import shutil
-
     shutil.copytree(src, dest)
     return dest
 
