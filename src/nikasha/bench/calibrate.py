@@ -14,8 +14,10 @@ own mutations, and the S6 vulnlab fixtures are the project's own fictional repor
 from __future__ import annotations
 
 import importlib
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from nikasha.bench.manifests import SOURCES
@@ -26,6 +28,7 @@ from nikasha.errors import NikashaError
 _SPDX = "SPDX"
 
 MIN_PER_CLASS = 50
+_CALIBRATION_FILE = re.compile(r"calibration-v([1-9][0-9]{0,8})\.yaml")
 CLASSES = ("genuine", "fabricated")
 
 
@@ -134,3 +137,37 @@ def to_yaml(outcome: CalibrationOutcome, version: int) -> str:
     ]
     lines += [f"  {k}: {v}" for k, v in outcome.strengths.items()]
     return "\n".join(lines) + "\n"
+
+
+def next_version(directory: Path) -> int:
+    """One more than the highest ``calibration-vN.yaml`` already in ``directory`` (else 1)."""
+    if not directory.is_dir():
+        return 1
+    taken = [
+        int(m.group(1))
+        for p in directory.iterdir()
+        if (m := _CALIBRATION_FILE.fullmatch(p.name)) is not None
+    ]
+    return max(taken, default=0) + 1
+
+
+def write_calibration(outcome: CalibrationOutcome, directory: Path) -> Path:
+    """Write ``calibration-vN.yaml`` at the next free N; an existing file is never replaced.
+
+    The file is created exclusively, so a concurrent writer that took the same N makes this
+    call move on to the next number rather than overwrite it.
+    """
+    if not outcome.fitted:
+        raise CalibrationError(outcome.reason)
+    directory.mkdir(parents=True, exist_ok=True)
+    version = next_version(directory)
+    for _ in range(100):
+        path = directory / f"calibration-v{version}.yaml"
+        try:
+            with path.open("x", encoding="utf-8", newline="\n") as handle:
+                handle.write(to_yaml(outcome, version))
+        except FileExistsError:
+            version += 1
+            continue
+        return path
+    raise CalibrationError(f"could not find a free calibration-vN.yaml name in {directory}")

@@ -60,7 +60,10 @@ should give UNGROUNDED.
   latency of Nikasha releases, plus a drop-one ablation for each check.
 - Calibrating check strengths (`nikasha bench calibrate`). This happens only when there are at
   least 50 labelled real reports per class. Only the real split (S1 to S4) counts: synthetic
-  S5 mutations and the project's own S6 vulnlab fixtures never do.
+  S5 mutations and the project's own S6 vulnlab fixtures never do. A fit is written as a new
+  `calibration-v<N>.yaml` and never overwrites an earlier one.
+- Dynamic reproduction (`nikasha bench run --repro`) of entries that name a `poc`, a `recipe`
+  and a `version`. No committed entry names a PoC yet.
 - **Not for** judging, ranking or naming reporters, and not as training data for classifiers
   that detect AI-written text.
 

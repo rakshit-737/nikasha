@@ -161,7 +161,7 @@ def test_calibrate_writes_a_file_only_when_fitted(tmp_path: Path) -> None:
     out = tmp_path / "cal"
     result = CliRunner().invoke(app, ["bench", "calibrate", str(results), "--out", str(out)])
     assert result.exit_code == 0, result.output
-    assert "No calibration file written" in result.output
+    assert "no calibration file written" in result.output
     assert not out.exists()
 
 
