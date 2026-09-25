@@ -39,11 +39,20 @@ CMD = CommandRecord(
 
 
 def crashed(
-    stderr: str, stdout: str = "", kind: str = "file_input", code: int = ABORT_STATUS
+    stderr: str,
+    stdout: str = "",
+    kind: str = "file_input",
+    code: int = ABORT_STATUS,
+    *,
+    attested: bool | None = None,
+    truncated: bool = False,
 ) -> ReproRun:
     """A crashed run. 134 (SIGABRT) is the status measured in the sandbox for a real ASan
-    or UBSan report under the recipes' ``abort_on_error=1``."""
-    return ReproRun(kind, code, False, False, stdout, stderr, CMD)
+    or UBSan report under the recipes' ``abort_on_error=1``. ``attested`` defaults to what
+    the vulnlab recipe says for ``kind`` (only ``file_input`` is attested)."""
+    if attested is None:
+        attested = kind == "file_input"
+    return ReproRun(kind, code, False, truncated, stdout, stderr, CMD, attested=attested)
 
 
 def clean(timed_out: bool = False) -> ReproRun:
@@ -314,3 +323,30 @@ def test_unmapped_behavior_then_negated_behavior_fall_through_to_title() -> None
         BehaviorClaim, "no free", predicate="uses_freed", subject_symbol="f", negated=True
     )
     assert claimed_class((unmapped, negated), "Heap overflow in f") == "heap-overflow"
+
+
+def test_unattested_file_input_is_never_a_reproduction() -> None:
+    # e.g. sqlite's .read script can print this exact report and .exit 134 itself.
+    ev = only(run("genuine_hdr_overflow.md", crashed(ASAN_RUN, attested=False)))
+    assert ev.details["outcome"] == "harness_unverified"
+    assert ev.details["unverified_outcome"] == "signature_match"
+    assert ev.details["attested"] is False
+    assert ev.outcome == "NEUTRAL" and ev.strength == 0.0
+    assert "not attested" in ev.summary
+
+
+def test_attested_default_is_false() -> None:
+    assert ReproRun("file_input", 134, False, False, "", ASAN_RUN, CMD).attested is False
+
+
+def test_attested_file_input_still_reproduces() -> None:
+    ev = only(run("genuine_hdr_overflow.md", crashed(ASAN_RUN)))
+    assert ev.details["outcome"] == "signature_match"
+    assert "truncated_note" not in ev.details
+
+
+def test_truncated_run_is_said_in_details() -> None:
+    ev = only(run("genuine_hdr_overflow.md", crashed(ASAN_RUN, truncated=True)))
+    assert ev.details["run"]["truncated"] is True
+    assert "truncated" in ev.details["truncated_note"]
+    assert "truncated" in ev.summary

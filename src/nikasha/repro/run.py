@@ -40,7 +40,12 @@ class PocError(NikashaError):
 
 @dataclass(frozen=True, slots=True)
 class ReproRun:
-    """One PoC execution. ``stdout``/``stderr`` are capped at the recipe's output limit."""
+    """One PoC execution. ``stdout``/``stderr`` are capped at the recipe's output limit.
+
+    ``attested`` is the run kind's ``attested_output``: whether a report on stderr and the
+    exit status can be attributed to the target rather than to the PoC input. It defaults
+    to ``False`` (conservative); C19 never counts an unattested run as a reproduction.
+    """
 
     kind: str
     exit_code: int
@@ -49,6 +54,7 @@ class ReproRun:
     stdout: str
     stderr: str
     record: CommandRecord
+    attested: bool = False
 
 
 def _safe_name(name: str) -> str:
@@ -204,6 +210,7 @@ def run_poc(
         stdout=result.stdout.decode("utf-8", "replace"),
         stderr=result.stderr.decode("utf-8", "replace"),
         record=result.record(),
+        attested=recipe.run.kinds[chosen].attested_output,
     )
 
 

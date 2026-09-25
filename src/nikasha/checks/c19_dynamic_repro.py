@@ -18,9 +18,12 @@ status is a crash, and it is compared only if it can be attributed to the target
    builds every recipe makes). Otherwise the crash is ``crash_unattributed``;
 3. the crashing frame must be project code with a source path, not the reporter's staged
    PoC under ``/poc`` (``crash_not_in_project``);
-4. a ``c_harness`` run is never counted: the harness is the reporter's code running in the
-   target's own process, so it can print a report that passes 1-3 and exit 134 itself.
-   Its comparison is recorded as ``harness_unverified`` (NEUTRAL, flagged for review).
+4. a ``c_harness`` run, or any run whose recipe kind does not set ``attested_output``
+   (``ReproRun.attested``), is never counted: the harness is the reporter's code running
+   in the target's own process, and a scriptable target (the sqlite shell's
+   ``.shell``/``.output``/``.exit``, curl's ``--config``) lets the input print a report
+   that passes 1-3 and exit 134 itself. Its comparison is recorded as
+   ``harness_unverified`` (NEUTRAL, flagged for review).
 
 Outcomes and strengths (``lr_defaults.yaml``, row C19):
 
@@ -36,10 +39,12 @@ Outcomes and strengths (``lr_defaults.yaml``, row C19):
 * ``crash_unparsed``, ``crash_uncompared``, ``crash_unattributed``,
   ``crash_not_in_project``, ``harness_unverified``: NEUTRAL, no strength.
 
-Remaining forgery risk: attribution rests on the target not being scriptable. A recipe
-whose target lets the input run commands or write arbitrary stderr and choose its exit
-status (the sqlite shell's ``.shell``/``.output``/``.exit``) is as untrusted as a harness,
-and ``ReproRun`` does not yet say which recipes those are.
+Remaining forgery risk: attribution rests on a recipe author marking a kind
+``attested_output: true`` only when the input truly cannot script the target. The default
+is ``false``.
+
+A truncated run (stdout/stderr hit the recipe's output cap) is said so in ``details``
+(``truncated_note``) and in the summary: the terminating report may be cut off.
 """
 
 from __future__ import annotations
@@ -93,6 +98,10 @@ _ENGINE_FAILURES: frozenset[int] = frozenset({125, 126, 127})
 _UNATTESTED_KINDS: frozenset[str] = frozenset({"c_harness"})
 #: Outcomes that carry a strength from lr_defaults.yaml; everything else scores 0.
 _SCORED: frozenset[str] = frozenset({"signature_match", "different_signature", "no_crash"})
+
+_TRUNCATED_NOTE = (
+    "output truncated at the recipe's output limit; the crash report may be incomplete"
+)
 
 _Judgement = tuple[Outcome, str, str, list[ClaimBase]]
 
@@ -160,6 +169,9 @@ class DynamicRepro(BaseCheck):
         details: dict[str, Any] = {}
         outcome, key, summary, cited = self._judge(ctx, repro, claims, cited, details)
         details["outcome"] = key
+        if isinstance(repro, ReproRun) and repro.truncated:
+            details["truncated_note"] = _TRUNCATED_NOTE
+            summary = f"{summary} ({_TRUNCATED_NOTE})"
         strength = self.strengths.get(CHECK_ID, key) if key in _SCORED else 0.0
         return [
             make_evidence(
@@ -313,8 +325,9 @@ class DynamicRepro(BaseCheck):
     ) -> _Judgement:
         """Turn one comparison into the outcome, withholding it for an unattested kind."""
         where = ", ".join(sig.top_functions) or "no application frame"
-        if repro.kind in _UNATTESTED_KINDS:
+        if repro.kind in _UNATTESTED_KINDS or not repro.attested:
             details["flag"] = "unverified_harness"
+            details["attested"] = False
             details["unverified_outcome"] = (
                 "signature_match" if result.matched else "different_signature"
             )
@@ -323,9 +336,9 @@ class DynamicRepro(BaseCheck):
                 "NEUTRAL",
                 "harness_unverified",
                 f"REVIEW: the harness run {verb} the reported signature ({sig.bug_class} in"
-                f" {where}), but a {repro.kind} PoC is the reporter's code in the target's"
-                " own process and can print any report, so it is not counted as a"
-                " reproduction",
+                f" {where}), but the output of a {repro.kind} run is not attested: the PoC"
+                " can script the target or is the reporter's code in its own process, so"
+                " it can print any report and it is not counted as a reproduction",
                 cited,
             )
         if result.matched:

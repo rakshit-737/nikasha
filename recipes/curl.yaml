@@ -23,11 +23,12 @@ build:
   timeout_s: 1800
   work_size: 2g
 run:
+  # attested_output false: args and --config files can write files and choose the output.
   kinds:
-    cli: {cmd: ["/build/curl", "{args}"]}
-    file_input: {cmd: ["/build/curl", "--config", "/poc/{file}"]}
+    cli: {cmd: ["/build/curl", "{args}"], attested_output: false}
+    file_input: {cmd: ["/build/curl", "--config", "/poc/{file}"], attested_output: false}
   env:
     ASAN_OPTIONS: "abort_on_error=1:detect_leaks=0:symbolize=1"
-    UBSAN_OPTIONS: "print_stacktrace=1:halt_on_error=1"
+    UBSAN_OPTIONS: "abort_on_error=1:print_stacktrace=1:halt_on_error=1"
   timeout_s: 30
 limits: {cpus: 2, memory: "2g", pids: 256, output_bytes: 1048576}

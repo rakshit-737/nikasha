@@ -35,6 +35,7 @@ as a wrong UNGROUNDED):
 
 from __future__ import annotations
 
+import posixpath
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -277,7 +278,11 @@ def normalize_function(name: str) -> str:
 def _under_poc(path: str | None) -> bool:
     if not path:
         return False
-    norm = path.replace("\\", "/")
+    # Normalise first: "/work/../poc/x.c" or "//poc/x.c" is under /poc too, and
+    # "/poc/../src/a.c" is not.
+    norm = posixpath.normpath(path.replace("\\", "/"))
+    if norm.startswith("//"):
+        norm = "/" + norm.lstrip("/")
     return norm == POC_ROOT or norm.startswith(POC_ROOT + "/")
 
 

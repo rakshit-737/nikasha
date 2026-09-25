@@ -42,6 +42,7 @@ _OUT_MODE = 0o777  # the build runs as uid 65534, which must be able to write /o
 _TREE_MODE = 0o755
 _FILE_MODE = 0o644
 _EXEC_BITS = 0o111
+_CHUNK = 1024 * 1024
 _OPEN_OUT_TRAP = "trap 'chmod -R a+rwX /out 2>/dev/null || true' EXIT"
 #: Empties ``/out`` from inside a container, as the uid that wrote it. Used when the host
 #: cannot delete what the build left (the trap did not run: timeout kill, or the build
@@ -49,6 +50,14 @@ _OPEN_OUT_TRAP = "trap 'chmod -R a+rwX /out 2>/dev/null || true' EXIT"
 SCRUB_SCRIPT = "chmod -R u+rwX /out 2>/dev/null; rm -rf /out/* /out/.[!.]* /out/..?*; true"
 _SCRUB_TIMEOUT_S = 120.0
 _SCRUB_LIMITS = sandbox.Limits(cpus=1, memory="256m", pids=64, output_bytes=64 * 1024)
+
+
+#: Most bytes copied out of a build's ``/out`` into the cache. ``/out`` is written by
+#: project code (hostile), so its size is bounded like any other input (P7); a sanitizer
+#: build of curl or sqlite with static libraries is well under 200 MiB.
+MAX_OUTPUT_BYTES = 1024 * 1024 * 1024
+#: Most entries (files and directories) copied out of ``/out``.
+MAX_OUTPUT_ENTRIES = 10_000
 
 
 class BuildFailedError(NikashaError):
@@ -193,33 +202,58 @@ def _install(staging: Path, target: Path) -> None:
         ) from exc
 
 
-def _copy_regular(src: Path, dest: Path) -> None:
+def _copy_regular(src: Path, dest: Path, budget: int) -> int:
     """Copy one regular file, opened without following links; keep only its exec bits.
 
-    setuid, setgid and sticky bits and group/other write never reach the cache.
+    setuid, setgid and sticky bits and group/other write never reach the cache. At most
+    ``budget`` bytes are copied (a file can grow between the size scan and the copy); the
+    number of bytes copied is returned.
     """
     fd = os.open(src, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0))
     with os.fdopen(fd, "rb") as reader:
         mode = os.fstat(reader.fileno()).st_mode
         if not stat.S_ISREG(mode):
             raise BuildFailedError(f"build output {src.name!r} is not a regular file")
+        copied = 0
         with dest.open("xb") as writer:
-            shutil.copyfileobj(reader, writer)
+            while chunk := reader.read(min(_CHUNK, budget - copied + 1)):
+                copied += len(chunk)
+                if copied > budget:
+                    raise BuildFailedError("build outputs exceed the size limit")
+                writer.write(chunk)
     dest.chmod(_FILE_MODE | (_EXEC_BITS if mode & _EXEC_BITS else 0))
+    return copied
 
 
-def copy_outputs(out: Path, dest: Path) -> None:
+def copy_outputs(
+    out: Path,
+    dest: Path,
+    *,
+    max_bytes: int = MAX_OUTPUT_BYTES,
+    max_entries: int = MAX_OUTPUT_ENTRIES,
+) -> None:
     """Copy the build container's ``/out`` to ``dest`` without following any link.
 
     ``/out`` is written by project code, so it is hostile: a symlink could make the host
     read one of its own files into the cache (and from there into the PoC container).
     Anything but plain directories and regular files refuses the build. Files keep only
-    their executable bit (the PoC container runs ``/build/<tool>``).
+    their executable bit (the PoC container runs ``/build/<tool>``). More than
+    ``max_entries`` entries or ``max_bytes`` bytes in total refuses the build, too.
     """
+    entries = 0
+    total = 0
     try:
         for dirpath, dirnames, filenames in os.walk(out, followlinks=False):
             for name in (*dirnames, *filenames):
-                mode = os.lstat(Path(dirpath) / name).st_mode
+                info = os.lstat(Path(dirpath) / name)
+                mode = info.st_mode
+                entries += 1
+                if stat.S_ISREG(mode):
+                    total += info.st_size
+                if entries > max_entries or total > max_bytes:
+                    raise BuildFailedError(
+                        f"build outputs exceed {max_entries} entries or {max_bytes} bytes"
+                    )
                 if not (stat.S_ISDIR(mode) or stat.S_ISREG(mode)):
                     rel = (Path(dirpath) / name).relative_to(out).as_posix()
                     raise BuildFailedError(
@@ -227,12 +261,13 @@ def copy_outputs(out: Path, dest: Path) -> None:
                         "(links, devices, FIFOs and sockets are refused)"
                     )
         dest.mkdir()
+        copied = 0
         for dirpath, dirnames, filenames in os.walk(out, followlinks=False):
             sub = Path(dirpath).relative_to(out)
             for name in dirnames:
                 (dest / sub / name).mkdir()
             for name in filenames:
-                _copy_regular(Path(dirpath) / name, dest / sub / name)
+                copied += _copy_regular(Path(dirpath) / name, dest / sub / name, max_bytes - copied)
     except (OSError, shutil.Error) as exc:
         raise BuildFailedError(f"could not copy build outputs: {exc}") from exc
 
@@ -362,6 +397,8 @@ def build(
 
 
 __all__ = [
+    "MAX_OUTPUT_BYTES",
+    "MAX_OUTPUT_ENTRIES",
     "BuildFailedError",
     "BuildResult",
     "build",

@@ -84,6 +84,8 @@ machine either.
 6. `/out` is hostile: it was written by project code. The host copies it into a private
    staging directory without following any link (see Caveats). Files keep only their
    executable bit, so setuid, setgid and group or other write bits never reach the cache.
+   The copy is capped at 1 GiB in total and 10,000 entries (`build.MAX_OUTPUT_BYTES`,
+   `build.MAX_OUTPUT_ENTRIES`); more refuses the build (`BuildFailedError`).
 7. The staging directory is renamed into place under a per-key lock file
    (`.<commit>.lock`, released by the OS when the process exits). Two builds of the same
    key can run at once: the first complete build wins, and the other becomes a cache hit.
@@ -134,6 +136,18 @@ Limits come from the recipe's `limits`.
 - **Arguments.** `--arg` values become separate argv entries and never pass through a
   shell. Only a `compile` step (the `c_harness` kind) uses `/bin/sh -c`, and every word in
   it is `shlex`-quoted.
+- **Attested output.** Each run kind sets `attested_output` (default `false`). It is `true`
+  only when the PoC input can neither script the target nor choose its stderr or exit
+  status; today only vulnlab's `file_input` is. The sqlite shell (`.shell`, `.output`,
+  `.exit`), curl `--config` and xmllint (which echoes input in diagnostics) are not.
+  `ReproRun.attested` carries it, and C19 treats an unattested run like `c_harness`: its
+  comparison is recorded as `harness_unverified` and never makes a report REPRODUCED.
+- **Sanitizer abort.** A recipe that builds with `-fsanitize=address`, `undefined` or
+  `memory` must set `abort_on_error=1` in `ASAN_OPTIONS`, `UBSAN_OPTIONS` (plus
+  `halt_on_error=1`) or `MSAN_OPTIONS`; the recipe loader refuses it otherwise, because
+  C19 attributes a report only when it ends the process with SIGABRT (134).
+- **Truncation.** A run whose output hit the cap is marked `truncated`, and C19 says so in
+  its summary and in `details.truncated_note`.
 - **Command record.** The full argv goes into a `CommandRecord`. As with
   `gitio.redact_argv`, it holds no host paths (`-v <path>:/poc:ro`) and no random names
   (`--name <name>`), and argv[0] is the bare engine name. The same run on two machines

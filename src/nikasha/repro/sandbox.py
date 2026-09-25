@@ -589,6 +589,33 @@ def image_exists(engine: EngineInfo, tag: str) -> bool:
     return proc.returncode == 0
 
 
+#: ``image inspect`` output is one ``sha256:<64 hex>`` line; anything else is refused.
+_IMAGE_ID_RE = re.compile(r"sha256:[0-9a-f]{64}")
+
+
+def image_id(engine: EngineInfo, tag: str) -> str | None:
+    """The local image ID (``sha256:...``) of ``tag``, or ``None`` if it is absent.
+
+    Runs ``<engine> image inspect --format {{.Id}} <tag>`` through the same hardened
+    pattern as :func:`image_exists`: resolved executable, validated tag, no shell, bounded
+    time. Output that is not exactly one image ID is treated as unknown.
+    """
+    exe = engine_executable(engine)
+    try:
+        proc = subprocess.run(
+            [exe, "image", "inspect", "--format", "{{.Id}}", check_image_tag(tag)],
+            capture_output=True,
+            timeout=_INFO_TIMEOUT_S,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if proc.returncode != 0:
+        return None
+    value = proc.stdout.decode("utf-8", "replace").strip()
+    return value if _IMAGE_ID_RE.fullmatch(value) else None
+
+
 def build_image_argv(engine: EngineName, dockerfile: Path, context: Path, tag: str) -> list[str]:
     """``<engine> build -f <dockerfile> -t <tag> <context>``."""
     return [engine, "build", "-f", str(dockerfile), "-t", check_image_tag(tag), str(context)]
