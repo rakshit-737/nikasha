@@ -14,6 +14,7 @@ that image build, never by a container).
 from __future__ import annotations
 
 import importlib.util
+import os
 import re
 import shutil
 from pathlib import Path
@@ -36,7 +37,7 @@ FORK_REFUSED = re.compile(rb"Cannot fork|fork: (?:retry: )?Resource temporarily 
 @pytest.fixture(scope="module")
 def engine() -> EngineInfo:
     try:
-        chosen = sandbox.select_engine("auto")
+        chosen = sandbox.select_engine(os.environ.get("NIKASHA_TEST_SANDBOX", "auto"))
     except NoEngineError as exc:  # a sandbox run without an engine is a failure, not a skip
         pytest.fail(f"the sandbox suite needs a container engine: {exc}")
     if not sandbox.image_exists(chosen, IMAGE):

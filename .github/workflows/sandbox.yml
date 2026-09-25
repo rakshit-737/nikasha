@@ -40,4 +40,8 @@ jobs:
       # fixture in tests/sandbox reuses it (image_exists) instead of building it again.
       - name: Build the recipe image
         run: docker build -f docker/recipes/c-toolchain.Dockerfile -t nikasha/recipe-c:1 docker/recipes
+      # The job builds its image with docker, so it tests docker; `auto` would pick the
+      # runner's rootless podman, which has its own image store.
       - run: uv run pytest -m "sandbox and not network" tests/sandbox tests/unit -q
+        env:
+          NIKASHA_TEST_SANDBOX: docker

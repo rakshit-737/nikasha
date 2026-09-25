@@ -10,6 +10,7 @@ and a real container: the genuine report must come out REPRODUCED through
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, cast
 
@@ -67,7 +68,7 @@ HARNESS_GENUINE = (
 @pytest.fixture(scope="module")
 def engine() -> EngineInfo:
     try:
-        chosen = sandbox.select_engine("auto")
+        chosen = sandbox.select_engine(os.environ.get("NIKASHA_TEST_SANDBOX", "auto"))
     except NoEngineError as exc:
         pytest.fail(f"the sandbox suite needs a container engine: {exc}")
     tag = VULNLAB.recipe.image.tag

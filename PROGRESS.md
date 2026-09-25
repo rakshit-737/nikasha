@@ -314,7 +314,8 @@ The living build log. Milestones follow SPEC §22, plus **M3.5** from ADR 0003.
   stubbed transports only. Nothing here has talked to the real services.
 - The Action pins `actions/checkout` and `actions/setup-python` by SHAs written offline;
   re-verify them with `gh api` before M8 (CLAUDE.md).
-- `[questions]` and `[ignore]` in `nikasha.toml` are validated but not yet consumed.
+- `[questions]` and `[ignore]` in `nikasha.toml` are consumed by `check` (ignored paths are
+  never judged).
 - A line-level review of M3/M4 hit the session limit mid-run: 124 findings across C01-C09
   were raised but never verified (27 high, 1 critical, mostly P4 conservatism), and the other
   29 review targets were never examined. Both are now closed (see "Reviews closed" below).
@@ -352,14 +353,14 @@ The living build log. Milestones follow SPEC §22, plus **M3.5** from ADR 0003.
 - The real recipe image (Fedora) could not be built here: the network proxy refuses the
   Fedora registries. Local sandbox runs used a stand-in image (gcc/clang on Debian/Ubuntu).
   M5 is done only when `sandbox.yml` is green in CI with the real image.
-- Scriptable targets (sqlite `cli`/`file_input`, curl `cli`) can print a forged sanitizer
-  report and pick exit 134. Before C19 is enabled for recipes other than vulnlab, add a
-  per-kind `attested_output` flag (recipes, schema, `ReproRun`) and treat unattested kinds
-  like c_harness.
-- A native-sanitizer recipe must set `abort_on_error=1`; the loader does not enforce it yet.
+- Every run kind declares `attested_output` (default false); only vulnlab `file_input` is
+  attested, so scriptable targets (sqlite, curl, libxml2 cli/file_input) can never yield
+  REPRODUCED. The recipe loader refuses a sanitizer build without `abort_on_error=1`.
+- The curl, sqlite and libxml2 recipes are unverified end to end: the stand-in image has no
+  tclsh, and gitlab.gnome.org is blocked from this environment.
 - C19 scores a timeout as `no_crash` (-0.5, per SPEC §12). For a report that claims a hang,
   a timeout is a reproduction: maintainer decision.
-- No cap on total bytes or file count copied out of `/out`.
+- Copies out of `/out` are capped at 1 GiB and 10,000 entries.
 
 ## M6: NikashaBench (2026-09-25)
 
@@ -373,8 +374,9 @@ The living build log. Milestones follow SPEC §22, plus **M3.5** from ADR 0003.
 
 ### Open
 - S1-S3 (real reports) wait on M3.5 corpus access and the HackerOne terms decision.
-- `bench calibrate` fits but does not write `calibration-vN.yaml`; no reliability diagram;
-  no `--repro` subset (§17.3).
+- `bench calibrate` writes `calibration-vN.yaml` (never overwriting); `bench run` draws a
+  reliability diagram and takes `--repro` (§17.3). No manifest names a PoC yet, so the repro
+  subset is empty until PoC fixtures are added.
 - C10 still has a wall-clock budget; a machine too slow to finish the scan changes the result.
 
 ## M8: Launch tooling (2026-09-25)
@@ -413,6 +415,8 @@ The living build log. Milestones follow SPEC §22, plus **M3.5** from ADR 0003.
   - C11 must accept modern ASan wording ("N bytes after"; a SUMMARY naming
     `__asan_memcpy` plus the module) as well as the older form (ADR 0005).
   - Make the top application frame of a trace a core claim.
+  - *2026-09-25:* all of the above are done and tested except the SQLite amalgamation
+    mapping, which needs `--online` verification.
 - **M3.5:** run the extraction smoke test on the real corpus. Check HackerOne's terms for
   the disclosed-report `.json` endpoint before fetching the corpus.
 - **M5:** engine-specific sandbox flags (see the verification report, §6). Materialise
@@ -422,5 +426,6 @@ The living build log. Milestones follow SPEC §22, plus **M3.5** from ADR 0003.
   - choose Zensical or Material for the docs (ADR);
   - `date-released` in `CITATION.cff` at v0.1.0;
   - add the docker ecosystem to Dependabot;
+  - *2026-09-25:* a nightly workflow runs the `network` and `sandbox and network` suites;
   - use `actions/attest` rather than `attest-build-provenance`;
   - re-verify every §0 fact for the README; drop or re-source the Alpha-Omega claim.
