@@ -9,6 +9,7 @@ import itertools
 import json
 import os
 import shutil
+import threading
 from pathlib import Path
 
 import pytest
@@ -157,3 +158,160 @@ def test_copy_outputs_refuses_links_and_special_files(tmp_path, plant):
     with pytest.raises(build.BuildFailedError, match="not a regular file"):
         build.copy_outputs(out, dest)
     assert not dest.exists()
+
+
+FAKE_ENGINE = sandbox.EngineInfo("docker", True, version="test")
+
+
+def _fake_container(calls: list[sandbox.ContainerSpec], *, fail: bool = False):  # type: ignore[no-untyped-def]
+    """A stand-in for ``run_container`` that writes the recipe outputs into ``/out``."""
+
+    def run(engine, spec, *, timeout_s, runtime=None, name=None):  # type: ignore[no-untyped-def]
+        calls.append(spec)
+        out = next(m.host for m in spec.mounts if m.target == "/out")
+        if spec.cmd[-1] != build.SCRUB_SCRIPT and not fail:
+            (out / "include").mkdir()
+            (out / "include" / "hdr.h").write_bytes(b"int x;\n")
+            (out / "hdrcat").write_bytes(b"\x7fELF")
+            (out / "hdrcat").chmod(0o4755)  # setuid must not survive the copy
+            (out / "libhdr.a").write_bytes(b"!<arch>\n")
+        return sandbox.ContainerResult(
+            argv=("docker",),
+            recorded_argv=("docker",),
+            exit_code=1 if fail else 0,
+            stdout=b"built\n",
+            stderr=b"",
+            timed_out=False,
+            truncated=False,
+            duration_ms=1,
+        )
+
+    return run
+
+
+class _Repo:
+    def export_tree(self, commit: str, dest: Path) -> None:
+        (dest / "Makefile").write_text("all:\n", encoding="utf-8")
+
+
+def test_build_installs_outputs_with_exec_bits_and_no_setuid(tmp_path, monkeypatch):
+    calls: list[sandbox.ContainerSpec] = []
+    monkeypatch.setattr(sandbox, "run_container", _fake_container(calls))
+    result = build.build(_Repo(), COMMIT, LOADED, FAKE_ENGINE, cache_root=tmp_path)  # type: ignore[arg-type]
+    assert result.cached is False
+    assert (result.outputs_dir / "include" / "hdr.h").read_bytes() == b"int x;\n"
+    if os.name == "posix":
+        assert (result.outputs_dir / "hdrcat").stat().st_mode & 0o7777 == 0o755
+        assert (result.outputs_dir / "include" / "hdr.h").stat().st_mode & 0o7777 == 0o644
+    assert list((tmp_path / "repro" / "tmp").iterdir()) == []
+    assert len(calls) == 1  # the host could delete /out itself: no scrub container
+    again = build.build(_Repo(), COMMIT, LOADED, FAKE_ENGINE, cache_root=tmp_path)  # type: ignore[arg-type]
+    assert again.cached is True
+
+
+def test_failed_build_cleans_its_scratch_and_caches_nothing(tmp_path, monkeypatch):
+    monkeypatch.setattr(sandbox, "run_container", _fake_container([], fail=True))
+    with pytest.raises(build.BuildFailedError, match="exited with 1"):
+        build.build(_Repo(), COMMIT, LOADED, FAKE_ENGINE, cache_root=tmp_path)  # type: ignore[arg-type]
+    assert build.load_cached(build.build_dir(LOADED, COMMIT, tmp_path)) is None
+    assert list((tmp_path / "repro" / "tmp").iterdir()) == []
+
+
+def test_undeletable_out_is_scrubbed_by_a_container(tmp_path, monkeypatch):
+    """Host rmtree fails (uid 65534 owns the tree): the scrub container runs, hardened."""
+    calls: list[sandbox.ContainerSpec] = []
+    out = tmp_path / "out"
+    (out / "include").mkdir(parents=True)
+    real_rmtree = shutil.rmtree
+    attempts = []
+
+    def rmtree(path, *args, **kwargs):  # type: ignore[no-untyped-def]
+        attempts.append(Path(path))
+        if len(attempts) == 1:
+            raise PermissionError(13, "Permission denied")
+        return real_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(build.shutil, "rmtree", rmtree)
+    monkeypatch.setattr(sandbox, "run_container", _fake_container(calls))
+    assert build.remove_out(FAKE_ENGINE, "img:1", out) is True
+    assert not out.exists()
+    (spec,) = calls
+    assert spec.cmd == ("/bin/sh", "-c", build.SCRUB_SCRIPT)
+    assert [(m.host, m.target, m.read_only) for m in spec.mounts] == [(out, "/out", False)]
+    argv = sandbox.run_argv("docker", spec, name="s1")
+    assert ("--network", "none") in itertools.pairwise(argv)
+    assert ("--user", "65534:65534") in itertools.pairwise(argv)
+
+
+def test_remove_out_never_raises_when_the_engine_is_gone(tmp_path, monkeypatch):
+    out = tmp_path / "out"
+    out.mkdir()
+
+    def rmtree(path, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if not kwargs.get("ignore_errors"):
+            raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(build.shutil, "rmtree", rmtree)
+    assert build.remove_out(NO_ENGINE, "img:1", out) is False
+
+
+def test_an_incomplete_leftover_is_replaced(tmp_path, monkeypatch):
+    target = build.build_dir(LOADED, COMMIT, tmp_path)
+    (target / "outputs").mkdir(parents=True)
+    (target / "outputs" / "stale").write_bytes(b"x")
+    monkeypatch.setattr(sandbox, "run_container", _fake_container([]))
+    result = build.build(_Repo(), COMMIT, LOADED, FAKE_ENGINE, cache_root=tmp_path)  # type: ignore[arg-type]
+    assert not (result.outputs_dir / "stale").exists()
+    assert (result.outputs_dir / "hdrcat").is_file()
+    assert [p.name for p in target.parent.iterdir() if p.suffix != ".lock"] == [
+        COMMIT
+    ]  # no staging or trash left
+
+
+def test_concurrent_builds_of_one_key_both_succeed(tmp_path, monkeypatch):
+    """Eight racing builds of one key: no FileExistsError, one complete build installed."""
+    monkeypatch.setattr(sandbox, "run_container", _fake_container([]))
+    barrier = threading.Barrier(8)
+    results: list[build.BuildResult] = []
+    errors: list[BaseException] = []
+
+    real_install = build._install
+
+    def install(staging: Path, target: Path) -> None:
+        barrier.wait(timeout=10)  # everyone reaches the install step together
+        real_install(staging, target)
+
+    monkeypatch.setattr(build, "_install", install)
+
+    def worker() -> None:
+        try:
+            results.append(
+                build.build(_Repo(), COMMIT, LOADED, FAKE_ENGINE, cache_root=tmp_path)  # type: ignore[arg-type]
+            )
+        except BaseException as exc:  # collected and asserted below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+    assert errors == []
+    assert len(results) == 8
+    target = build.build_dir(LOADED, COMMIT, tmp_path)
+    assert build.load_cached(target) is not None
+    assert all((r.outputs_dir / "hdrcat").is_file() for r in results)
+    assert [p.name for p in target.parent.iterdir() if p.suffix != ".lock"] == [COMMIT]
+
+
+def test_install_raises_a_nikasha_error_when_it_cannot_install(tmp_path, monkeypatch):
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    target = tmp_path / "target"
+
+    def replace(self: Path, other: Path) -> Path:
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(Path, "replace", replace)
+    with pytest.raises(build.BuildFailedError, match="could not install"):
+        build._install(staging, target)

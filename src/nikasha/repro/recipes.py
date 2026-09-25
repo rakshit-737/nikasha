@@ -32,7 +32,10 @@ FILE_PLACEHOLDER = "{file}"
 
 _ID_CHARS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789-_")
 _PATH_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./+@")
+#: The same grammar as ``$defs.size`` in the schema and ``sandbox._SIZE_RE``.
 _SIZE_RE = re.compile(r"[0-9]{1,15}[kmgKMG]?")
+_DOCKERFILE_DIR = "docker/recipes/"
+_DOCKERFILE_SUFFIX = ".Dockerfile"
 
 Identifier = Annotated[str, Field(min_length=1, max_length=64)]
 
@@ -84,7 +87,13 @@ class RecipeImage(Model):
     @classmethod
     def _dockerfile(cls, value: str) -> str:
         _check_rel_path(value)
-        if not value.startswith("docker/recipes/") or not value.endswith(".Dockerfile"):
+        name = value.removeprefix(_DOCKERFILE_DIR)
+        if (
+            name == value
+            or "/" in name
+            or not name.endswith(_DOCKERFILE_SUFFIX)
+            or len(name) == len(_DOCKERFILE_SUFFIX)
+        ):
             raise ValueError("dockerfile must be docker/recipes/<name>.Dockerfile")
         return value
 

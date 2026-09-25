@@ -41,8 +41,8 @@ def test_every_hardened_flag_is_present(engine):
         assert flag in argv
     for pair in [
         ("--network", "none"),
-        ("--tmpfs", "/tmp:rw,size=64m"),
-        ("--tmpfs", "/work:rw,exec,size=256m"),
+        ("--tmpfs", "/tmp:rw,size=64m,mode=1777"),
+        ("--tmpfs", "/work:rw,exec,size=256m,mode=1777"),
         ("--cap-drop", "ALL"),
         ("--pids-limit", "256"),
         ("--memory", "2g"),

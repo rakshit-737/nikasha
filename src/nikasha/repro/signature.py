@@ -22,13 +22,20 @@ as a wrong UNGROUNDED):
   stages the PoC, e.g. a ``c_harness``) are dropped, and :func:`crash_in_project` says
   whether the crashing frame is project code at all. A crash inside the harness is not a
   reproduction of a bug in the project.
-* **Only the terminating report counts** (:func:`terminating_trace`): the last sanitizer
-  report on stderr. A hostile PoC can print decoy reports; they must not be able to lift
-  the result by being "the best match" among many (P7).
+* **Only the terminating report counts** (:func:`terminating_report`): the last sanitizer
+  report on stderr, and only when nothing but whitespace follows it. A hostile PoC can
+  print decoy reports; they must not be able to lift the result by being "the best match"
+  among many (P7).
+* **The exit status must fit the report** (:func:`exit_status_fits`). Every shipped recipe
+  builds with ASan/UBSan and ``abort_on_error=1``, so a report that really ended the
+  process leaves exit status 134 (SIGABRT; measured in the sandbox for both ASan and
+  UBSan). Formats without such a contract (valgrind, gdb, language runtimes) are not
+  attributed at all until a recipe gives them one.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -51,6 +58,10 @@ POC_ROOT = "/poc"
 MAX_OBSERVED = 8
 #: Addresses below this are "near 0": a SEGV there is a NULL dereference (SPEC §13.5).
 NULL_PAGE = 4096
+#: Native sanitizer formats whose report, with ``abort_on_error=1``, ends in ``abort()``.
+SANITIZER_FORMATS: frozenset[str] = frozenset({"asan", "ubsan", "msan", "tsan", "lsan"})
+#: The container exit status of a process killed by SIGABRT (128 + 6).
+ABORT_STATUS = 134
 
 #: Functions present in nearly every stack, so sharing them says nothing.
 ENTRY_FUNCTIONS: frozenset[str] = frozenset(
@@ -150,20 +161,51 @@ def _normalize_text(text: str) -> str:
     return " ".join(text.lower().replace("-", " ").replace("_", " ").split())
 
 
+#: A negation cue right before a class keyword: "not a use after free", "rather than a
+#: heap overflow". Anchored at the end of a short window, bounded, linear-time (P7).
+_NEGATION_BEFORE_RE = re.compile(
+    r"(?:\bnot|\bno|\bnever|\bnor|\bneither|\bisn't|\bwasn't|\baren't|\brather than"
+    r"|\binstead of|\bruled out)(?: (?:a|an|the|any))? $"
+)
+_NEGATION_WINDOW = 24
+
+
+def _negated_at(norm: str, pos: int, keyword: str) -> bool:
+    """Whether the keyword occurrence at ``pos`` is negated ("not a use after free").
+
+    "no null pointer check" names a missing check, not the absence of the bug, so a
+    keyword directly followed by "check" is never negated.
+    """
+    if norm.startswith(" check", pos + len(keyword)):
+        return False
+    return _NEGATION_BEFORE_RE.search(norm[max(0, pos - _NEGATION_WINDOW) : pos]) is not None
+
+
+def _first_affirmed(norm: str, keyword: str) -> int:
+    """Position of the first non-negated occurrence of ``keyword`` in ``norm``, or -1."""
+    pos = norm.find(keyword)
+    while pos >= 0:
+        if not _negated_at(norm, pos, keyword):
+            return pos
+        pos = norm.find(keyword, pos + 1)
+    return -1
+
+
 def bug_class_of_text(text: str | None, *, prose: bool = False) -> str | None:
     """The equivalence class a free-text bug description names, or ``None``.
 
-    The keyword that occurs *earliest* wins (the longest one on a tie), so "heap overflow,
-    not a use after free" is a heap overflow. With ``prose=True`` (report text rather than
-    sanitizer output) a bare "stack overflow" is ambiguous: reporters use it for stack
-    buffer overflows as often as for stack exhaustion.
+    The keyword that occurs *earliest* wins (the longest one on a tie), and negated
+    occurrences are skipped, so "heap overflow, not a use after free" and "not a use after
+    free but a heap overflow" are both heap overflows. With ``prose=True`` (report text
+    rather than sanitizer output) a bare "stack overflow" is ambiguous: reporters use it for
+    stack buffer overflows as often as for stack exhaustion.
     """
     if not text:
         return None
     norm = _normalize_text(text[:512])
     best: tuple[int, int, str] | None = None
     for keyword, cls in _CLASS_KEYWORDS:
-        pos = norm.find(keyword)
+        pos = _first_affirmed(norm, keyword)
         if pos < 0:
             continue
         key = (pos, -len(keyword), cls)
@@ -172,7 +214,7 @@ def bug_class_of_text(text: str | None, *, prose: bool = False) -> str | None:
     if best is None:
         return None
     cls = best[2]
-    if prose and cls == "stack-exhaustion" and norm.find("stack overflow") == best[0]:
+    if prose and cls == "stack-exhaustion" and norm.startswith("stack overflow", best[0]):
         return STACK_AMBIGUOUS
     return cls
 
@@ -320,17 +362,14 @@ def signature(trace: TraceData) -> Signature:
     )
 
 
-def _lcs(a: Sequence[str], b: Sequence[str]) -> int:
-    """Length of the longest common subsequence (inputs are capped at MAX_FRAMES)."""
-    if not a or not b:
-        return 0
-    prev = [0] * (len(b) + 1)
-    for x in a:
-        cur = [0]
+def _prefix_lcs(a: Sequence[str], b: Sequence[str]) -> list[list[int]]:
+    """``t[i][j]`` = LCS length of ``a[:i]`` and ``b[:j]``; one O(len(a) * len(b)) pass."""
+    table = [[0] * (len(b) + 1) for _ in range(len(a) + 1)]
+    for i, x in enumerate(a):
+        row, nxt = table[i], table[i + 1]
         for j, y in enumerate(b):
-            cur.append(prev[j] + 1 if x == y else max(prev[j + 1], cur[j]))
-        prev = cur
-    return prev[-1]
+            nxt[j + 1] = row[j] + 1 if x == y else max(row[j + 1], nxt[j])
+    return table
 
 
 def anchored_alignment(claimed: Sequence[str], observed: Sequence[str]) -> int:
@@ -338,15 +377,23 @@ def anchored_alignment(claimed: Sequence[str], observed: Sequence[str]) -> int:
 
     For each anchor ``claimed[i]`` (i in 0, 1) paired with an equal ``observed[j]``, the
     alignment is ``LCS(before) + 1 + LCS(after)``. Returns 0 when neither anchor appears.
+    Both LCS tables are built once, so the work is O(n * m) with n, m <= ``MAX_FRAMES``
+    however many times the anchors recur (P7).
     """
     claimed = list(claimed[:MAX_FRAMES])
     observed = list(observed[:MAX_FRAMES])
+    if not claimed or not observed:
+        return 0
+    before = _prefix_lcs(claimed, observed)
+    # after[i][j] = LCS(claimed[i:], observed[j:]), via the prefix table of the reversals.
+    rev = _prefix_lcs(claimed[::-1], observed[::-1])
+    n, m = len(claimed), len(observed)
     best = 0
-    for i in range(min(2, len(claimed))):
+    for i in range(min(2, n)):
         for j, name in enumerate(observed):
             if name != claimed[i]:
                 continue
-            length = _lcs(claimed[:i], observed[:j]) + 1 + _lcs(claimed[i + 1 :], observed[j + 1 :])
+            length = before[i][j] + 1 + rev[n - i - 1][m - j - 1]
             best = max(best, length)
     return best
 
@@ -410,15 +457,44 @@ def parse_run_output(output: str) -> list[TraceData]:
     return [parsed.data for parsed in parse_traces(output)][-MAX_OBSERVED:]
 
 
-def terminating_trace(stderr: str) -> TraceData | None:
-    """The sanitizer report that ended the run: the last one on stderr, or ``None``.
+@dataclass(frozen=True, slots=True)
+class TerminatingReport:
+    """The last trace on a run's stderr, and whether anything but whitespace follows it."""
+
+    trace: TraceData
+    at_tail: bool
+
+
+def terminating_report(stderr: str) -> TerminatingReport | None:
+    """The report that ended the run: the last trace on stderr, or ``None``.
 
     stdout is never read: a PoC (or a target echoing its input) can print anything there.
     Earlier reports on stderr are ignored too, since with ``abort_on_error=1`` only the
-    last one can have terminated the process.
+    last one can have terminated the process; and a sanitizer that aborts prints nothing
+    after its report, so text after it (``at_tail=False``) means the report did not end
+    the process and was probably echoed (P7).
     """
-    traces = parse_run_output(stderr)
-    return traces[-1] if traces else None
+    parsed = parse_traces(stderr)
+    if not parsed:
+        return None
+    last = parsed[-1]
+    return TerminatingReport(last.data, not stderr[last.end :].strip())
+
+
+def terminating_trace(stderr: str) -> TraceData | None:
+    """:func:`terminating_report`'s trace, or ``None``."""
+    report = terminating_report(stderr)
+    return report.trace if report else None
+
+
+def exit_status_fits(trace: TraceData, exit_code: int) -> bool:
+    """Whether ``exit_code`` is what the process leaves when ``trace`` ends it.
+
+    Only native sanitizer reports have a contract here (``abort_on_error=1`` in every
+    recipe, so SIGABRT: 134). Anything else is not attributed: a status the PoC could
+    choose proves nothing about who printed the report.
+    """
+    return trace.format in SANITIZER_FORMATS and exit_code == ABORT_STATUS
 
 
 @dataclass(frozen=True, slots=True)

@@ -368,9 +368,11 @@ def run_argv(
         argv.append("--read-only-tmpfs=false")
     argv += [
         "--tmpfs",
-        "/tmp:rw,size=64m",  # noqa: S108 - a tmpfs inside the container
+        # mode=1777: an image's WORKDIR creates /work as root 0755, and the tmpfs would
+        # inherit that, leaving uid 65534 unable to write either scratch directory.
+        "/tmp:rw,size=64m,mode=1777",  # noqa: S108 - a tmpfs inside the container
         "--tmpfs",
-        f"/work:rw,exec,size={_check_size(spec.work_size, 'work size')}",
+        f"/work:rw,exec,size={_check_size(spec.work_size, 'work size')},mode=1777",
         "--cap-drop",
         "ALL",
         "--security-opt",

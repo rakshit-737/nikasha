@@ -20,7 +20,10 @@ import os
 import shlex
 import shutil
 import stat
+import sys
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -37,7 +40,15 @@ _COMPLETE = "complete.json"
 _LOG = "build.log"
 _OUT_MODE = 0o777  # the build runs as uid 65534, which must be able to write /out
 _TREE_MODE = 0o755
+_FILE_MODE = 0o644
+_EXEC_BITS = 0o111
 _OPEN_OUT_TRAP = "trap 'chmod -R a+rwX /out 2>/dev/null || true' EXIT"
+#: Empties ``/out`` from inside a container, as the uid that wrote it. Used when the host
+#: cannot delete what the build left (the trap did not run: timeout kill, or the build
+#: removed it). uid 65534 owns every entry, so it can make each one writable first.
+SCRUB_SCRIPT = "chmod -R u+rwX /out 2>/dev/null; rm -rf /out/* /out/.[!.]* /out/..?*; true"
+_SCRUB_TIMEOUT_S = 120.0
+_SCRUB_LIMITS = sandbox.Limits(cpus=1, memory="256m", pids=64, output_bytes=64 * 1024)
 
 
 class BuildFailedError(NikashaError):
@@ -140,18 +151,61 @@ def _open_tree(path: Path) -> None:
             file.chmod(file.stat().st_mode | 0o444)
 
 
-def _install(staging: Path, target: Path) -> None:
-    """Move a finished build into place; an existing complete build wins (cache hit)."""
-    if load_cached(target) is not None:
-        return
-    if target.exists():
-        shutil.rmtree(target)  # an incomplete leftover
+@contextmanager
+def _key_lock(target: Path) -> Iterator[None]:
+    """Serialize installs of one build key across processes and threads.
+
+    The lock file sits next to the build directory. The OS drops the lock when the file
+    descriptor closes, so a crashed process never leaves a stale lock behind.
+    """
+    fd = os.open(target.with_name(f".{target.name}.lock"), os.O_RDWR | os.O_CREAT, 0o600)
     try:
-        staging.chmod(0o700)
-        staging.replace(target)
-    except OSError:
-        if load_cached(target) is None:  # lost a race to a complete build otherwise
-            raise
+        if sys.platform == "win32":
+            import msvcrt  # noqa: PLC0415 - platform-specific
+
+            msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl  # noqa: PLC0415 - platform-specific
+
+            fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(fd)
+
+
+def _install(staging: Path, target: Path) -> None:
+    """Move a finished build into place; an existing complete build wins (cache hit).
+
+    Concurrent builds of the same key are expected (two ``nikasha repro`` runs on one
+    report), so the check-and-rename runs under a per-key lock: a complete build is never
+    removed, and only an incomplete leftover (from a crash) is replaced.
+    """
+    try:
+        with _key_lock(target):
+            if load_cached(target) is not None:
+                return
+            if target.exists():
+                shutil.rmtree(target)  # an incomplete leftover from a crashed build
+            staging.replace(target)
+    except OSError as exc:
+        raise BuildFailedError(
+            f"could not install the build into the cache: {type(exc).__name__}"
+        ) from exc
+
+
+def _copy_regular(src: Path, dest: Path) -> None:
+    """Copy one regular file, opened without following links; keep only its exec bits.
+
+    setuid, setgid and sticky bits and group/other write never reach the cache.
+    """
+    fd = os.open(src, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0))
+    with os.fdopen(fd, "rb") as reader:
+        mode = os.fstat(reader.fileno()).st_mode
+        if not stat.S_ISREG(mode):
+            raise BuildFailedError(f"build output {src.name!r} is not a regular file")
+        with dest.open("xb") as writer:
+            shutil.copyfileobj(reader, writer)
+    dest.chmod(_FILE_MODE | (_EXEC_BITS if mode & _EXEC_BITS else 0))
 
 
 def copy_outputs(out: Path, dest: Path) -> None:
@@ -159,7 +213,8 @@ def copy_outputs(out: Path, dest: Path) -> None:
 
     ``/out`` is written by project code, so it is hostile: a symlink could make the host
     read one of its own files into the cache (and from there into the PoC container).
-    Anything but plain directories and regular files refuses the build.
+    Anything but plain directories and regular files refuses the build. Files keep only
+    their executable bit (the PoC container runs ``/build/<tool>``).
     """
     try:
         for dirpath, dirnames, filenames in os.walk(out, followlinks=False):
@@ -177,9 +232,80 @@ def copy_outputs(out: Path, dest: Path) -> None:
             for name in dirnames:
                 (dest / sub / name).mkdir()
             for name in filenames:
-                shutil.copyfile(Path(dirpath) / name, dest / sub / name, follow_symlinks=False)
+                _copy_regular(Path(dirpath) / name, dest / sub / name)
     except (OSError, shutil.Error) as exc:
         raise BuildFailedError(f"could not copy build outputs: {exc}") from exc
+
+
+def scrub_spec(image: str, out: Path) -> sandbox.ContainerSpec:
+    """The hardened, offline container that empties ``out`` (mounted at ``/out``)."""
+    return sandbox.ContainerSpec(
+        image=image,
+        cmd=("/bin/sh", "-c", SCRUB_SCRIPT),
+        mounts=(sandbox.Mount(out, "/out", read_only=False),),
+        limits=_SCRUB_LIMITS,
+        work_size="16m",
+    )
+
+
+def remove_out(
+    engine: sandbox.EngineInfo, image: str, out: Path, *, runtime: str | None = None
+) -> bool:
+    """Delete the build container's ``/out`` from the host; return whether it is gone.
+
+    The build runs as uid 65534 (a subordinate uid under rootless podman), so a directory
+    it created is not writable by the host user unless the exit trap opened it. When the
+    host cannot delete the tree, the same image empties it from inside a container.
+    """
+    try:
+        shutil.rmtree(out)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        try:
+            sandbox.run_container(
+                engine, scrub_spec(image, out), timeout_s=_SCRUB_TIMEOUT_S, runtime=runtime
+            )
+        except NikashaError:
+            return False
+        shutil.rmtree(out, ignore_errors=True)
+    return not out.exists()
+
+
+def _run_build(
+    engine: sandbox.EngineInfo,
+    recipe: Recipe,
+    commit: str,
+    dirs: tuple[Path, Path],
+    runtime: str | None,
+) -> tuple[sandbox.ContainerResult, str]:
+    src, out = dirs
+    result = sandbox.run_container(
+        engine,
+        build_spec(recipe, src, out),
+        timeout_s=float(recipe.build.timeout_s),
+        runtime=runtime,
+    )
+    log = (result.stdout + result.stderr).decode("utf-8", "replace")
+    if result.timed_out or result.exit_code != 0:
+        tail = "\n".join(log.strip().splitlines()[-20:])
+        why = "timed out" if result.timed_out else f"exited with {result.exit_code}"
+        raise BuildFailedError(f"build of {recipe.id} at {commit[:12]} {why}:\n{tail}")
+    return result, log
+
+
+def _stage(target: Path, out: Path, log: str, meta: dict[str, object]) -> None:
+    """Copy the outputs into a private staging directory and install it at ``target``."""
+    ensure_private_dir(target.parent)
+    staging = Path(tempfile.mkdtemp(dir=target.parent, prefix=".staging-"))
+    try:
+        copy_outputs(out, staging / "outputs")
+        _open_tree(staging / "outputs")  # readable by uid 65534 before anyone can see it
+        (staging / _LOG).write_text(log, encoding="utf-8")
+        (staging / _COMPLETE).write_text(json.dumps(meta, sort_keys=True), encoding="utf-8")
+        _install(staging, target)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
 
 
 def build(
@@ -198,49 +324,41 @@ def build(
     if cached is not None:
         return cached
     recipe = loaded.recipe
-    scratch_root = ensure_private_dir((cache_root or cache_dir()) / "repro" / "tmp")
-    with tempfile.TemporaryDirectory(dir=scratch_root, ignore_cleanup_errors=True) as tmp:
-        work = Path(tmp)
-        src = work / "src"
-        out = work / "out"
+    try:
+        scratch_root = ensure_private_dir((cache_root or cache_dir()) / "repro" / "tmp")
+        work = Path(tempfile.mkdtemp(dir=scratch_root, prefix="build-"))
+    except OSError as exc:
+        raise BuildFailedError(f"cannot create a build directory: {exc}") from exc
+    src = work / "src"
+    out = work / "out"
+    try:
         src.mkdir()
         out.mkdir()
         repo.export_tree(commit, src)
         _open_tree(src)
         work.chmod(_TREE_MODE)
         out.chmod(_OUT_MODE)
-        result = sandbox.run_container(
-            engine,
-            build_spec(recipe, src, out),
-            timeout_s=float(recipe.build.timeout_s),
-            runtime=runtime,
-        )
-        log = (result.stdout + result.stderr).decode("utf-8", "replace")
-        if result.timed_out or result.exit_code != 0:
-            tail = "\n".join(log.strip().splitlines()[-20:])
-            why = "timed out" if result.timed_out else f"exited with {result.exit_code}"
-            raise BuildFailedError(f"build of {recipe.id} at {commit[:12]} {why}:\n{tail}")
-        ensure_private_dir(target.parent)
-        staging = Path(tempfile.mkdtemp(dir=target.parent, prefix=".staging-"))
-        try:
-            copy_outputs(out, staging / "outputs")
-            (staging / _LOG).write_text(log, encoding="utf-8")
-            record = result.record()
-            meta = {
-                "commit": commit,
-                "recipe_id": recipe.id,
-                "recipe_sha256": loaded.sha256,
-                "record": record.model_dump(mode="json"),
-            }
-            (staging / _COMPLETE).write_text(json.dumps(meta, sort_keys=True), encoding="utf-8")
-            _install(staging, target)
-        finally:
-            shutil.rmtree(staging, ignore_errors=True)
-        winner = load_cached(target)
-        if winner is not None and winner.record != record:
-            return winner  # a concurrent build of the same key landed first
-    _open_tree(target / "outputs")
-    return BuildResult(target / "outputs", cached=False, log=log, record=record)
+        result, log = _run_build(engine, recipe, commit, (src, out), runtime)
+        record = result.record()
+        meta: dict[str, object] = {
+            "commit": commit,
+            "recipe_id": recipe.id,
+            "recipe_sha256": loaded.sha256,
+            "record": record.model_dump(mode="json"),
+        }
+        _stage(target, out, log, meta)
+    except OSError as exc:
+        raise BuildFailedError(f"build of {recipe.id} failed: {type(exc).__name__}: {exc}") from exc
+    finally:
+        # Never raises: a failure to clean up must not hide why the build failed.
+        remove_out(engine, recipe.image.tag, out, runtime=runtime)
+        shutil.rmtree(work, ignore_errors=True)
+    installed = load_cached(target)
+    if installed is None:  # pragma: no cover - _install raises instead
+        raise BuildFailedError(f"build of {recipe.id} did not reach the cache")
+    if installed.record != record:
+        return installed  # a concurrent build of the same key landed first
+    return BuildResult(installed.outputs_dir, cached=False, log=log, record=record)
 
 
 __all__ = [
@@ -253,4 +371,6 @@ __all__ = [
     "build_spec",
     "copy_outputs",
     "load_cached",
+    "remove_out",
+    "scrub_spec",
 ]

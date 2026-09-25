@@ -14,6 +14,7 @@ that image build, never by a container).
 from __future__ import annotations
 
 import importlib.util
+import re
 import shutil
 from pathlib import Path
 
@@ -29,6 +30,7 @@ ROOT = Path(__file__).resolve().parents[2]
 VULNLAB = recipes.find_recipe("vulnlab")
 IMAGE = VULNLAB.recipe.image.tag
 PIDS = 64
+FORK_REFUSED = re.compile(rb"Cannot fork|fork: (?:retry: )?Resource temporarily unavailable")
 
 
 @pytest.fixture(scope="module")
@@ -89,9 +91,12 @@ def test_fork_bomb_is_contained_by_the_pids_limit(engine):
     bomb = _run(
         engine, "bomb() { bomb | bomb & }; bomb; sleep 5; echo SURVIVED", timeout_s=30, name=name
     )
-    # A contained shell bomb may still reach its echo; what matters is that it stayed inside
-    # the pids limit (checked above), its container is gone, and the engine still works.
-    del bomb
+    # The effect of the limit: forks were refused (dash says "Cannot fork", bash says
+    # "fork: ... Resource temporarily unavailable"), and the bomb burned out on its own
+    # well before the wall-clock timeout instead of having to be killed.
+    assert FORK_REFUSED.search(bomb.stderr), bomb.stderr[:400]
+    assert bomb.timed_out is False
+    assert bomb.duration_ms < 25_000
     assert not sandbox.container_exists(engine, name)
     after = _run(engine, "echo alive")
     assert after.exit_code == 0 and after.stdout.strip() == b"alive"
@@ -155,6 +160,87 @@ def test_vulnlab_build_and_poc_reproduce_the_heap_overflow(engine, tmp_path):
     assert outcome.record.argv[0] == engine.name
     assert "<path>:/poc:ro" in outcome.record.argv
     assert not any(str(tmp_path) in arg for arg in outcome.record.argv)
+
+
+def _vulnlab_repo(tmp_path: Path) -> tuple[Path, str]:
+    spec = importlib.util.spec_from_file_location("bv", ROOT / "scripts" / "build_vulnlab.py")
+    assert spec is not None and spec.loader is not None
+    bv = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bv)
+    git_dir = tmp_path / "vulnlab.git"
+    return git_dir, bv.build_vulnlab(git_dir)["v1.2.0"]
+
+
+def _hostile(steps: list[str]) -> recipes.LoadedRecipe:
+    """vulnlab with other build steps (same image), as if the project's build were hostile."""
+    data = VULNLAB.recipe.model_dump(mode="json")
+    data["build"]["steps"] = steps
+    return recipes.LoadedRecipe(recipes.Recipe.model_validate(data), VULNLAB.path, "b" * 64)
+
+
+@pytest.mark.parametrize(
+    "plant",
+    [
+        "ln -s /etc/passwd build/hdrcat",
+        "ln -s ../../../../../../../../etc/passwd include/x.h",
+        "ln -s / include/root",
+        "mkfifo include/fifo",
+    ],
+)
+def test_links_left_in_out_by_a_hostile_build_are_refused(engine, tmp_path, plant):
+    git_dir, commit = _vulnlab_repo(tmp_path)
+    cache = tmp_path / "cache"
+    loaded = _hostile(
+        [
+            "mkdir -p build include",
+            "touch build/libhdr.a",
+            plant,
+            "[ -L build/hdrcat ] || touch build/hdrcat",
+        ]
+    )
+    with GitRepo(git_dir) as repo, pytest.raises(build.BuildFailedError, match="not a regular"):
+        build.build(repo, commit, loaded, engine, cache_root=cache)
+    assert build.load_cached(build.build_dir(loaded, commit, cache)) is None
+    assert list((cache / "repro" / "tmp").iterdir()) == []  # the scratch tree is gone
+
+
+def test_scratch_is_removed_even_when_the_build_skips_its_exit_trap(engine, tmp_path):
+    """A build that drops the trap and locks its directories still leaves nothing behind."""
+    git_dir, commit = _vulnlab_repo(tmp_path)
+    cache = tmp_path / "cache"
+    loaded = _hostile(
+        [
+            "trap - EXIT",
+            "mkdir -p build include/deep/er && touch build/hdrcat build/libhdr.a",
+            "touch include/deep/er/f && chmod 0500 include/deep/er include/deep include",
+            "cp -R include /out/locked && chmod 0500 /out/locked/deep/er /out/locked/deep"
+            " /out/locked && exit 3",
+        ]
+    )
+    with GitRepo(git_dir) as repo, pytest.raises(build.BuildFailedError, match="exited with 3"):
+        build.build(repo, commit, loaded, engine, cache_root=cache)
+    assert list((cache / "repro" / "tmp").iterdir()) == []
+
+
+def test_scrub_container_empties_a_tree_the_host_cannot_delete(engine, tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    out.chmod(0o777)
+    locked = (
+        "mkdir -p /out/a/b /out/.hidden && touch /out/a/b/f /out/.hidden/g /out/..x"
+        " && chmod 0500 /out/a/b /out/a /out/.hidden"
+    )
+    spec = ContainerSpec(
+        image=IMAGE,
+        cmd=("/bin/sh", "-c", locked),
+        mounts=(sandbox.Mount(out, "/out", read_only=False),),
+        limits=Limits(pids=PIDS),
+    )
+    assert sandbox.run_container(engine, spec, timeout_s=60).exit_code == 0
+    assert (out / "a" / "b" / "f").exists()
+    result = sandbox.run_container(engine, build.scrub_spec(IMAGE, out), timeout_s=60)
+    assert result.exit_code == 0
+    assert list(out.iterdir()) == []
 
 
 REAL_PROJECTS = [

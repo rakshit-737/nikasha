@@ -81,6 +81,15 @@ machine either.
 5. Outputs are cached under `<cache_dir>/repro/builds/<recipe_id>/<sha256[:16]>/<commit>/`,
    keyed by `(recipe_id, recipe_sha256, commit)`. Any edit to the recipe file changes the
    key. `complete.json` marks a finished build.
+6. `/out` is hostile: it was written by project code. The host copies it into a private
+   staging directory without following any link (see Caveats). Files keep only their
+   executable bit, so setuid, setgid and group or other write bits never reach the cache.
+7. The staging directory is renamed into place under a per-key lock file
+   (`.<commit>.lock`, released by the OS when the process exits). Two builds of the same
+   key can run at once: the first complete build wins, and the other becomes a cache hit.
+   A complete build is never removed; only an incomplete leftover from a crash is replaced.
+8. The scratch directory is always removed, whether the build succeeded or not (see
+   Caveats).
 
 Building the recipe image pulls a base image, so it needs `--online` (P3). Without that flag,
 Nikasha prints the `build` command for you to run yourself.
@@ -92,7 +101,7 @@ Every PoC runs in a fresh container with these flags:
 ```
 run --rm --init --pull never --name <name>
     --network none --read-only [--read-only-tmpfs=false  (podman only)]
-    --tmpfs /tmp:rw,size=64m --tmpfs /work:rw,exec,size=256m
+    --tmpfs /tmp:rw,size=64m,mode=1777 --tmpfs /work:rw,exec,size=256m,mode=1777
     --cap-drop ALL --security-opt no-new-privileges        (podman)
                    --security-opt no-new-privileges=true   (docker)
     --pids-limit 256 --memory 2g --cpus 2 --user 65534:65534 --ulimit core=0
@@ -109,7 +118,15 @@ These flags differ from the SPEC list in a few places. The per-engine difference
 Limits come from the recipe's `limits`.
 
 - **Timeout.** A wall-clock timeout kills the container (`kill`, then `rm -f`) and marks
-  the run `timed_out`.
+  the run `timed_out`. `--timeout` overrides the recipe's `run.timeout_s` and must be
+  greater than 0 and at most 3600 seconds (the schema's maximum); anything else, including
+  `nan` and `inf`, is refused.
+- **Terminal output.** The text view prints the last 40 lines of the PoC's stderr. It is
+  hostile, so every C0 and C1 control character except tab and newline (ESC, CSI, OSC, BEL,
+  DEL and so on) and every bidirectional override is shown as a visible `\xNN` or `\uNNNN`
+  escape, and Rich markup, emoji codes and highlighting are off. A PoC cannot clear the
+  screen, set the title, plant an OSC 8 link or write the clipboard (OSC 52). `--json`
+  output escapes control characters as JSON always does.
 - **Output cap.** Each stream is capped at `limits.output_bytes` (1 MB by default). The
   rest is read and discarded so the engine never blocks, and the run is marked `truncated`.
 - **Staging.** The PoC is copied into a private staging directory. Symbolic links are never
@@ -129,14 +146,21 @@ checks the effect, not the flag:
 
 - refusal without an engine;
 - network egress fails (only `lo` exists);
-- a fork bomb is contained (a fork counter stops below the pids limit, and the engine still
-  answers afterwards);
+- a fork bomb is contained (a fork counter stops below the pids limit; a shell fork bomb
+  is refused forks and burns out long before its timeout; its container is gone and the
+  engine still answers afterwards);
 - writes to the rootfs fail with `Read-only file system`;
 - the process runs as uid and gid 65534, with `NoNewPrivs: 1` and an empty `CapEff`;
 - a timeout kills the container, and no container with its name is left behind.
 
 The file also checks output truncation and runs vulnlab end to end: build, cache hit, and
 the heap overflow from `examples/reports/genuine_hdr_overflow.md` reproduced under ASan.
+Hostile builds are covered too: symlinks (absolute, relative, to `/`) and FIFOs left in
+`/out` refuse the build and cache nothing, and a build that drops its exit trap and locks
+its directories still leaves no scratch behind.
+
+`.github/workflows/sandbox.yml` runs this suite on docker (ubuntu) for every push to `main`
+and every pull request.
 
 These tests need a real engine. They are marked `sandbox`, which the default run excludes.
 Run them with:
@@ -150,12 +174,13 @@ In a sandbox run, a missing engine **fails** the suite rather than skipping it.
 ## Caveats
 
 - The build runs as uid 65534. On the host that uid is `nobody` (rootful docker) or a
-  subordinate uid (rootless podman), so the host user could not delete the files it writes
-  to `/out`. The build script therefore starts with an `EXIT` trap that runs
-  `chmod -R a+rwX /out`. Nikasha copies the outputs into the cache as the host user, so
-  you always own the cache. If a build is killed before the trap runs, leftovers can
-  remain in `<cache>/repro/tmp`. Remove them with `podman unshare rm -rf` (podman) or as
-  root (docker).
+  subordinate uid (rootless podman), so the host user cannot delete a directory the build
+  creates in `/out`. The build script therefore starts with an `EXIT` trap that runs
+  `chmod -R a+rwX /out`. That trap does not run when a timed-out build is killed, and a
+  hostile build can remove it. When the host cannot delete `/out`, Nikasha starts one more
+  container from the same image, with the same hardened flags and only `/out` mounted,
+  which makes every entry writable and deletes it as the uid that wrote it. Nikasha copies
+  the outputs into the cache as the host user, so you always own the cache.
 - Build outputs must be regular files and directories. A symlink, device, FIFO or socket
   in `/out` refuses the build, because the host never follows a link the build left behind.
 - Crash-signature matching (SPEC §13.5) is a separate module (`repro/signature.py`).

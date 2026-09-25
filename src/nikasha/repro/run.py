@@ -25,6 +25,8 @@ from nikasha.repro.recipes import ARGS_PLACEHOLDER, FILE_PLACEHOLDER, Recipe, Ru
 MAX_POC_BYTES = 64 * 1024 * 1024
 MAX_POC_FILES = 1000
 MAX_ARGS = 256
+#: Upper bound of a PoC run's wall-clock timeout (the recipe schema's own maximum).
+MAX_TIMEOUT_S = 3600.0
 _SAFE_NAME = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.+")
 _HARNESS_NAME = "poc.c"
 _FALLBACK_NAME = "poc.bin"
@@ -177,6 +179,8 @@ def run_poc(
     cache_root: Path | None = None,
 ) -> ReproRun:
     """Stage ``poc``, run it once in a fresh container, and return the capped result."""
+    if timeout_s is not None and not 0 < timeout_s <= MAX_TIMEOUT_S:
+        raise PocError(f"the PoC timeout must be > 0 and <= {MAX_TIMEOUT_S:g} seconds")
     chosen = choose_kind(recipe, poc, kind)
     scratch_root = ensure_private_dir((cache_root or cache_dir()) / "repro" / "tmp")
     with tempfile.TemporaryDirectory(dir=scratch_root) as tmp:
@@ -203,4 +207,12 @@ def run_poc(
     )
 
 
-__all__ = ["PocError", "ReproRun", "choose_kind", "poc_command", "run_poc", "stage_poc"]
+__all__ = [
+    "MAX_TIMEOUT_S",
+    "PocError",
+    "ReproRun",
+    "choose_kind",
+    "poc_command",
+    "run_poc",
+    "stage_poc",
+]

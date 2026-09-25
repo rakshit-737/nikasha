@@ -130,3 +130,18 @@ def test_run_poc_refuses_without_an_engine(tmp_path, monkeypatch):
     engine = run.sandbox.EngineInfo("docker", False, error="not found on PATH")
     with pytest.raises(run.sandbox.NoEngineError):
         run.run_poc(engine, VULNLAB, tmp_path, poc, cache_root=tmp_path / "cache")
+
+
+@pytest.mark.parametrize("timeout", [0.0, -1.0, 3601.0, float("nan"), float("inf")])
+def test_run_poc_refuses_out_of_range_timeouts(tmp_path, timeout):
+    poc = tmp_path / "p.txt"
+    poc.write_bytes(b"x")
+    with pytest.raises(run.PocError, match="timeout"):
+        run.run_poc(
+            run.sandbox.EngineInfo("docker", True),
+            VULNLAB,
+            tmp_path,
+            poc,
+            timeout_s=timeout,
+            cache_root=tmp_path / "cache",
+        )
