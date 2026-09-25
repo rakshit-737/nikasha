@@ -90,6 +90,8 @@ _ELISION_RE = re.compile(
 )
 #: A SUMMARY's body before `` in func``: the bug type, then the location.
 _SUMMARY_FIELDS = 2
+#: The ``#N`` a frame line starts with.
+_FRAME_NUMBER_RE = re.compile(r"\A#(\d{1,6})\b")
 #: What ASan prints in place of a stack it has no frames for (``malloc_context_size=0``).
 _EMPTY_STACK = "<empty stack>"
 
@@ -118,10 +120,20 @@ class Pasted(NamedTuple):
     trimmed: bool = False
     #: Whether the sanitizer printed ``<empty stack>`` for a stack it could not unwind.
     empty_stack: bool = False
+    #: Whether some cut could have removed a whole stack. A cut is confined only when it
+    #: sits between two frames of the crash stack (the first run of frames, printed before
+    #: the region line and every allocation or free stack) whose numbering runs on across
+    #: it; any other cut, including one that opens or closes the paste, is loose.
+    loose_cut: bool = False
 
 
 #: No cuts and no empty stacks: what a rule assumes when it is given no pasted text.
 NOTHING_PASTED = Pasted()
+
+
+def _frame_number(line: str) -> int | None:
+    match = _FRAME_NUMBER_RE.match(line)
+    return int(match.group(1)) if match else None
 
 
 def pasted(claim: TraceClaim) -> Pasted:
@@ -133,19 +145,32 @@ def pasted(claim: TraceClaim) -> Pasted:
         if frame.raw.strip()
     }
     after: set[str] = set()
-    pending = trimmed = empty = False
+    pending = trimmed = empty = loose = seen = False
+    # Inside the first unbroken run of frames and cut markers: the crash stack, which a
+    # sanitizer prints before the region line and so before every allocation or free stack.
+    first_run = True
+    last_index: int | None = None
     for span in claim.spans:
         for line in span.text.split("\n"):
             stripped = line.strip()
             if stripped in raws:
+                index = _frame_number(stripped)
                 if pending:
                     after.add(stripped)
-                pending = False
+                    # Confined: the numbering runs on inside the crash stack, so the cut
+                    # removed crash frames and no whole stack.
+                    runs_on = last_index is not None and index is not None and index > last_index
+                    loose = loose or not (first_run and runs_on)
+                pending, seen, last_index = False, True, index
             elif _ELISION_RE.match(line):
                 pending = trimmed = True
-            elif stripped == _EMPTY_STACK:
-                empty = True
-    return Pasted(after_elision=frozenset(after), trimmed=trimmed, empty_stack=empty)
+            else:
+                first_run = first_run and not seen
+                empty = empty or stripped == _EMPTY_STACK
+    loose = loose or pending  # a trailing cut may have dropped every stack after it
+    return Pasted(
+        after_elision=frozenset(after), trimmed=trimmed, empty_stack=empty, loose_cut=loose
+    )
 
 
 # --- formatting helpers ------------------------------------------------------------------
@@ -411,10 +436,12 @@ def _stacks_present(trace: TraceData, paste: Pasted = NOTHING_PASTED) -> Verdict
     Gated on the trace reaching past where those stacks belong: a sanitizer prints them
     between the region line and the SUMMARY, so only a trace carrying *both* of those can be
     missing one. A reporter who trimmed the paste after the region line is not contradicting
-    themselves (P4), and neither is one who marked a cut (``...``) or a report where ASan
-    itself printed ``<empty stack>`` (``malloc_context_size=0``).
+    themselves (P4), and neither is one who marked a cut (``...``) that could have removed a
+    whole stack, or a report where ASan itself printed ``<empty stack>``
+    (``malloc_context_size=0``). A cut between two frames of one stack removed frames of that
+    stack only, so it excuses nothing else (``Pasted.loose_cut``).
     """
-    if paste.trimmed or paste.empty_stack:
+    if paste.loose_cut or paste.empty_stack:
         return NOT_CHECKABLE
     bug_type = (trace.bug_type or "").lower()
     wants_alloc = _expects_alloc_stack(bug_type)

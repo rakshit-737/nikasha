@@ -473,3 +473,36 @@ def test_an_empty_allocation_stack_is_not_a_missing_one(make_ctx: MakeContext) -
     (evidence,) = _run(make_ctx, [trace])
     assert evidence.outcome == "SUPPORTS"
     assert "stacks_present" not in evidence.details["rules_checked"]
+
+
+def _without_allocation_stack(text: str) -> str:
+    head, _, rest = text.partition("allocated by thread T0 here:\n")
+    _, _, tail = rest.partition("\n\n")
+    return f"{head}{tail}"
+
+
+def test_a_cut_inside_the_crash_stack_does_not_excuse_a_missing_allocation_stack(
+    make_ctx: MakeContext,
+) -> None:
+    """A cut between two crash frames removed crash frames, not a whole later stack."""
+    lines = _without_allocation_stack(_fixture_text()).split("\n")
+    first_frame_2 = next(i for i, line in enumerate(lines) if line.lstrip().startswith("#2 "))
+    lines[first_frame_2 : first_frame_2 + 2] = ["    ..."]
+    trace = _pasted_claim("\n".join(lines))
+    assert trace.alloc_frames == ()
+    (evidence,) = _run(make_ctx, [trace])
+    assert "stacks_present" in _violated(evidence)
+    assert "frame_indices" not in _violated(evidence)
+
+
+def test_a_cut_after_the_crash_stack_excuses_a_missing_allocation_stack(
+    make_ctx: MakeContext,
+) -> None:
+    """A cut that closes a stack may have removed every stack printed after it (P4)."""
+    lines = _without_allocation_stack(_fixture_text()).split("\n")
+    last_crash = max(i for i, line in enumerate(lines) if line.lstrip().startswith("#"))
+    lines.insert(last_crash + 1, "    ...")
+    trace = _pasted_claim("\n".join(lines))
+    assert trace.alloc_frames == ()
+    (evidence,) = _run(make_ctx, [trace])
+    assert "stacks_present" not in evidence.details["rules_checked"]

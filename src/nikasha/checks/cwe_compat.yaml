@@ -23,6 +23,28 @@
 # (extract/traces/ubsan.py), Valgrind's Memcheck kinds (extract/traces/valgrind.py) and the
 # common prose spellings.
 #
+# Hierarchy review (CWE 4.x, research view CWE-1000), and why each family reads as it does:
+#   * Overflow family: CWE-119 is the pillar-level parent; CWE-787 (write) and CWE-125 (read)
+#     are its main children; CWE-788 (after end of buffer) sits under 119, and CWE-121
+#     (stack) and CWE-122 (heap) are children of both 787 and 788. CWE-120 is the classic
+#     unchecked copy under 787/119. Every overflow family accepts the whole chain.
+#   * Heap vs stack (CWE-122 vs CWE-121) is NOT treated as a contradiction. The storage class
+#     is an easy slip (NVD itself has relabelled records), the generic "buffer-overflow"
+#     alias names neither, and a global overflow is formally neither but is routinely filed
+#     under one of them. A wrong CWE child is a question for the reporter, not evidence that
+#     the report is ungrounded (P4).
+#   * ASan's "stack-overflow" is stack *exhaustion* (CWE-674/400), but reporters constantly
+#     cite CWE-121 for it because of the name, so 119 and 121 are accepted there too.
+#   * Use-after-free: CWE-416 is a child of CWE-825 (expired pointer dereference), which in
+#     turn is under CWE-672 (operation on a resource after expiration). CWE-415 (double free)
+#     shares both parents, so double-free accepts 825 and 672 as well. The faulting access
+#     of a use-after-free is a read or a write, so 125 and 787 are accepted too.
+#   * Uninitialised memory: CWE-908 and CWE-457 are under CWE-665 (improper initialization).
+#   * Integer bugs: 190/191 lead to buffer overflows (680), including stack ones (121), and
+#     truncating conversions are CWE-197.
+# What stays incompatible are genuine category errors: a web or injection CWE for a memory
+# error, a memory CWE for an injection, a leak CWE for an overflow, and so on.
+#
 # CWE titles are abbreviated from the CWE list (cwe.mitre.org), CWE 4.x.
 version: 1
 
@@ -58,6 +80,7 @@ cwes:
   190: Integer Overflow or Wraparound
   191: Integer Underflow (Wrap or Wraparound)
   193: Off-by-one Error
+  197: Numeric Truncation Error
   200: Exposure of Sensitive Information to an Unauthorized Actor
   252: Unchecked Return Value
   306: Missing Authentication for Critical Function
@@ -76,6 +99,8 @@ cwes:
   562: Return of Stack Variable Address
   590: Free of Memory not on the Heap
   601: URL Redirection to Untrusted Site ("Open Redirect")
+  665: Improper Initialization
+  672: Operation on a Resource after Expiration or Release
   611: Improper Restriction of XML External Entity Reference
   674: Uncontrolled Recursion
   680: Integer Overflow to Buffer Overflow
@@ -105,16 +130,17 @@ bug_types:
   # --- memory safety (ASan, Valgrind, GDB) ------------------------------------------------
   heap_buffer_overflow:
     aliases: [heap-buffer-overflow, heap-overflow, heap-corruption, heap-buffer-overrun]
-    compatible: [119, 120, 122, 124, 125, 126, 127, 128, 131, 170, 190, 191, 193, 680, 787,
-                 788, 805]
+    compatible: [119, 120, 121, 122, 124, 125, 126, 127, 128, 131, 170, 190, 191, 193, 680,
+                 787, 788, 805]
   stack_buffer_overflow:
     aliases: [stack-buffer-overflow, dynamic-stack-buffer-overflow, stack-buffer-underflow,
               stack-overflow-write, buffer-overflow, buffer-overrun]
-    compatible: [119, 120, 121, 124, 125, 126, 127, 128, 131, 170, 190, 191, 193, 562, 680,
-                 787, 788, 805]
+    compatible: [119, 120, 121, 122, 124, 125, 126, 127, 128, 131, 170, 190, 191, 193, 562,
+                 680, 787, 788, 805]
   global_buffer_overflow:
     aliases: [global-buffer-overflow, global-overflow]
-    compatible: [119, 120, 125, 126, 127, 128, 131, 170, 190, 191, 193, 680, 787, 788, 805]
+    compatible: [119, 120, 121, 122, 124, 125, 126, 127, 128, 131, 170, 190, 191, 193, 680,
+                 787, 788, 805]
   out_of_bounds_access:
     aliases: [invalid-read, invalid-write, out-of-bounds-read, out-of-bounds-write, oob-read,
               oob-write, container-overflow, intra-object-overflow, array-index-out-of-bounds]
@@ -123,11 +149,11 @@ bug_types:
   use_after_free:
     aliases: [heap-use-after-free, use-after-free, use-after-poison, invalid-free,
               stack-use-after-return, stack-use-after-scope]
-    compatible: [119, 415, 416, 562, 590, 763, 825]
+    compatible: [119, 125, 415, 416, 562, 590, 672, 763, 787, 825]
   double_free:
     aliases: [double-free, attempting-double-free, alloc-dealloc-mismatch,
               new-delete-type-mismatch, mismatched-free]
-    compatible: [415, 416, 590, 762, 763]
+    compatible: [119, 415, 416, 590, 672, 762, 763, 825]
   memory_leak:
     aliases: [detected-memory-leaks, memory-leaks, memory-leak, leak-definitely-lost,
               leak-indirectly-lost, leak-possibly-lost, leak-still-reachable]
@@ -135,20 +161,20 @@ bug_types:
   uninitialized_memory:
     aliases: [uninitialised-value, uninitialized-value, use-of-uninitialized-value,
               conditional-jump-on-uninitialised-value, msan-use-of-uninitialized-value]
-    compatible: [200, 457, 824, 908]
+    compatible: [200, 457, 665, 824, 908]
   null_or_wild_dereference:
     aliases: [segv, sigsegv, sigbus, null-pointer-dereference, null-deref, nullptr-dereference,
               access-violation, wild-pointer-dereference]
     compatible: [119, 125, 416, 476, 690, 787, 822, 824, 825, 908]
   stack_exhaustion:
     aliases: [stack-overflow, stack-exhaustion, infinite-recursion, sigstkflt]
-    compatible: [400, 674, 770]
+    compatible: [119, 121, 400, 674, 770]
 
   # --- arithmetic and typing (UBSan) ------------------------------------------------------
   integer_overflow:
     aliases: [signed-integer-overflow, unsigned-integer-overflow, integer-overflow,
               integer-underflow, implicit-conversion, shift, pointer-overflow]
-    compatible: [119, 120, 122, 128, 131, 190, 191, 193, 680, 681, 704, 787]
+    compatible: [119, 120, 121, 122, 125, 128, 131, 190, 191, 193, 197, 680, 681, 704, 787]
   divide_by_zero:
     aliases: [integer-divide-by-zero, float-divide-by-zero, divide-by-zero, sigfpe]
     compatible: [369]

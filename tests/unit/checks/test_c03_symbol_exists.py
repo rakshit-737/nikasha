@@ -233,7 +233,19 @@ class TestP4NeverSaysNeverOnIncompleteEvidence:
         assert evidence.outcome == "NEUTRAL"
         assert evidence.strength == 0.0
         assert evidence.details["uncertain_releases"] == ["v1.2.0"]
+        assert evidence.details["defined_in"] == []
         assert "did not parse cleanly" in evidence.summary
+
+    def test_an_uncertain_outcome_still_names_the_releases_that_define_it(
+        self, make_ctx: MakeContext
+    ) -> None:
+        c = claim(SymbolClaim, name="hdr_find", role="core")
+        ctx = make_ctx(claims=[c])
+        _seed_uncertain(ctx, "hdr_find", release="v1.2.0", path="src/hdr.c")
+        (evidence,) = SymbolExists().run(ctx, [c])
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.details["outcome"] == "uncertain"
+        assert evidence.details["defined_in"] == ["v1.3.0"]
 
     def test_a_generated_file_is_never_judged(self, make_ctx: MakeContext) -> None:
         c = claim(SymbolClaim, name=NEVER, role="core", context_path="src/config.h")

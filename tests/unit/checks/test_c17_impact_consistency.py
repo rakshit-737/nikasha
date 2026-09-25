@@ -20,6 +20,7 @@ from nikasha.checks.c17_impact_consistency import (
     ImpactConsistency,
     base_score,
     echo,
+    modifying_metrics,
     parse_vector,
     roundup,
     severity_band,
@@ -435,3 +436,21 @@ def test_not_defined_modifiers_still_leave_a_mismatch_refutable(make_ctx: MakeCo
     [ev] = _run(make_ctx, [c])
     assert ev.outcome == "REFUTES"
     assert ev.details["finding"] == "score_mismatch"
+
+
+def test_an_unknown_metric_key_is_not_a_modifier() -> None:
+    vector = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/ZZ:Q"
+    assert modifying_metrics(vector, "3.1") == []
+    assert modifying_metrics(vector + "/E:U/MAV:L", "3.1") == ["E", "MAV"]
+
+
+def test_modifier_keys_follow_the_vector_version() -> None:
+    assert modifying_metrics("AV:N/AC:L/Au:N/C:P/I:P/A:P/CDP:H/MAV:L", "2.0") == ["CDP"]
+    assert modifying_metrics("CVSS:3.1/AV:N/CDP:H/MAV:L", "3.1") == ["MAV"]
+
+
+def test_a_garbage_key_does_not_shield_a_score_mismatch(make_ctx: MakeContext) -> None:
+    vector = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/ZZ:Q"
+    c = claim(ImpactClaim, cvss_vector=vector, cvss_version="3.1", cvss_score=5.0)
+    [ev] = _run(make_ctx, [c])
+    assert ev.outcome == "REFUTES"

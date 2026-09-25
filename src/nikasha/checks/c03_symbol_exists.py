@@ -249,7 +249,11 @@ class SymbolExists(BaseCheck):
                 f" {', '.join(timeline.uncertain_releases)} in files that did not parse"
                 " cleanly, so its absence is not established",
                 details=details
-                | {"outcome": "uncertain", "uncertain_releases": timeline.uncertain_releases},
+                | {
+                    "outcome": "uncertain",
+                    "uncertain_releases": timeline.uncertain_releases,
+                    "defined_in": [p.release for p in timeline.presence if p.defined],
+                },
             )
 
         if timeline.ever_defined:
