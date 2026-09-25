@@ -40,6 +40,7 @@ from nikasha.code.facts import SymbolDef
 from nikasha.code.generated import GeneratedMatch
 from nikasha.code.literal import literal_search
 from nikasha.code.timeline import Timeline
+from nikasha.errors import ExternalToolError
 from nikasha.model.claims import Claim, ClaimKind, SymbolClaim
 from nikasha.model.evidence import CodeLocation, Evidence
 
@@ -88,7 +89,15 @@ class SymbolExists(BaseCheck):
                 continue
             # A timeline greps every release; stop rather than overrun the budget, but say
             # so for every claim left behind instead of dropping it silently (P6).
-            evidence = self._budget_spent(claim) if ctx.expired() else self._one(ctx, claim)
+            if ctx.expired():
+                evidence: Evidence | None = self._budget_spent(claim)
+            else:
+                try:
+                    evidence = self._one(ctx, claim)
+                except ExternalToolError as exc:
+                    # A grep or pickaxe git could not finish is not "undefined": say so for
+                    # this claim alone and keep judging the others (P4).
+                    evidence = self._search_failed(claim, exc)
             if evidence is not None:
                 out.append(evidence)
         return out
@@ -358,6 +367,19 @@ class SymbolExists(BaseCheck):
         )
 
     # --- helpers --------------------------------------------------------------------------
+
+    def _search_failed(self, claim: SymbolClaim, exc: ExternalToolError) -> Evidence:
+        name = claim.name.strip()
+        return self._neutral(
+            claim,
+            summary=f"{name} could not be searched for: {exc}, so nothing is concluded",
+            details={
+                "symbol": name,
+                "outcome": "search_failed",
+                "incomplete": str(exc),
+                "history_complete": False,
+            },
+        )
 
     def _neutral(
         self,

@@ -243,6 +243,10 @@ class CodeIndex:
 
         Uses the full index when the commit is indexed; otherwise greps for the name and
         parses only the matching files (lazy strategy).
+
+        Raises :class:`~nikasha.errors.ExternalToolError` when that grep fails. An empty list
+        would read as "not defined" and could refute a true claim, so a failed search is
+        never degraded to one; callers treat it as not searched (P4).
         """
         if self.is_indexed(commit):
             tree = self.tree_of(commit)

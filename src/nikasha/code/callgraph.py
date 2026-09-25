@@ -23,6 +23,7 @@ from typing import Literal
 
 from nikasha.code.facts import CallSite, MacroDef, SymbolDef
 from nikasha.code.index import CodeIndex
+from nikasha.errors import ExternalToolError
 
 EdgeKind = Literal["direct", "macro", "inlined_2hop", "indirect_possible", "none"]
 SMALL_FUNCTION_LINES = 30
@@ -108,7 +109,23 @@ def _two_hop(index: CodeIndex, commit: str, calls: CallList, target: str) -> lis
 
 def _indirect(index: CodeIndex, commit: str, calls: CallList, target: str) -> list[Evidence]:
     indirect_calls = [(p, c) for p, c in calls if c.indirect]
-    if not indirect_calls or not _address_taken(index, commit, target):
+    if not indirect_calls:
+        return []
+    try:
+        taken = _address_taken(index, commit, target)
+    except ExternalToolError:
+        # The search for the callee's address did not finish, so "cannot call" is unknown:
+        # the edge stays possible rather than becoming ``none`` (P4).
+        return [
+            Evidence(
+                p,
+                c.line,
+                f"indirect call via {c.callee} (where {target} is address-taken could not"
+                " be searched, so the edge is not ruled out)",
+            )
+            for p, c in indirect_calls[:5]
+        ]
+    if not taken:
         return []
     return [Evidence(p, c.line, f"indirect call via {c.callee}") for p, c in indirect_calls[:5]]
 
@@ -122,7 +139,11 @@ _STEPS = (
 
 
 def edge(index: CodeIndex, commit: str, caller: str, callee: str) -> Edge:
-    """Classify the call edge ``caller → callee`` at ``commit`` (see module docstring)."""
+    """Classify the call edge ``caller → callee`` at ``commit`` (see module docstring).
+
+    Raises :class:`~nikasha.errors.ExternalToolError` when git cannot finish a definition
+    search (lazy index): the caller must treat the edge as not searched, never as ``none``.
+    """
     target = _bare(callee)
     callers = _functions(index, commit, caller)
     if not callers:

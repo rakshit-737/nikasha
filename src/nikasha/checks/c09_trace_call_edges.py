@@ -36,7 +36,7 @@ from nikasha.code.callgraph import EdgeKind, edge
 from nikasha.code.callgraph import Evidence as CallSite
 from nikasha.code.facts import FileFacts
 from nikasha.code.trace_forensics import app_frames, bare_function
-from nikasha.errors import NikashaError
+from nikasha.errors import ExternalToolError, NikashaError
 from nikasha.model.claims import Claim, ClaimKind, Frame, TraceClaim
 from nikasha.model.evidence import CodeLocation, Evidence, Outcome
 
@@ -157,7 +157,12 @@ class TraceCallEdges(BaseCheck):
         for claim in claims:
             if not isinstance(claim, TraceClaim):
                 continue
-            evidence = self._one(ctx, claim)
+            try:
+                evidence = self._one(ctx, claim)
+            except ExternalToolError as exc:
+                # A grep git could not finish is not a missing edge: say so for this trace
+                # alone and keep judging the others (P4).
+                evidence = _search_failed(claim, exc)
             if evidence is not None:
                 out.append(evidence)
         return out
@@ -214,6 +219,24 @@ class TraceCallEdges(BaseCheck):
             details=details,
             locations=walk.locations[:MAX_LOCATIONS],
         )
+
+
+def _search_failed(claim: TraceClaim, exc: ExternalToolError) -> Evidence:
+    """NEUTRAL at strength 0: a failed search holds no finding either way (P4)."""
+    return make_evidence(
+        check_id=CHECK_ID,
+        group=GROUP,
+        claims=[claim],
+        outcome="NEUTRAL",
+        strength=0.0,
+        summary=f"the trace's call edges could not be searched for: {exc}, so nothing is concluded",
+        details={
+            "outcome": "search_failed",
+            "incomplete": str(exc),
+            "history_complete": False,
+            "trace_format": claim.format,
+        },
+    )
 
 
 def _walk(ctx: CheckContext, trace: TraceClaim) -> _Walk:

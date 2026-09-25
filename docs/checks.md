@@ -114,6 +114,7 @@ Applies to: `symbol`
 | `never_in_history_core` | -3.00 |
 | `never_in_history_supporting` | -1.50 |
 | `referenced_only` | +0.00 |
+| `search_failed` | — (not scored) |
 | `uncertain` | — (not scored) |
 
 ## C04
@@ -192,6 +193,7 @@ Applies to: `snippet`
 | `other_release_only` | -0.50 |
 | `partial` | +0.50 |
 | `ref_search_capped` | — (not scored) |
+| `search_failed` | — (not scored) |
 | `search_incomplete` | — (not scored) |
 | `small_snippet_multiplier` | +0.30 |
 | `too_large` | — (not scored) |
@@ -227,6 +229,7 @@ Applies to: `trace`
 | `indirect_possible` | +0.00 |
 | `missing_edge` | -1.00 |
 | `missing_edge_cap` | -3.00 |
+| `search_failed` | — (not scored) |
 | `truncated` | — (not scored) |
 
 ## C10
