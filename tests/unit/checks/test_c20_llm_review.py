@@ -382,7 +382,13 @@ def test_the_request_timeout_is_bounded_by_the_check_budget(make_ctx: MakeContex
 
 
 def test_summaries_describe_code_never_people(make_ctx: MakeContext) -> None:
-    answers = [SUPPORTED, REFUTED, UNCLEAR, {**SUPPORTED, "cited_lines": [1]}, LLMError("x")]
+    answers: list[dict[str, Any] | Exception] = [
+        SUPPORTED,
+        REFUTED,
+        UNCLEAR,
+        {**SUPPORTED, "cited_lines": [1]},
+        LLMError("x"),
+    ]
     for answer in answers:
         (evidence,) = _run(make_ctx, [_bounds()], FakeProvider(answer))
         text = evidence.summary.lower()

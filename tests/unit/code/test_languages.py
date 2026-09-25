@@ -31,12 +31,12 @@ from nikasha.code.languages import Lang, detect_language
         ("SRC/MAIN.C", Lang.C),  # case-insensitive extensions
     ],
 )
-def test_extension(path, lang):
+def test_extension(path: str, lang: Lang) -> None:
     assert detect_language(path) is lang
 
 
 @pytest.mark.parametrize("path", ["README.md", "Makefile", "data.json", "noext", "x.h.orig"])
-def test_unknown(path):
+def test_unknown(path: str) -> None:
     assert detect_language(path) is None
 
 
@@ -55,7 +55,7 @@ def test_plain_header_is_c() -> None:
         b"struct A {\nprivate:\n  int x;\n};\n",
     ],
 )
-def test_header_with_cpp_constructs_is_cpp(head):
+def test_header_with_cpp_constructs_is_cpp(head: bytes) -> None:
     assert detect_language("include/x.h", head) is Lang.CPP
 
 
@@ -74,7 +74,7 @@ def test_header_override_from_config() -> None:
         (b"#!/usr/bin/php\n<?php\n", Lang.PHP),
     ],
 )
-def test_shebang(head, lang):
+def test_shebang(head: bytes, lang: Lang) -> None:
     assert detect_language("bin/tool", head) is lang
 
 
@@ -86,7 +86,7 @@ def test_shebang_does_not_override_extension() -> None:
     "head",
     [b"#!/bin/sh\necho hi\n", b"#!\n", b"#!\xff\xfe\x00garbage", b"", b"\x00\x01\x02"],
 )
-def test_unknown_or_garbage_script(head):
+def test_unknown_or_garbage_script(head: bytes) -> None:
     assert detect_language("bin/tool", head) is None
 
 

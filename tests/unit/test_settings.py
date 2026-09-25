@@ -20,6 +20,7 @@ from types import SimpleNamespace
 import pytest
 from jinja2.exceptions import SecurityError
 from jinja2.sandbox import ImmutableSandboxedEnvironment
+from pydantic import BaseModel
 
 from nikasha import settings as settings_module
 from nikasha.checks.strengths import default_strengths
@@ -51,7 +52,7 @@ DOCS = ROOT / "docs" / "configuration.md"
 _KEY = "C03.never_in_history_core"
 EXAMPLE = ROOT / "examples" / "nikasha.toml"
 
-SECTION_MODELS = {
+SECTION_MODELS: dict[str, type[BaseModel]] = {
     "project": ProjectSettings,
     "thresholds": ThresholdSettings,
     "scoring": ScoringSettings,
@@ -219,7 +220,7 @@ def test_full_file_round_trip(isolated: SimpleNamespace) -> None:
 def test_settings_are_frozen() -> None:
     loaded = Settings()
     with pytest.raises(Exception, match="frozen"):
-        loaded.scoring = ScoringSettings(prior=1.0)  # type: ignore[misc]
+        loaded.scoring = ScoringSettings(prior=1.0)
 
 
 def test_settings_are_hashable(isolated: SimpleNamespace) -> None:
@@ -814,7 +815,7 @@ def test_filesystem_errors_become_settings_errors(
     def denied(self: Path, *args: object, **kwargs: object) -> bool:
         if self.name == "nikasha.toml":
             raise PermissionError(13, "Permission denied")
-        return real_is_file(self, *args, **kwargs)  # type: ignore[arg-type]
+        return real_is_file(self, *args, **kwargs)
 
     monkeypatch.setattr(Path, "is_file", denied)
     with pytest.raises(SettingsError, match="cannot read") as excinfo:
@@ -835,7 +836,7 @@ def test_calibration_filesystem_errors_name_the_key(
     def denied(self: Path, *args: object, **kwargs: object) -> bool:
         if self.name == "cal.yaml":
             raise PermissionError(13, "Permission denied")
-        return real_is_file(self, *args, **kwargs)  # type: ignore[arg-type]
+        return real_is_file(self, *args, **kwargs)
 
     monkeypatch.setattr(Path, "is_file", denied)
     with pytest.raises(SettingsError, match=r"scoring\.calibration: cannot read"):

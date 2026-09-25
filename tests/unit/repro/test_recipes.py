@@ -7,6 +7,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -57,7 +58,7 @@ def test_vulnlab_matches_the_spec_example() -> None:
 
 def test_sha256_is_of_the_file_bytes() -> None:
     loaded = recipes.find_recipe("vulnlab")
-    assert loaded.sha256 == recipes.hashlib.sha256(VULNLAB).hexdigest()
+    assert loaded.sha256 == recipes.hashlib.sha256(VULNLAB).hexdigest()  # type: ignore[attr-defined]
 
 
 def _schema_props(node: dict[str, Any]) -> dict[str, Any]:
@@ -98,7 +99,7 @@ def _model_bounds(info: Any) -> dict[str, Any]:
     for meta in info.metadata:
         for kind, keyword in _BOUNDS.items():
             if isinstance(meta, kind):
-                found[keyword] = getattr(meta, dataclasses.fields(meta)[0].name)
+                found[keyword] = getattr(meta, dataclasses.fields(meta)[0].name)  # type: ignore[arg-type]
         if isinstance(meta, annotated_types.MinLen):
             found["min"] = meta.min_length
         if isinstance(meta, annotated_types.MaxLen):
@@ -189,7 +190,9 @@ FIELDS = [
 
 
 @pytest.mark.parametrize(("ref", "good", "bad", "setter"), FIELDS)
-def test_schema_patterns_and_models_accept_the_same_values(ref, good, bad, setter):
+def test_schema_patterns_and_models_accept_the_same_values(
+    ref: str, good: list[str], bad: list[str], setter: Callable[[dict[str, Any], str], None]
+) -> None:
     """The schema is the published contract: it must accept exactly what Nikasha accepts."""
     pattern = SCHEMA["$defs"][ref]["pattern"]
     for value, expected in _cases(good, bad):
@@ -261,7 +264,9 @@ def test_sandbox_and_recipes_share_one_size_grammar() -> None:
         (lambda d: d["run"].update(timeout_s=0), "timeout_s"),
     ],
 )
-def test_invalid_recipes_are_refused(mutate, message):
+def test_invalid_recipes_are_refused(
+    mutate: Callable[[dict[str, Any]], object], message: str
+) -> None:
     data = _vulnlab()
     mutate(data)
     with pytest.raises(RecipeError, match=message):
@@ -277,7 +282,7 @@ def test_non_mapping_and_bad_yaml_are_refused() -> None:
         parse_recipe(b"#" * (recipes.MAX_RECIPE_BYTES + 1))
 
 
-def test_id_must_match_file_name(tmp_path):
+def test_id_must_match_file_name(tmp_path: Path) -> None:
     path = tmp_path / "other.yaml"
     path.write_bytes(VULNLAB)
     with pytest.raises(RecipeError, match="file name"):

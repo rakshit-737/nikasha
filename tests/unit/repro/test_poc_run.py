@@ -55,7 +55,7 @@ def test_argument_limits() -> None:
         run.poc_command(KINDS["cli"], args=("x",) * (run.MAX_ARGS + 1))
 
 
-def test_stage_single_file(tmp_path):
+def test_stage_single_file(tmp_path: Path) -> None:
     poc = tmp_path / "crash input.bin"
     poc.write_bytes(b"\x00\x01")
     dest = tmp_path / "stage"
@@ -65,7 +65,7 @@ def test_stage_single_file(tmp_path):
     assert (dest / name).read_bytes() == b"\x00\x01"
 
 
-def test_stage_harness_is_named_poc_c(tmp_path):
+def test_stage_harness_is_named_poc_c(tmp_path: Path) -> None:
     poc = tmp_path / "exploit.c"
     poc.write_text("int main(void){return 0;}\n", encoding="utf-8")
     dest = tmp_path / "stage"
@@ -74,7 +74,7 @@ def test_stage_harness_is_named_poc_c(tmp_path):
     assert (dest / "poc.c").is_file()
 
 
-def test_stage_directory(tmp_path):
+def test_stage_directory(tmp_path: Path) -> None:
     src = tmp_path / "pocdir"
     (src / "sub").mkdir(parents=True)
     (src / "sub" / "a.txt").write_text("a", encoding="utf-8")
@@ -84,7 +84,9 @@ def test_stage_directory(tmp_path):
     assert (dest / "sub" / "a.txt").read_text(encoding="utf-8") == "a"
 
 
-def test_stage_refuses_missing_and_oversized(tmp_path, monkeypatch):
+def test_stage_refuses_missing_and_oversized(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     dest = tmp_path / "stage"
     dest.mkdir()
     with pytest.raises(PocError, match="does not exist"):
@@ -97,7 +99,7 @@ def test_stage_refuses_missing_and_oversized(tmp_path, monkeypatch):
 
 
 @pytest.mark.skipif(not hasattr(os, "symlink"), reason="no symlink support")
-def test_stage_refuses_symlink_and_skips_links_in_dirs(tmp_path):
+def test_stage_refuses_symlink_and_skips_links_in_dirs(tmp_path: Path) -> None:
     secret = tmp_path / "secret"
     secret.write_text("s", encoding="utf-8")
     link = tmp_path / "link"
@@ -116,29 +118,29 @@ def test_stage_refuses_symlink_and_skips_links_in_dirs(tmp_path):
     assert not (dest / "leak").exists()
 
 
-def test_run_spec_mounts_are_read_only(tmp_path):
+def test_run_spec_mounts_are_read_only(tmp_path: Path) -> None:
     spec = run.run_spec(VULNLAB, tmp_path / "b", tmp_path / "p", ("/build/hdrcat",))
     assert {(m.target, m.read_only) for m in spec.mounts} == {("/poc", True), ("/build", True)}
     assert spec.limits.output_bytes == 1024 * 1024
     assert spec.env["ASAN_OPTIONS"].startswith("abort_on_error=1")
 
 
-def test_run_poc_refuses_without_an_engine(tmp_path, monkeypatch):
+def test_run_poc_refuses_without_an_engine(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PATH", str(tmp_path))
     poc = tmp_path / "crash.bin"
     poc.write_bytes(b"x")
-    engine = run.sandbox.EngineInfo("docker", False, error="not found on PATH")
-    with pytest.raises(run.sandbox.NoEngineError):
+    engine = run.sandbox.EngineInfo("docker", False, error="not found on PATH")  # type: ignore[attr-defined]
+    with pytest.raises(run.sandbox.NoEngineError):  # type: ignore[attr-defined]
         run.run_poc(engine, VULNLAB, tmp_path, poc, cache_root=tmp_path / "cache")
 
 
 @pytest.mark.parametrize("timeout", [0.0, -1.0, 3601.0, float("nan"), float("inf")])
-def test_run_poc_refuses_out_of_range_timeouts(tmp_path, timeout):
+def test_run_poc_refuses_out_of_range_timeouts(tmp_path: Path, timeout: float) -> None:
     poc = tmp_path / "p.txt"
     poc.write_bytes(b"x")
     with pytest.raises(run.PocError, match="timeout"):
         run.run_poc(
-            run.sandbox.EngineInfo("docker", True),
+            run.sandbox.EngineInfo("docker", True),  # type: ignore[attr-defined]
             VULNLAB,
             tmp_path,
             poc,

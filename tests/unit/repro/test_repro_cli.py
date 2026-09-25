@@ -32,7 +32,7 @@ def _app() -> typer.Typer:
 APP = _app()
 
 
-def test_repro_refuses_without_an_engine(tmp_path, monkeypatch):
+def test_repro_refuses_without_an_engine(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The real refusal path: an empty PATH means no podman or docker can be found."""
     monkeypatch.setenv("PATH", str(tmp_path))
     poc = tmp_path / "crash.bin"
@@ -49,7 +49,9 @@ def test_repro_refuses_without_an_engine(tmp_path, monkeypatch):
     assert "never run on the host" in result.output
 
 
-def test_repro_refuses_a_named_engine_that_is_missing(tmp_path, monkeypatch):
+def test_repro_refuses_a_named_engine_that_is_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("PATH", str(tmp_path))
     result = runner.invoke(
         APP,
@@ -89,7 +91,7 @@ def test_recipes_validate_all_shipped() -> None:
     assert result.output.count("ok\t") == 4
 
 
-def test_recipes_validate_reports_bad_files(tmp_path):
+def test_recipes_validate_reports_bad_files(tmp_path: Path) -> None:
     bad = tmp_path / "bad.yaml"
     bad.write_text("id: bad\ntitle: x\n", encoding="utf-8")
     result = runner.invoke(APP, ["recipes", "validate", str(bad)])
@@ -98,7 +100,7 @@ def test_recipes_validate_reports_bad_files(tmp_path):
 
 
 @pytest.mark.parametrize("value", ["0", "-5", "3601", "nan", "inf"])
-def test_repro_rejects_out_of_range_timeouts(tmp_path, value):
+def test_repro_rejects_out_of_range_timeouts(tmp_path: Path, value: str) -> None:
     result = runner.invoke(
         APP,
         [
@@ -129,7 +131,7 @@ HOSTILE = (
 )
 
 
-def _fake_pipeline(monkeypatch, tmp_path):  # type: ignore[no-untyped-def]
+def _fake_pipeline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):  # type: ignore[no-untyped-def]
     """Every stage of ``repro`` replaced by a stand-in; the run's stderr is hostile."""
     from nikasha.model.evidence import CommandRecord  # noqa: PLC0415
     from nikasha.repro import build, run, sandbox  # noqa: PLC0415
@@ -165,7 +167,9 @@ def _fake_pipeline(monkeypatch, tmp_path):  # type: ignore[no-untyped-def]
     )
 
 
-def test_repro_output_never_passes_terminal_controls(tmp_path, monkeypatch):
+def test_repro_output_never_passes_terminal_controls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _fake_pipeline(monkeypatch, tmp_path)
     poc = tmp_path / "crash.bin"
     poc.write_bytes(b"x")
@@ -185,7 +189,7 @@ def test_repro_output_never_passes_terminal_controls(tmp_path, monkeypatch):
 @pytest.mark.skipif(
     sys.platform == "win32", reason="Windows file names cannot hold control characters"
 )
-def test_recipes_validate_escapes_hostile_file_names(tmp_path):
+def test_recipes_validate_escapes_hostile_file_names(tmp_path: Path) -> None:
     bad = tmp_path / "x\x1b]0;t\x07.yaml"
     bad.write_text("id: [unclosed\n", encoding="utf-8")
     result = runner.invoke(APP, ["recipes", "validate", str(bad)])

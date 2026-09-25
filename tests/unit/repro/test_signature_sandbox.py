@@ -118,7 +118,9 @@ def _c19_of(result: Any) -> Evidence:
     return cast(Evidence, evidence)
 
 
-def test_genuine_report_is_reproduced_through_the_pipeline(engine, outputs, vulnlab_repo, tmp_path):
+def test_genuine_report_is_reproduced_through_the_pipeline(
+    engine: EngineInfo, outputs: tuple[Path, Path], vulnlab_repo: Path, tmp_path: Path
+) -> None:
     repro = _run(engine, outputs, tmp_path, "poc.txt", OVERFLOW)
     assert repro.kind == "file_input"
     assert repro.exit_code == ABORT_STATUS  # the measured status the gate relies on
@@ -139,7 +141,9 @@ def test_genuine_report_is_reproduced_through_the_pipeline(engine, outputs, vuln
     assert without.verdict.label == "GROUNDED"
 
 
-def test_fabricated_report_is_not_reproduced(engine, outputs, vulnlab_repo, tmp_path):
+def test_fabricated_report_is_not_reproduced(
+    engine: EngineInfo, outputs: tuple[Path, Path], vulnlab_repo: Path, tmp_path: Path
+) -> None:
     repro = _run(engine, outputs, tmp_path, "poc.txt", OVERFLOW)
     result = check_report(
         REPORTS / "fabricated_hdr_overflow.md",
@@ -151,7 +155,9 @@ def test_fabricated_report_is_not_reproduced(engine, outputs, vulnlab_repo, tmp_
     assert result.verdict.label != "REPRODUCED"
 
 
-def test_benign_input_is_no_crash(engine, outputs, tmp_path):
+def test_benign_input_is_no_crash(
+    engine: EngineInfo, outputs: tuple[Path, Path], tmp_path: Path
+) -> None:
     repro = _run(engine, outputs, tmp_path, "poc.txt", "Host: example.test\n")
     assert repro.exit_code == 0
     assert _c19("genuine_hdr_overflow.md", repro).details["outcome"] == "no_crash"
@@ -167,7 +173,9 @@ def test_benign_input_is_no_crash(engine, outputs, tmp_path):
     ],
     ids=["forged-abort", "forged-exit-1", "bug-in-harness", "genuine-harness"],
 )
-def test_harness_runs_are_never_a_reproduction(engine, outputs, tmp_path, source, outcome):
+def test_harness_runs_are_never_a_reproduction(
+    engine: EngineInfo, outputs: tuple[Path, Path], tmp_path: Path, source: str, outcome: str
+) -> None:
     repro = _run(engine, outputs, tmp_path, "poc.c", source)
     assert repro.kind == "c_harness"
     evidence = _c19("genuine_hdr_overflow.md", repro)

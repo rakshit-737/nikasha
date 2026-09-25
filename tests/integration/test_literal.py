@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -18,12 +19,12 @@ V120 = EXPECTED["v1.2.0"]
 
 
 @pytest.fixture
-def repo(vulnlab_repo):
+def repo(vulnlab_repo: Path) -> Iterator[GitRepo]:
     with GitRepo(vulnlab_repo) as r:
         yield r
 
 
-def test_quoted_line_is_found_with_its_location(repo):
+def test_quoted_line_is_found_with_its_location(repo: GitRepo) -> None:
     result = literal_search(repo, "    char *dst = malloc(HDR_VALUE_MAX);\n", V120)
     assert result is not None
     assert result.literal == "char *dst = malloc(HDR_VALUE_MAX);"
@@ -34,14 +35,14 @@ def test_quoted_line_is_found_with_its_location(repo):
     )
 
 
-def test_literal_is_never_a_pattern_or_an_option(repo):
+def test_literal_is_never_a_pattern_or_an_option(repo: GitRepo) -> None:
     for hostile in ("--open-files-in-pager=touch /tmp/x", "-e", ".*", "dst[len]"):
         result = literal_search(repo, hostile, V120)
         assert result is not None
         assert all(hostile in h.text for h in result.hits)
 
 
-def test_word_match_and_pathspecs(repo):
+def test_word_match_and_pathspecs(repo: GitRepo) -> None:
     everywhere = literal_search(repo, "util_copy_value", V120)
     assert everywhere is not None
     assert len(everywhere.paths) >= 2
@@ -53,14 +54,14 @@ def test_word_match_and_pathspecs(repo):
     assert partial.hits == ()
 
 
-def test_cap_is_reported(repo):
+def test_cap_is_reported(repo: GitRepo) -> None:
     result = literal_search(repo, "return", V120, max_hits=2)
     assert result is not None
     assert len(result.hits) == 2
     assert result.truncated
 
 
-def test_absent_literal(repo):
+def test_absent_literal(repo: GitRepo) -> None:
     result = literal_search(repo, "hdr_decode_chunked_value(", V120)
     assert result is not None
     assert result.hits == ()
@@ -70,6 +71,6 @@ def test_absent_literal(repo):
 @pytest.mark.parametrize(
     "literal", ["", "   ", "two\nlines", "cr\rline", "nul\0byte", "x" * (MAX_LITERAL_CHARS + 1)]
 )
-def test_unsearchable_literals(repo, literal):
+def test_unsearchable_literals(repo: GitRepo, literal: str) -> None:
     assert searchable(literal) is None
     assert literal_search(repo, literal, V120) is None

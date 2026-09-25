@@ -23,6 +23,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+import pytest
+
 from nikasha.ingest import ingest_string
 from nikasha.model.evidence import CodeLocation, CommandRecord, Evidence
 from nikasha.model.result import Result
@@ -331,7 +333,7 @@ def test_only_the_first_few_locations_are_shown() -> None:
     assert "more locations not shown" in html
 
 
-def test_code_stops_when_the_page_budget_runs_out(monkeypatch):
+def test_code_stops_when_the_page_budget_runs_out(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(evidence_cards, "MAX_CODE_CHARS", 10)
     html = render(
         make_evidence(locations=(make_location(),)), excerpts=lines_from("int a;", first=10)

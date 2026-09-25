@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 The Nikasha Authors
 # SPDX-License-Identifier: Apache-2.0
 import json
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
@@ -24,7 +25,7 @@ def test_no_args_shows_help() -> None:
     assert "version" in result.output
 
 
-def test_doctor_json_is_well_formed(tmp_path, monkeypatch):
+def test_doctor_json_is_well_formed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("NIKASHA_CACHE_DIR", str(tmp_path / "cache"))
     result = runner.invoke(app, ["doctor", "--json"])
     payload = json.loads(result.stdout)
@@ -34,7 +35,7 @@ def test_doctor_json_is_well_formed(tmp_path, monkeypatch):
     assert result.exit_code == (0 if payload["ok"] else 1)
 
 
-def test_doctor_fails_without_git(tmp_path, monkeypatch):
+def test_doctor_fails_without_git(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("NIKASHA_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setattr(gitio, "git_version", lambda: None)
     result = runner.invoke(app, ["doctor", "--json"])
@@ -46,20 +47,22 @@ def test_doctor_fails_without_git(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("args", [["doctor"], ["doctor", "--json"]])
-def test_doctor_table_and_json_agree_on_exit_code(tmp_path, monkeypatch, args):
+def test_doctor_table_and_json_agree_on_exit_code(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, args: list[str]
+) -> None:
     monkeypatch.setenv("NIKASHA_CACHE_DIR", str(tmp_path / "cache"))
     json_code = runner.invoke(app, ["doctor", "--json"]).exit_code
     assert runner.invoke(app, args).exit_code == json_code
 
 
 @pytest.mark.parametrize("encoding", ["cp1252", "ascii", "latin-1", "no-such-codec"])
-def test_legacy_encodings_fall_back_to_ascii(encoding):
+def test_legacy_encodings_fall_back_to_ascii(encoding: str) -> None:
     symbols = status_symbols(encoding)
     assert all(ch.isascii() for ch in "".join(symbols.values()))
 
 
 @pytest.mark.parametrize("encoding", ["utf-8", "UTF-8", None])
-def test_utf8_uses_check_marks(encoding):
+def test_utf8_uses_check_marks(encoding: str | None) -> None:
     assert status_symbols(encoding)["ok"] == "✓"
 
 
@@ -67,7 +70,9 @@ def test_ascii_flag_forces_ascii() -> None:
     assert status_symbols("utf-8", force_ascii=True)["ok"] == "+"
 
 
-def test_doctor_table_survives_cp1252_stdout(tmp_path, monkeypatch):
+def test_doctor_table_survives_cp1252_stdout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("NIKASHA_CACHE_DIR", str(tmp_path / "cache"))
     result = CliRunner(charset="cp1252").invoke(app, ["doctor"])
     assert result.exception is None or isinstance(result.exception, SystemExit)

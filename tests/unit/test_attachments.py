@@ -7,6 +7,7 @@ import os
 import stat
 import tarfile
 import zipfile
+from pathlib import Path
 
 import pytest
 
@@ -34,7 +35,7 @@ from nikasha.ingest.attachments import (
         ("\u202etxt.exe", "_txt.exe"),
     ],
 )
-def test_sanitize_name(name, expected):
+def test_sanitize_name(name: str, expected: str) -> None:
     assert sanitize_name(name) == expected
 
 
@@ -49,7 +50,7 @@ def test_sanitize_name_length_and_dedup() -> None:
     assert len(second) <= MAX_NAME_LEN
 
 
-def test_store_attachments_caps_and_permissions(tmp_path):
+def test_store_attachments_caps_and_permissions(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     stored, warnings = store_attachments(
         [
@@ -69,7 +70,7 @@ def test_store_attachments_caps_and_permissions(tmp_path):
         assert stat.S_IMODE((run_dir / "poc.bin").stat().st_mode) == 0o600
 
 
-def _zip(tmp_path, entries, name="a.zip"):
+def _zip(tmp_path: Path, entries: list[tuple[str, str | bytes]], name: str = "a.zip") -> Path:
     path = tmp_path / name
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
         for arcname, data in entries:
@@ -77,14 +78,14 @@ def _zip(tmp_path, entries, name="a.zip"):
     return path
 
 
-def test_safe_extract_zip(tmp_path):
+def test_safe_extract_zip(tmp_path: Path) -> None:
     archive = _zip(tmp_path, [("dir/poc.txt", "hi"), ("b.txt", "x")])
     out = safe_extract_archive(archive, tmp_path / "out")
     assert sorted(p.name for p in out) == ["b.txt", "poc.txt"]
 
 
 @pytest.mark.parametrize("bad", ["../evil.txt", "/abs.txt", "a/../../evil.txt", "C:/x.txt"])
-def test_zip_traversal_is_rejected(tmp_path, bad):
+def test_zip_traversal_is_rejected(tmp_path: Path, bad: str) -> None:
     archive = _zip(tmp_path, [(bad, "x")])
     with pytest.raises(ArchiveRejectedError):
         safe_extract_archive(archive, tmp_path / "out")
@@ -92,19 +93,19 @@ def test_zip_traversal_is_rejected(tmp_path, bad):
     assert not (tmp_path / "evil.txt").exists()
 
 
-def test_zip_bomb_ratio_is_rejected(tmp_path):
+def test_zip_bomb_ratio_is_rejected(tmp_path: Path) -> None:
     archive = _zip(tmp_path, [("zeros", b"\0" * 5_000_000)])
     with pytest.raises(ArchiveRejectedError):
         safe_extract_archive(archive, tmp_path / "out", ArchiveLimits(max_ratio=10))
 
 
-def test_zip_file_count_is_limited(tmp_path):
+def test_zip_file_count_is_limited(tmp_path: Path) -> None:
     archive = _zip(tmp_path, [(f"f{i}", "x") for i in range(5)])
     with pytest.raises(ArchiveRejectedError):
         safe_extract_archive(archive, tmp_path / "out", ArchiveLimits(max_files=3))
 
 
-def test_zip_symlink_is_rejected(tmp_path):
+def test_zip_symlink_is_rejected(tmp_path: Path) -> None:
     path = tmp_path / "l.zip"
     info = zipfile.ZipInfo("link")
     info.external_attr = 0o120777 << 16
@@ -121,7 +122,7 @@ def _symlink_member() -> tarfile.TarInfo:
     return info
 
 
-def test_tar_symlink_and_traversal_are_rejected(tmp_path):
+def test_tar_symlink_and_traversal_are_rejected(tmp_path: Path) -> None:
     for member in (tarfile.TarInfo("../escape"), _symlink_member()):
         path = tmp_path / "t.tar"
         with tarfile.open(path, "w") as tf:
@@ -130,7 +131,7 @@ def test_tar_symlink_and_traversal_are_rejected(tmp_path):
             safe_extract_archive(path, tmp_path / "out")
 
 
-def test_tar_ok(tmp_path):
+def test_tar_ok(tmp_path: Path) -> None:
     path = tmp_path / "ok.tar.gz"
     data = b"payload"
     info = tarfile.TarInfo("poc.bin")
@@ -141,7 +142,7 @@ def test_tar_ok(tmp_path):
     assert out.read_bytes() == data
 
 
-def test_not_an_archive(tmp_path):
+def test_not_an_archive(tmp_path: Path) -> None:
     path = tmp_path / "x.bin"
     path.write_bytes(b"not an archive")
     with pytest.raises(ArchiveRejectedError):

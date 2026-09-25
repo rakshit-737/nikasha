@@ -210,7 +210,7 @@ def test_c10_budget_expiring_after_the_last_release_keeps_the_scan_complete(
     assert all(complete for _, complete in baseline)
 
     scored = {"n": 0}
-    real = c10.analyze_trace
+    real = c10.analyze_trace  # type: ignore[attr-defined]
 
     def counting(*args: object, **kwargs: object) -> object:
         scored["n"] += 1

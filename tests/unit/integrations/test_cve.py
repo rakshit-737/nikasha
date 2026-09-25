@@ -28,7 +28,7 @@ import urllib.request
 from email.message import Message
 from http.client import HTTPMessage
 from pathlib import Path
-from typing import Any
+from typing import IO, Any, cast
 
 import pytest
 import typer
@@ -428,14 +428,18 @@ def _version_claims(*entries: AffectedVersion) -> list[VersionClaim]:
 def test_affected_ranges_become_range_claims_with_the_right_bounds() -> None:
     (ranged,) = _version_claims(AffectedVersion("1.0.0", "affected", less_than="1.3.0"))
     assert ranged.relation == "affected_range"
+    assert ranged.lower is not None
+    assert ranged.upper is not None
     assert (ranged.lower.raw, ranged.upper.raw, ranged.upper_inclusive) == ("1.0.0", "1.3.0", False)
     (capped,) = _version_claims(AffectedVersion("0", "affected", less_than_or_equal="1.2.0"))
+    assert capped.upper is not None
     assert (capped.relation, capped.upper.raw, capped.upper_inclusive) == (
         "affected_range",
         "1.2.0",
         True,
     )
     (open_ended,) = _version_claims(AffectedVersion("0", "affected", less_than="1.3.0"))
+    assert open_ended.upper is not None
     assert (open_ended.upper.raw, open_ended.upper_inclusive) == ("1.3.0", False)
 
 
@@ -620,9 +624,11 @@ def test_a_redirect_off_https_is_refused_before_it_is_followed(target: str) -> N
     handler = cve_module._HttpsOnlyRedirect()
     request = urllib.request.Request("https://raw.githubusercontent.com/x")
     with pytest.raises(urllib.error.URLError, match="off HTTPS"):
-        handler.redirect_request(request, None, 302, "Found", HTTPMessage(), target)
+        handler.redirect_request(
+            request, cast("IO[bytes]", None), 302, "Found", HTTPMessage(), target
+        )
     followed = handler.redirect_request(
-        request, None, 302, "Found", HTTPMessage(), "https://example.invalid/y"
+        request, cast("IO[bytes]", None), 302, "Found", HTTPMessage(), "https://example.invalid/y"
     )
     assert followed is not None
     assert followed.full_url == "https://example.invalid/y"
@@ -632,7 +638,7 @@ def test_the_fetch_goes_through_the_https_only_opener(monkeypatch: pytest.Monkey
     seen: list[list[type]] = []
 
     def open_(self: urllib.request.OpenerDirector, request: Any, *a: Any, **k: Any) -> Any:
-        seen.append([type(h) for h in self.handlers])
+        seen.append([type(h) for h in self.handlers])  # type: ignore[attr-defined]
         return _Response(GENUINE.read_bytes(), request.full_url)
 
     monkeypatch.setattr("urllib.request.OpenerDirector.open", open_)
@@ -742,7 +748,9 @@ def checked(vulnlab_repo: Path, tmp_path_factory: pytest.TempPathFactory) -> dic
 
 
 @needs_git
-def test_the_record_whose_details_are_in_the_code_is_never_ungrounded(checked) -> None:
+def test_the_record_whose_details_are_in_the_code_is_never_ungrounded(
+    checked: dict[str, Any],
+) -> None:
     report = checked[GENUINE.stem]
     assert report.verdict.label != "UNGROUNDED", report.verdict
     assert report.verdict.label in {"GROUNDED", "MIXED"}, report.verdict
@@ -758,7 +766,9 @@ def test_the_record_whose_details_are_in_the_code_is_never_ungrounded(checked) -
 
 
 @needs_git
-def test_the_record_whose_details_are_not_in_the_code_is_refuted_across_groups(checked) -> None:
+def test_the_record_whose_details_are_not_in_the_code_is_refuted_across_groups(
+    checked: dict[str, Any],
+) -> None:
     report = checked[CONTRADICTED.stem]
     assert report.verdict.label in {"UNGROUNDED", "MIXED"}, report.verdict
     assert report.result.target is not None and report.result.target.ref_name == "v1.2.0"
@@ -769,14 +779,16 @@ def test_the_record_whose_details_are_not_in_the_code_is_refuted_across_groups(c
 
 
 @needs_git
-def test_every_run_is_deterministic(vulnlab_repo: Path, tmp_path: Path, checked) -> None:
+def test_every_run_is_deterministic(
+    vulnlab_repo: Path, tmp_path: Path, checked: dict[str, Any]
+) -> None:
     again = check_cve(str(GENUINE), repo=str(vulnlab_repo), index_path=tmp_path / "again.sqlite")
     first = checked[GENUINE.stem].result.to_json(include_timings=False)
     assert again.result.to_json(include_timings=False) == first
 
 
 @needs_git
-def test_no_output_describes_a_person(checked) -> None:
+def test_no_output_describes_a_person(checked: dict[str, Any]) -> None:
     """P1: the wording targets the record's claims, never whoever wrote them."""
     banned = ("ai-generated", "slop", "fabricated by", "fake", "hallucinat")
     for name, report in checked.items():

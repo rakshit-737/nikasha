@@ -66,7 +66,7 @@ def test_only_wrappers_spawn_processes() -> None:
     assert offenders == {}
 
 
-def test_detector_catches_known_patterns(tmp_path):
+def test_detector_catches_known_patterns(tmp_path: Path) -> None:
     sample = tmp_path / "bad.py"
     sample.write_text(
         "import subprocess\nimport os\nfrom os import system\nos.popen('x')\n",

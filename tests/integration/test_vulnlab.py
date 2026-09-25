@@ -39,14 +39,15 @@ pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git is not 
 
 
 @pytest.fixture(scope="module")
-def repo(tmp_path_factory) -> tuple[Path, dict[str, str]]:
+def repo(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, dict[str, str]]:
     dest = tmp_path_factory.mktemp("vulnlab") / "repo.git"
     tags = bv.build_vulnlab(dest)
     return dest, tags
 
 
 def _file_at(dest: Path, tag: str, path: str) -> str:
-    return bv._git(["show", f"{tag}:{path}"], cwd=dest, env=bv._git_env()).decode()
+    text: str = bv._git(["show", f"{tag}:{path}"], cwd=dest, env=bv._git_env()).decode()
+    return text
 
 
 def _grep(dest: Path, tag: str, pattern: str, *, word: bool = False, fixed: bool = False) -> bool:

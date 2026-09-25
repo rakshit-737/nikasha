@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Valgrind parser: real fixtures (with a trailing internal assertion), variants, robustness."""
 
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,7 @@ from hypothesis import strategies as st
 from nikasha.extract import extract_claims
 from nikasha.extract.traces import PARSERS, valgrind
 from nikasha.ingest import ingest_string
-from nikasha.model.claims import TraceClaim
+from nikasha.model.claims import Frame, MemoryRegion, TraceClaim
 
 FIXTURES = Path(__file__).parents[2] / "fixtures" / "traces" / "valgrind"
 PARSER = PARSERS["valgrind"]
@@ -22,11 +23,12 @@ def _load(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf-8")
 
 
-def _first_app(frames):
+def _first_app(frames: Sequence[Frame]) -> Frame:
     return next(f for f in frames if not f.is_runtime)
 
 
-def _assert_block(region, address, distance):
+def _assert_block(region: MemoryRegion | None, address: int, distance: int) -> None:
+    assert region is not None
     # "Address A is N bytes after a block of size 64": block = [A - N - 64, A - N)
     assert region.relation == "right"
     assert region.size == 64
@@ -42,7 +44,9 @@ def _assert_block(region, address, distance):
         ("02-vulnlab-invalid-write-v1.2.1.txt", 29, 24, 112),
     ],
 )
-def test_fixture_with_internal_assertion(name, write_line, alloc_line, caller_line):
+def test_fixture_with_internal_assertion(
+    name: str, write_line: int, alloc_line: int, caller_line: int
+) -> None:
     text = _load(name)
     traces = PARSER.parse(text)
     assert len(traces) == 1  # the host stacktrace / "Thread 1: status" frames are not traces
@@ -56,6 +60,7 @@ def test_fixture_with_internal_assertion(name, write_line, alloc_line, caller_li
     assert data.format == "valgrind"
     assert data.bug_type == "invalid-write"
     assert data.message == "Invalid write of size 2"
+    assert data.access is not None
     assert (data.access.kind, data.access.size) == ("WRITE", 2)
     assert data.address == data.access_address == data.region_address == 0x4A5E7B0
     _assert_block(data.region, 0x4A5E7B0, 0)
@@ -101,6 +106,7 @@ def test_fixture_with_five_errors() -> None:
     for trace, (bug, size, address, distance, n_frames, app) in zip(traces, expected, strict=True):
         data = trace.data
         assert data.bug_type == bug
+        assert data.access is not None
         assert data.access.size == size
         assert data.address == address
         _assert_block(data.region, address, distance)
@@ -113,7 +119,7 @@ def test_fixture_with_five_errors() -> None:
     # printf's internals (memcpy, __printf_buffer, __vfprintf_internal) are runtime frames
     assert [f.is_runtime for f in traces[3].data.frames] == [True] * 6 + [False]
     # every error block shares one heap block
-    assert len({t.data.region.start for t in traces}) == 1
+    assert len({t.data.region.start for t in traces}) == 1  # type: ignore[union-attr]
     assert "HEAP SUMMARY" not in text[traces[-1].start : traces[-1].end]
 
 
@@ -151,6 +157,7 @@ USE_AFTER_FREE = """\
 def test_use_after_free_block_stacks() -> None:
     trace = PARSER.parse(USE_AFTER_FREE)[0]
     data = trace.data
+    assert data.region is not None
     assert data.region.relation == "inside"
     assert (data.region.start, data.region.end) == (0x4A8D048 - 8, 0x4A8D048 + 8)
     assert [f.function for f in data.free_frames] == ["free", "main"]
@@ -168,6 +175,7 @@ def test_before_block_region_and_library_frames() -> None:
         "==3==  Address 0x1000 is 2 bytes before a block of size 10 alloc'd\n"
     )
     data = PARSER.parse(text)[0].data
+    assert data.region is not None
     assert (data.region.start, data.region.end, data.region.relation) == (0x1002, 0x100C, "left")
     frames = data.frames
     assert (frames[0].function, frames[0].module, frames[0].is_runtime) == (
@@ -227,7 +235,7 @@ def test_segv_uninitialised_and_leak_errors() -> None:
         ("HEAP SUMMARY:", None),
     ],
 )
-def test_classify(line, bug_type):
+def test_classify(line: str, bug_type: str | None) -> None:
     kind = valgrind.classify(line)
     assert (kind[0] if kind else None) == bug_type
 
@@ -254,7 +262,7 @@ ALL_LINES += USE_AFTER_FREE.splitlines()
 
 
 @pytest.mark.parametrize("name", sorted(p.name for p in FIXTURES.glob("*.txt")))
-def test_every_truncation_parses(name):
+def test_every_truncation_parses(name: str) -> None:
     lines = _load(name).splitlines(keepends=True)
     for n in range(len(lines) + 1):
         text = "".join(lines[:n])
@@ -265,7 +273,7 @@ def test_every_truncation_parses(name):
 
 
 @pytest.mark.parametrize("text", ["", "==1==", "==1== Invalid read of size", "==x== Invalid"])
-def test_garbage_does_not_raise(text):
+def test_garbage_does_not_raise(text: str) -> None:
     assert PARSER.parse(text) == []
 
 
@@ -276,11 +284,11 @@ def _check(text: str) -> None:
 
 
 @given(st.text())
-def test_hypothesis_random_text(text):
+def test_hypothesis_random_text(text: str) -> None:
     _check(text)
 
 
 @settings(max_examples=200)
 @given(st.lists(st.one_of(st.sampled_from(ALL_LINES), st.text(max_size=30)), max_size=40))
-def test_hypothesis_shuffled_report_lines(lines):
+def test_hypothesis_shuffled_report_lines(lines: list[str]) -> None:
     _check("\n".join(lines))

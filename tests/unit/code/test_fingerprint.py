@@ -96,7 +96,7 @@ def test_multichar_operators() -> None:
 
 
 @pytest.mark.parametrize("number", ["0", "42", "0x1Fu", "1.5e-3", ".5f", "1_000", "10ULL", "0b101"])
-def test_numbers_become_placeholders(number):
+def test_numbers_become_placeholders(number: str) -> None:
     assert _texts(f"x = {number};") == ["x", "=", "NUM", ";"]
 
 
@@ -216,7 +216,7 @@ def test_line_numbers_after_multiline_comment() -> None:
     ],
 )
 @pytest.mark.no_cover  # the budget measures the lexer, not coverage.py's tracer (~5x)
-def test_lexer_is_linear_on_hostile_input(unit, lang, size):
+def test_lexer_is_linear_on_hostile_input(unit: str, lang: str | None, size: int) -> None:
     code = unit * (size // len(unit))
     started = time.perf_counter()
     tokenize(code, lang)
@@ -303,13 +303,13 @@ _small_hashes = st.lists(st.integers(0, 6), max_size=60)
 
 @given(hashes=_small_hashes, w=st.integers(1, 8))
 @settings(max_examples=500)
-def test_winnow_equals_reference(hashes, w):
+def test_winnow_equals_reference(hashes: list[int], w: int) -> None:
     assert winnow(hashes, w) == _reference_winnow(hashes, w)
 
 
 @given(hashes=_small_hashes, w=st.integers(1, 8))
 @settings(max_examples=300)
-def test_every_window_holds_a_selected_minimum(hashes, w):
+def test_every_window_holds_a_selected_minimum(hashes: list[int], w: int) -> None:
     fps = winnow(hashes, w)
     positions = [fp.position for fp in fps]
     assert positions == sorted(set(positions))
@@ -334,7 +334,13 @@ _filler = st.lists(_token_text, max_size=30)
     data=st.data(),
 )
 @settings(max_examples=500)
-def test_guarantee_shared_run_of_w_plus_k_minus_1_is_detected(fillers, k, w, extra, data):
+def test_guarantee_shared_run_of_w_plus_k_minus_1_is_detected(
+    fillers: tuple[list[str], list[str], list[str], list[str]],
+    k: int,
+    w: int,
+    extra: int,
+    data: st.DataObject,
+) -> None:
     """SPEC §11.4 required test: a shared token run of length >= w + k - 1 is always detected."""
     prefix_a, suffix_a, prefix_b, suffix_b = fillers
     run = data.draw(st.lists(_token_text, min_size=w + k - 1 + extra, max_size=w + k - 1 + extra))
@@ -348,7 +354,7 @@ def test_guarantee_shared_run_of_w_plus_k_minus_1_is_detected(fillers, k, w, ext
 
 
 @given(tokens=st.lists(_token_text, max_size=40), k=st.integers(1, 6), w=st.integers(1, 6))
-def test_fingerprints_exist_iff_enough_tokens(tokens, k, w):
+def test_fingerprints_exist_iff_enough_tokens(tokens: list[str], k: int, w: int) -> None:
     fps = fingerprint_tokens(_tokens(tokens), k, w)
     assert bool(fps) == (len(tokens) >= w + k - 1)
 
@@ -465,7 +471,9 @@ def test_align_empty_inputs() -> None:
     after=st.lists(_token_text, max_size=30),
 )
 @settings(max_examples=200)
-def test_align_finds_an_embedded_snippet(before, run, after):
+def test_align_finds_an_embedded_snippet(
+    before: list[str], run: list[str], after: list[str]
+) -> None:
     file_tokens = [Token(t, i + 1) for i, t in enumerate(before + run + after)]
     snippet = [Token(t, 1) for t in run]
     result = align(snippet, file_tokens, min_block=1)

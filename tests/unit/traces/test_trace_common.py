@@ -26,7 +26,7 @@ from nikasha.extract.traces.common import (
     split_location,
 )
 from nikasha.ingest import ingest_string
-from nikasha.model.claims import TraceClaim, TraceData
+from nikasha.model.claims import TraceClaim, TraceData, TraceFormat
 
 TRACES = Path(__file__).parents[2] / "fixtures" / "traces"
 FORMATS = ("asan", "ubsan", "valgrind", "gdb", "python", "java", "go", "rust", "node")
@@ -55,7 +55,7 @@ FORMATS = ("asan", "ubsan", "valgrind", "gdb", "python", "java", "go", "rust", "
         ("/usr/src/debug/glibc/csu/../sysdeps/x.h", "/usr/src/debug/glibc/csu/../sysdeps/x.h"),
     ],
 )
-def test_normalize_path(raw, normalized):
+def test_normalize_path(raw: str | None, normalized: str | None) -> None:
     assert normalize_path(raw) == normalized
 
 
@@ -91,7 +91,9 @@ def test_make_frame_keeps_the_original_path_only_when_it_changed() -> None:
         (None, None, None, False),
     ],
 )
-def test_is_runtime_frame(function, path, module, runtime):
+def test_is_runtime_frame(
+    function: str | None, path: str | None, module: str | None, runtime: bool
+) -> None:
     assert is_runtime_frame(function, path, module) is runtime
 
 
@@ -115,7 +117,7 @@ def test_is_runtime_frame_extra_prefixes() -> None:
         (None, False),
     ],
 )
-def test_is_native_runtime_frame(function, runtime):
+def test_is_native_runtime_frame(function: str | None, runtime: bool) -> None:
     assert common.is_native_runtime_frame(function, None, None) is runtime
 
 
@@ -126,7 +128,7 @@ def test_is_native_runtime_frame(function, runtime):
     ("text", "value"),
     [("0", 0), ("42", 42), ("", None), ("x", None), ("-1", None), ("²", None), ("9" * 19, None)],
 )
-def test_parse_int(text, value):
+def test_parse_int(text: str, value: int | None) -> None:
     assert parse_int(text) == value
 
 
@@ -146,7 +148,7 @@ def test_parse_int(text, value):
         ("", None),
     ],
 )
-def test_split_location(text, parsed):
+def test_split_location(text: str, parsed: tuple[str, int, int | None] | None) -> None:
     assert split_location(text) == parsed
 
 
@@ -177,7 +179,7 @@ def test_run_guarded_caps_input_and_swallows_parser_errors() -> None:
 
 def test_register_rejects_duplicates() -> None:
     class Duplicate:
-        format = "asan"
+        format: TraceFormat = "asan"
 
         def parse(self, text: str) -> list[ParsedTrace]:
             return []
@@ -197,7 +199,7 @@ def test_registered_formats() -> None:
 
 
 class _Fake:
-    def __init__(self, fmt: str, spans: list[tuple[int, int]]) -> None:
+    def __init__(self, fmt: TraceFormat, spans: list[tuple[int, int]]) -> None:
         self.format = fmt
         self.spans = spans
 
@@ -207,22 +209,26 @@ class _Fake:
         ]
 
 
-def _run(monkeypatch, *fakes: _Fake) -> list[tuple[str, int, int]]:
+def _run(monkeypatch: pytest.MonkeyPatch, *fakes: _Fake) -> list[tuple[str, int, int]]:
     monkeypatch.setattr(traces_pkg, "PARSERS", {f.format: f for f in fakes})
     return [(t.data.format, t.start, t.end) for t in parse_traces("x" * 100)]
 
 
-def test_overlap_larger_trace_wins(monkeypatch):
+def test_overlap_larger_trace_wins(monkeypatch: pytest.MonkeyPatch) -> None:
     kept = _run(monkeypatch, _Fake("asan", [(0, 50)]), _Fake("gdb", [(10, 20), (60, 70)]))
     assert kept == [("asan", 0, 50), ("gdb", 60, 70)]
 
 
-def test_overlap_equal_size_prefers_earlier_then_format_name(monkeypatch):
+def test_overlap_equal_size_prefers_earlier_then_format_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     kept = _run(monkeypatch, _Fake("node", [(0, 10), (5, 15)]), _Fake("java", [(0, 10)]))
     assert kept == [("java", 0, 10)]
 
 
-def test_adjacent_and_disjoint_traces_are_all_kept_in_order(monkeypatch):
+def test_adjacent_and_disjoint_traces_are_all_kept_in_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     kept = _run(monkeypatch, _Fake("rust", [(10, 20)]), _Fake("go", [(20, 30), (0, 10)]))
     assert kept == [("go", 0, 10), ("rust", 10, 20), ("go", 20, 30)]
 
@@ -292,13 +298,13 @@ def _check(text: str) -> None:
 
 
 @given(st.text())
-def test_parse_traces_random_text(text):
+def test_parse_traces_random_text(text: str) -> None:
     _check(text)
 
 
 @settings(max_examples=300)
 @given(st.lists(st.one_of(st.sampled_from(ALL_LINES), st.text(max_size=20)), max_size=60))
-def test_parse_traces_on_mixed_fixture_lines(lines):
+def test_parse_traces_on_mixed_fixture_lines(lines: list[str]) -> None:
     _check("\n".join(lines))
 
 

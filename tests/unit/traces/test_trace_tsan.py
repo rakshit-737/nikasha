@@ -30,7 +30,7 @@ def test_not_registered_by_default() -> None:
 
 
 @pytest.mark.parametrize("text", ["", "\n", "hello world", "#0 0x1 in main /a.c:1:2", "=" * 80])
-def test_no_trace_without_header(text):
+def test_no_trace_without_header(text: str) -> None:
     assert PARSER.parse(text) == []
 
 
@@ -50,7 +50,7 @@ def test_output_is_deterministic() -> None:
 
 @given(st.text(max_size=400))
 @settings(max_examples=200, deadline=None)
-def test_never_raises_on_arbitrary_text(text):
+def test_never_raises_on_arbitrary_text(text: str) -> None:
     PARSER.parse(text)
     PARSER.parse(HEADER + "\n" + text)
 
@@ -59,7 +59,7 @@ def test_never_raises_on_arbitrary_text(text):
     "seed",
     ["#0 0x1 in ", "    #0 ", HEADER + "\n", "(a+0x1) ", ":1:2 ", "SUMMARY: ", "a" * 7 + ":"],
 )
-def test_linear_time_on_hostile_input(seed):
+def test_linear_time_on_hostile_input(seed: str) -> None:
     text = HEADER + "\n" + seed * (200_000 // len(seed))
     started = time.perf_counter()
     PARSER.parse(text)
@@ -94,13 +94,15 @@ def test_real_fixtures_parse() -> None:
         ("    #2 <null> <null> (libc.so.6+0x29d8f)", (None, None, None, None, "libc.so.6")),
     ],
 )  # fmt: skip
-def test_frame_fields_with_module_suffix(line, expected):
+def test_frame_fields_with_module_suffix(
+    line: str, expected: tuple[str | None, str | None, int | None, int | None, str | None]
+) -> None:
     frame = parse_tsan_frame(line)
     assert frame is not None
     assert (frame.function, frame.path, frame.line, frame.col, frame.module) == expected
 
 
 @pytest.mark.parametrize("line", ["    #0 f /a.c:1 (m+zz)", "    #0 f /a.c:1 (+0x1)", "x"])
-def test_frame_rejects_malformed_module_suffix(line):
+def test_frame_rejects_malformed_module_suffix(line: str) -> None:
     frame = parse_tsan_frame(line)
     assert frame is None or frame.module is None

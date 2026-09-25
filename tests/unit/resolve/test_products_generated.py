@@ -41,7 +41,7 @@ def test_extraction_products_come_from_the_yaml() -> None:
         "version: 1\nprojects: [{name: x, aliases: notalist}]",
     ],
 )
-def test_invalid_documents_are_rejected(text):
+def test_invalid_documents_are_rejected(text: str) -> None:
     with pytest.raises(NikashaError):
         parse_known_projects(text)
 
@@ -65,7 +65,7 @@ def test_yaml_is_loaded_safely() -> None:
         ("lib/*.h", "lib/sub/x.h", False),
     ],
 )
-def test_glob_match(glob, path, ok):
+def test_glob_match(glob: str, path: str, ok: bool) -> None:
     assert glob_match(glob, path) is ok
 
 

@@ -17,14 +17,14 @@ from nikasha.extract.versions import parse_version
         ("8_5_0", (8, 5, 0), None),
     ],
 )
-def test_parse_version(raw, numbers, qualifier):
+def test_parse_version(raw: str, numbers: tuple[int, ...], qualifier: str | None) -> None:
     spec = parse_version(raw)
     assert spec is not None
     assert (spec.numbers, spec.qualifier) == (numbers, qualifier)
 
 
 @pytest.mark.parametrize("raw", ["abc", "1.x", ""])
-def test_parse_version_rejects(raw):
+def test_parse_version_rejects(raw: str) -> None:
     assert parse_version(raw) is None
 
 
@@ -49,7 +49,9 @@ def test_affected_range_and_earlier() -> None:
         ("All versions before 3.45.1 are affected.", None, (3, 45, 1), False),
     ],
 )
-def test_ranges(text, lower, upper, inclusive):
+def test_ranges(
+    text: str, lower: tuple[int, ...] | None, upper: tuple[int, ...], inclusive: bool
+) -> None:
     c = one(text, "version")
     assert c.relation == "affected_range"
     assert (c.lower.numbers if c.lower else None) == lower

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Python traceback parser: real fixtures (chains, caret lines), variants, robustness."""
 
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -10,8 +11,9 @@ from hypothesis import strategies as st
 
 from nikasha.extract import extract_claims
 from nikasha.extract.traces import PARSERS, python_tb
+from nikasha.extract.traces.common import ParsedTrace
 from nikasha.ingest import ingest_string
-from nikasha.model.claims import TraceClaim
+from nikasha.model.claims import Frame, TraceClaim
 
 FIXTURES = Path(__file__).parents[2] / "fixtures" / "traces" / "python"
 PARSER = PARSERS["python"]
@@ -21,13 +23,13 @@ def _load(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf-8")
 
 
-def _one(text: str):
+def _one(text: str) -> ParsedTrace:
     traces = PARSER.parse(text)
     assert len(traces) == 1, traces
     return traces[0]
 
 
-def _where(frames):
+def _where(frames: Sequence[Frame]) -> list[tuple[str | None, int | None]]:
     return [(f.function, f.line) for f in frames]
 
 
@@ -176,7 +178,7 @@ def test_marker_without_following_traceback_ends_chain() -> None:
         (None, False),
     ],
 )
-def test_is_stdlib_path(path, stdlib):
+def test_is_stdlib_path(path: str | None, stdlib: bool) -> None:
     assert python_tb.is_stdlib_path(path) is stdlib
 
 
@@ -186,7 +188,7 @@ ALL_LINES = [line for p in sorted(FIXTURES.glob("*.txt")) for line in p.read_tex
 
 
 @pytest.mark.parametrize("name", sorted(p.name for p in FIXTURES.glob("*.txt")))
-def test_every_truncation_parses(name):
+def test_every_truncation_parses(name: str) -> None:
     lines = _load(name).splitlines(keepends=True)
     for n in range(len(lines) + 1):
         text = "".join(lines[:n])
@@ -197,7 +199,7 @@ def test_every_truncation_parses(name):
 
 
 @pytest.mark.parametrize("text", ["", "Traceback (most recent call last):", '  File "', "\t\n\t"])
-def test_garbage_does_not_raise(text):
+def test_garbage_does_not_raise(text: str) -> None:
     assert PARSER.parse(text) == []
 
 
@@ -208,11 +210,11 @@ def _check(text: str) -> None:
 
 
 @given(st.text())
-def test_hypothesis_random_text(text):
+def test_hypothesis_random_text(text: str) -> None:
     _check(text)
 
 
 @settings(max_examples=200)
 @given(st.lists(st.one_of(st.sampled_from(ALL_LINES), st.text(max_size=30)), max_size=40))
-def test_hypothesis_shuffled_report_lines(lines):
+def test_hypothesis_shuffled_report_lines(lines: list[str]) -> None:
     _check("\n".join(lines))

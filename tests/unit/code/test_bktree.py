@@ -32,7 +32,7 @@ VULNLAB_FUNCTIONS = [
 _word = st.text(alphabet="abAB_c", max_size=8)
 
 
-def _brute_force(words, query, radius):
+def _brute_force(words: list[str], query: str, radius: int) -> list[tuple[int, str]]:
     """Every distinct word within *radius*, as sorted (distance, word) pairs."""
     pairs = {(Levenshtein.distance(w.lower(), query.lower()), w) for w in words}
     return sorted((d, w) for d, w in pairs if d <= radius)
@@ -54,7 +54,7 @@ def _brute_force(words, query, radius):
         ("___", set()),
     ],
 )
-def test_name_parts(name, parts):
+def test_name_parts(name: str, parts: set[str]) -> None:
     assert name_parts(name) == frozenset(parts)
 
 
@@ -99,7 +99,7 @@ def test_duplicates_keep_every_original_spelling() -> None:
 
 @given(words=st.lists(_word, max_size=40), query=_word, radius=st.integers(-1, 6))
 @settings(max_examples=400)
-def test_search_equals_brute_force(words, query, radius):
+def test_search_equals_brute_force(words: list[str], query: str, radius: int) -> None:
     tree = BKTree(words)
     expected = _brute_force(words, query, radius)
     assert tree.search(query, radius) == expected
@@ -107,7 +107,7 @@ def test_search_equals_brute_force(words, query, radius):
 
 @given(words=st.lists(_word, max_size=30), query=_word)
 @settings(max_examples=200)
-def test_suggest_is_brute_force_ranking(words, query):
+def test_suggest_is_brute_force_ranking(words: list[str], query: str) -> None:
     radius = max(1, len(query) // 4)
     hits = _brute_force(words, query, radius)
     ranked = sorted(hits, key=lambda h: (h[0], -token_jaccard(query, h[1]), h[1]))
@@ -116,7 +116,7 @@ def test_suggest_is_brute_force_ranking(words, query):
 
 @given(words=st.lists(_word, max_size=30), data=st.data())
 @settings(max_examples=100)
-def test_insertion_order_does_not_change_results(words, data):
+def test_insertion_order_does_not_change_results(words: list[str], data: st.DataObject) -> None:
     shuffled = data.draw(st.permutations(words))
     query = data.draw(_word)
     assert BKTree(words).search(query, 3) == BKTree(shuffled).search(query, 3)

@@ -204,7 +204,7 @@ def decision(label: str = "UNGROUNDED", **kwargs: Any) -> Decision:
         "confidence": "high",
         "rule": "3a: a core locus that never existed",
     }
-    return Decision(**(base | kwargs))  # type: ignore[arg-type]
+    return Decision(**(base | kwargs))
 
 
 # --- the templates themselves ------------------------------------------------------------------

@@ -28,6 +28,7 @@ from nikasha.checks.c17_impact_consistency import (
 from nikasha.extract.pipeline import extract_claims
 from nikasha.ingest import load_report
 from nikasha.model.claims import ImpactClaim
+from nikasha.model.evidence import Evidence
 
 REPORTS = Path(__file__).resolve().parents[3] / "examples" / "reports"
 
@@ -37,7 +38,7 @@ GENUINE = "CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:H"
 FABRICATED = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
 
 
-def _run(make_ctx: MakeContext, claims: list[ImpactClaim]) -> list:
+def _run(make_ctx: MakeContext, claims: list[ImpactClaim]) -> list[Evidence]:
     ctx = make_ctx(claims=claims)
     return ImpactConsistency().run(ctx, claims)
 

@@ -102,7 +102,7 @@ def test_longer_repo_paths_share_the_suffix() -> None:
         "lib/sub/../http.c",
     ],
 )
-def test_query_normalization(query):
+def test_query_normalization(query: str) -> None:
     trie = PathTrie(["lib/http.c", "src/http.c"])
     assert trie.resolve(query) == ["lib/http.c"]
     assert trie.match_depth(query) == 2
@@ -186,7 +186,9 @@ def test_disambiguate_several_defining_files() -> None:
     absolute=st.booleans(),
 )
 @settings(max_examples=300)
-def test_prefixed_repo_path_resolves_to_itself(paths, data, prefix, absolute):
+def test_prefixed_repo_path_resolves_to_itself(
+    paths: list[str], data: st.DataObject, prefix: list[str], absolute: bool
+) -> None:
     target = data.draw(st.sampled_from(paths))
     query = ("/" if absolute else "") + "/".join([*prefix, target])
     trie = PathTrie(paths)
@@ -197,7 +199,7 @@ def test_prefixed_repo_path_resolves_to_itself(paths, data, prefix, absolute):
 
 @given(paths=_repo, query=st.lists(st.one_of(_repo_part, _prefix_part), max_size=6))
 @settings(max_examples=300)
-def test_resolve_equals_brute_force(paths, query):
+def test_resolve_equals_brute_force(paths: list[str], query: list[str]) -> None:
     q = "/".join(query)
     trie = PathTrie(paths)
     depth, expected = _brute_force(paths, q)
@@ -213,7 +215,7 @@ def test_resolve_equals_brute_force(paths, query):
 
 @given(paths=_repo, data=st.data())
 @settings(max_examples=100)
-def test_insertion_order_does_not_matter(paths, data):
+def test_insertion_order_does_not_matter(paths: list[str], data: st.DataObject) -> None:
     shuffled = data.draw(st.permutations(paths))
     query = data.draw(st.sampled_from(paths))
     assert PathTrie(paths).resolve(query) == PathTrie(shuffled).resolve(query)
@@ -226,7 +228,9 @@ def test_insertion_order_does_not_matter(paths, data):
     sep=st.sampled_from(["/", "\\"]),
 )
 @settings(max_examples=200)
-def test_normalization_variants_resolve_identically(parts, junk, drive, sep):
+def test_normalization_variants_resolve_identically(
+    parts: list[str], junk: list[str], drive: str, sep: str
+) -> None:
     target = "/".join(parts)
     trie = PathTrie([target])
     noisy = [*junk, *(f"{j}{sep}.." for j in junk), ".", *parts]

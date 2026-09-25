@@ -6,20 +6,21 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from nikasha.extract import extract_claims
 from nikasha.ingest import ingest_string, load_report
 from nikasha.resolve.repo import RepoNotAvailableError, acquire, canonical_url
-from nikasha.resolve.target import TargetNotFoundError, resolve_target
+from nikasha.resolve.target import Resolution, TargetNotFoundError, resolve_target
 
 ROOT = Path(__file__).resolve().parents[3]
 EXPECTED = json.loads((ROOT / "examples" / "vulnlab" / "expected.json").read_text())
 REPORTS = ROOT / "examples" / "reports"
 
 
-def _resolve(text_or_path, vulnlab_repo, **kwargs):
+def _resolve(text_or_path: str | Path, vulnlab_repo: Path, **kwargs: Any) -> Resolution:
     if isinstance(text_or_path, Path):
         report = load_report(text_or_path)
     else:
@@ -37,7 +38,9 @@ def _resolve(text_or_path, vulnlab_repo, **kwargs):
         ("already_fixed.md", "v1.3.0"),
     ],
 )
-def test_fixture_reports_resolve_to_claimed_versions(vulnlab_repo, report, tag):
+def test_fixture_reports_resolve_to_claimed_versions(
+    vulnlab_repo: Path, report: str, tag: str
+) -> None:
     res = _resolve(REPORTS / report, vulnlab_repo)
     assert res.target.ref_name == tag
     assert res.target.commit == EXPECTED[tag]
@@ -45,14 +48,14 @@ def test_fixture_reports_resolve_to_claimed_versions(vulnlab_repo, report, tag):
     assert res.release.name == tag
 
 
-def test_vague_report_has_no_version(vulnlab_repo):
+def test_vague_report_has_no_version(vulnlab_repo: Path) -> None:
     res = _resolve(REPORTS / "vague.md", vulnlab_repo)
     assert res.target.commit is None
     assert res.target.confidence == "low"
     assert "no version" in res.target.method
 
 
-def test_explicit_flags_win(vulnlab_repo):
+def test_explicit_flags_win(vulnlab_repo: Path) -> None:
     res = _resolve(REPORTS / "genuine_hdr_overflow.md", vulnlab_repo, version="1.3")
     assert res.target.ref_name == "v1.3.0"
     res = _resolve(REPORTS / "genuine_hdr_overflow.md", vulnlab_repo, ref="v1.0.0")
@@ -63,25 +66,25 @@ def test_explicit_flags_win(vulnlab_repo):
         _resolve("text", vulnlab_repo, version="9.9.9")
 
 
-def test_unknown_version_warns_but_does_not_guess(vulnlab_repo):
+def test_unknown_version_warns_but_does_not_guess(vulnlab_repo: Path) -> None:
     res = _resolve("Tested on libhdr 1.2.7.", vulnlab_repo)
     assert res.target.commit is None
     assert any("1.2.7" in w for w in res.target.warnings)
 
 
-def test_commit_claim(vulnlab_repo):
+def test_commit_claim(vulnlab_repo: Path) -> None:
     short = EXPECTED["v1.1.0"][:10]
     res = _resolve(f"Crash at commit {short} in libhdr.", vulnlab_repo)
     assert res.target.commit == EXPECTED["v1.1.0"]
 
 
-def test_missing_commit_is_a_warning(vulnlab_repo):
+def test_missing_commit_is_a_warning(vulnlab_repo: Path) -> None:
     res = _resolve("Tested at commit deadbeefcafe0123 and libhdr 1.1.0.", vulnlab_repo)
     assert res.target.ref_name == "v1.1.0"
     assert any("fork" in w for w in res.target.warnings)
 
 
-def test_branch_ref(vulnlab_repo):
+def test_branch_ref(vulnlab_repo: Path) -> None:
     res = _resolve("Reproduced on the master branch.", vulnlab_repo)
     assert res.target.ref_name == "main"
     assert res.target.commit == EXPECTED["v1.3.0"]
@@ -89,7 +92,7 @@ def test_branch_ref(vulnlab_repo):
     assert res.target.warnings
 
 
-def test_multiple_versions_are_recorded(vulnlab_repo):
+def test_multiple_versions_are_recorded(vulnlab_repo: Path) -> None:
     res = _resolve("Tested on libhdr 1.1.0 and libhdr 1.2.1.", vulnlab_repo)
     assert res.target.ref_name == "v1.1.0"
     assert res.target.alternatives == ("v1.2.1",)
@@ -102,7 +105,9 @@ def test_no_repository_is_an_actionable_error() -> None:
         resolve_target(report, extract_claims(report).claims)
 
 
-def test_repo_from_known_project_needs_the_cache(tmp_path, monkeypatch):
+def test_repo_from_known_project_needs_the_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("NIKASHA_CACHE_DIR", str(tmp_path))
     report = ingest_string("Tested on curl 8.5.0.", input_format="markdown")
     with pytest.raises(RepoNotAvailableError, match="--online"):
@@ -120,7 +125,7 @@ def test_repo_from_known_project_needs_the_cache(tmp_path, monkeypatch):
         ),
     ],
 )
-def test_canonical_url(url, expected):
+def test_canonical_url(url: str, expected: str) -> None:
     assert canonical_url(url) == expected
 
 
@@ -134,12 +139,12 @@ def test_canonical_url(url, expected):
         "https://github.com/../x",
     ],
 )
-def test_unsafe_urls_are_refused(url):
+def test_unsafe_urls_are_refused(url: str) -> None:
     with pytest.raises(RepoNotAvailableError):
         canonical_url(url)
 
 
-def test_local_repositories(vulnlab_repo, tmp_path):
+def test_local_repositories(vulnlab_repo: Path, tmp_path: Path) -> None:
     assert acquire(str(vulnlab_repo)).git_dir == vulnlab_repo.resolve()
     with pytest.raises(RepoNotAvailableError):
         acquire(str(tmp_path))

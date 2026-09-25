@@ -13,6 +13,8 @@ import importlib.util
 import sys
 import time
 from pathlib import Path
+from types import ModuleType
+from typing import Any
 
 import pytest
 from hypothesis import given, settings
@@ -33,7 +35,7 @@ def test_not_registered_by_default() -> None:
 
 
 @pytest.mark.parametrize("text", ["", "\n", "hello world", "#0 0x1 in main /a.c:1:2", "=" * 80])
-def test_no_trace_without_header(text):
+def test_no_trace_without_header(text: str) -> None:
     assert PARSER.parse(text) == []
 
 
@@ -53,7 +55,7 @@ def test_output_is_deterministic() -> None:
 
 @given(st.text(max_size=400))
 @settings(max_examples=200, deadline=None)
-def test_never_raises_on_arbitrary_text(text):
+def test_never_raises_on_arbitrary_text(text: str) -> None:
     PARSER.parse(text)
     PARSER.parse(HEADER + "\n" + text)
 
@@ -62,7 +64,7 @@ def test_never_raises_on_arbitrary_text(text):
     "seed",
     ["#0 0x1 in ", "    #0 ", HEADER + "\n", "(a+0x1) ", ":1:2 ", "SUMMARY: ", "a" * 7 + ":"],
 )
-def test_linear_time_on_hostile_input(seed):
+def test_linear_time_on_hostile_input(seed: str) -> None:
     text = HEADER + "\n" + seed * (200_000 // len(seed))
     started = time.perf_counter()
     PARSER.parse(text)
@@ -91,7 +93,7 @@ def test_real_fixtures_parse() -> None:
 # --- capture script (scripts/capture_sanitizer_fixtures.py): pure parts, no engine needed ---
 
 
-def _capture_module():
+def _capture_module() -> ModuleType:
     path = Path(__file__).parents[3] / "scripts" / "capture_sanitizer_fixtures.py"
     spec = importlib.util.spec_from_file_location("capture_sanitizer_fixtures", path)
     assert spec is not None and spec.loader is not None
@@ -101,11 +103,13 @@ def _capture_module():
     return module
 
 
-def _result(stderr=b"", exit_code=23, timed_out=False, truncated=False):
+def _result(
+    stderr: bytes = b"", exit_code: int = 23, timed_out: bool = False, truncated: bool = False
+) -> sandbox.ContainerResult:
     return sandbox.ContainerResult((), (), exit_code, b"", stderr, timed_out, truncated, 0)
 
 
-def _bug(cap, **kw):
+def _bug(cap: ModuleType, **kw: str) -> Any:
     fields = {
         "fmt": "lsan",
         "name": "01-example",

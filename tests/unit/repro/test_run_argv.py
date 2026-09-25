@@ -7,6 +7,7 @@ from __future__ import annotations
 import io
 import itertools
 from pathlib import Path
+from typing import Literal
 
 import pytest
 
@@ -34,7 +35,7 @@ def _pairs(argv: list[str]) -> list[tuple[str, str]]:
 
 
 @pytest.mark.parametrize("engine", ["podman", "docker"])
-def test_every_hardened_flag_is_present(engine):
+def test_every_hardened_flag_is_present(engine: Literal["podman", "docker"]) -> None:
     argv = sandbox.run_argv(engine, _spec(), name="nikasha-abc")
     pairs = _pairs(argv)
     for flag in ("--rm", "--init", "--read-only"):
@@ -113,13 +114,13 @@ def test_limits_come_from_the_spec() -> None:
         {"limits": Limits(pids=0)},
     ],
 )
-def test_unsafe_specs_are_refused(bad):
+def test_unsafe_specs_are_refused(bad: dict[str, object]) -> None:
     with pytest.raises(SandboxError):
         sandbox.run_argv("docker", _spec(**bad), name="n1")
 
 
 @pytest.mark.parametrize("name", ["", "-x", "a b", "a/b", "x" * 200])
-def test_bad_names_and_runtimes_are_refused(name):
+def test_bad_names_and_runtimes_are_refused(name: str) -> None:
     with pytest.raises(SandboxError):
         sandbox.run_argv("docker", _spec(), name=name)
     with pytest.raises(SandboxError):
@@ -170,7 +171,7 @@ def test_container_result_record_hashes_and_marks_truncation() -> None:
     record = result.record()
     assert record.truncated is True
     assert record.duration_ms is None  # durations never enter evidence (P2)
-    assert record.stdout_sha256 == sandbox.hashlib.sha256(b"").hexdigest()
+    assert record.stdout_sha256 == sandbox.hashlib.sha256(b"").hexdigest()  # type: ignore[attr-defined]
 
 
 def test_capped_reader_keeps_the_first_bytes_and_drains_the_rest() -> None:
@@ -196,7 +197,7 @@ def test_image_tags_are_checked() -> None:
 
 
 def test_image_build_needs_online() -> None:
-    with pytest.raises(sandbox.NikashaError, match="--online"):
+    with pytest.raises(sandbox.NikashaError, match="--online"):  # type: ignore[attr-defined]
         sandbox.build_image(
             sandbox.EngineInfo("docker", True), POC, HOST, "nikasha/recipe-c:1", online=False
         )

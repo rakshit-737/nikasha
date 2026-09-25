@@ -39,7 +39,7 @@ def _blanked(src: bytes) -> tuple[str, int]:
          "char * " + " " * len("ATTR_MALLOC") + "\ndup(const char *s)\n{\n}\n"),
     ],
 )  # fmt: skip
-def test_attribute_macros_are_blanked(src, expected):
+def test_attribute_macros_are_blanked(src: bytes, expected: str) -> None:
     out, n = _blanked(src)
     assert out == expected
     assert n == 1
@@ -68,7 +68,7 @@ def test_two_capitalised_words_keep_one_as_the_type() -> None:
         b"",
     ],
 )
-def test_other_capitalised_words_are_left_alone(src):
+def test_other_capitalised_words_are_left_alone(src: bytes) -> None:
     out, n = _blanked(src)
     assert n == 0
     assert out == src.decode()
@@ -92,7 +92,7 @@ def test_blanking_is_deterministic_and_idempotent() -> None:
     ],
     ids=["repeated-heads", "one-token", "long-line", "no-names"],
 )
-def test_hostile_input_is_linear(src):
+def test_hostile_input_is_linear(src: bytes) -> None:
     started = time.perf_counter()
     blank_attribute_macros(src)
     assert time.perf_counter() - started < 5.0

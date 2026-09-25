@@ -30,7 +30,7 @@ from nikasha.extract.references import classify_url
         ("https://github.com/o/r", "url", None, "https://github.com/o/r"),
     ],
 )
-def test_classify_url(url, kind, value, repo):
+def test_classify_url(url: str, kind: str, value: str | None, repo: str | None) -> None:
     got_kind, got_value, got_repo = classify_url(url)
     assert (got_kind, got_repo) == (kind, repo)
     if value is not None:
@@ -56,32 +56,32 @@ def test_cve_inside_url_is_not_double_counted() -> None:
 
 
 class TestImpact:
-    def test_vector_score_severity_and_cwe(self):
+    def test_vector_score_severity_and_cwe(self) -> None:
         text = "**CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H — 9.8 (Critical)** · CWE-122"
         c = one(text, "impact")
         assert c.cvss_version == "3.1"
         assert c.cvss_vector.endswith("A:H")
         assert (c.cvss_score, c.severity_word, c.cwe) == (9.8, "Critical", "CWE-122")
 
-    def test_v4_vector(self):
+    def test_v4_vector(self) -> None:
         c = one("CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N", "impact")
         assert c.cvss_version == "4.0"
 
-    def test_v2_vector(self):
+    def test_v2_vector(self) -> None:
         c = one("Vector (AV:N/AC:L/Au:N/C:P/I:P/A:P) here.", "impact")
         assert c.cvss_version == "2.0"
 
-    def test_score_without_vector(self):
+    def test_score_without_vector(self) -> None:
         c = one("We rate this CVSS base score 7.5 (High).", "impact")
         assert (c.cvss_score, c.severity_word) == (7.5, "High")
 
-    def test_severity_word_only_in_clear_positions(self):
+    def test_severity_word_only_in_clear_positions(self) -> None:
         assert one("Severity: High", "impact").severity_word == "High"
         assert claims("The CPU load was high and memory low.", "impact") == []
 
 
 class TestBehavior:
-    def test_calls_api(self):
+    def test_calls_api(self) -> None:
         c = one("`hdr_parse_line()` calls `memcpy()` with an unchecked length.", "behavior")
         assert (c.subject_symbol, c.predicate, c.object) == (
             "hdr_parse_line",
@@ -97,15 +97,15 @@ class TestBehavior:
             "`util_copy_value` does not check the size before copying.",
         ],
     )
-    def test_missing_bounds_check(self, text):
+    def test_missing_bounds_check(self, text: str) -> None:
         c = one(text, "behavior")
         assert (c.subject_symbol, c.predicate) == ("util_copy_value", "missing_bounds_check")
 
-    def test_null_uaf_intovf(self):
+    def test_null_uaf_intovf(self) -> None:
         preds = {c.predicate for c in claims(
             "Missing NULL check in `hdr_find()`. A use after free in `hdr_free()`. "
             "An integer overflow in `size_calc()`.", "behavior")}  # fmt: skip
         assert preds == {"missing_null_check", "uses_freed", "integer_overflow"}
 
-    def test_plain_prose_is_not_behavior(self):
+    def test_plain_prose_is_not_behavior(self) -> None:
         assert claims("The parser calls the helper without checking anything.", "behavior") == []

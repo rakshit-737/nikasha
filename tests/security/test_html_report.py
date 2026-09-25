@@ -1013,7 +1013,8 @@ COMPONENTS = component_modules()
 
 
 def render_component(module: object, ctx: HtmlContext) -> Fragment | None:
-    return module.render(ctx)  # type: ignore[attr-defined]
+    fragment: Fragment | None = module.render(ctx)  # type: ignore[attr-defined]
+    return fragment
 
 
 @pytest.fixture(scope="module")

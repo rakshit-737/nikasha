@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from nikasha.errors import NikashaError
@@ -50,7 +52,9 @@ def test_rejects_unknown_choice() -> None:
         sandbox.select_engine("host", [DOCKER])
 
 
-def test_real_detection_with_an_empty_path_refuses(tmp_path, monkeypatch):
+def test_real_detection_with_an_empty_path_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """No mocks of the probe: an empty PATH really has no engine, so selection refuses."""
     monkeypatch.setenv("PATH", str(tmp_path))
     with pytest.raises(NoEngineError):

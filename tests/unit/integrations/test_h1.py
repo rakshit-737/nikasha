@@ -11,8 +11,9 @@ import json
 import urllib.error
 import urllib.request
 from datetime import date
+from http.client import HTTPMessage
 from pathlib import Path
-from typing import Any
+from typing import IO, Any, NoReturn, cast
 
 import pytest
 import typer
@@ -138,11 +139,11 @@ class FakeResponse:
         return None
 
 
-def install(monkeypatch, routes: dict[str, object]) -> list[dict[str, Any]]:
+def install(monkeypatch: pytest.MonkeyPatch, routes: dict[str, object]) -> list[dict[str, Any]]:
     """Route ``urllib.request.urlopen`` to canned answers and record every request."""
     calls: list[dict[str, Any]] = []
 
-    def fake_urlopen(request, timeout=None):
+    def fake_urlopen(request: urllib.request.Request, timeout: float | None = None) -> object:
         assert timeout is not None and timeout > 0
         url = request.full_url
         calls.append(
@@ -165,8 +166,8 @@ def install(monkeypatch, routes: dict[str, object]) -> list[dict[str, Any]]:
     return calls
 
 
-def _boom(monkeypatch) -> None:
-    def boom(*args, **kwargs):
+def _boom(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(*args: object, **kwargs: object) -> NoReturn:
         raise AssertionError("the network was reached")
 
     monkeypatch.setattr("urllib.request.urlopen", boom)
@@ -186,14 +187,16 @@ def _routes() -> dict[str, object]:
 # --- refusals (before any request) -------------------------------------------------------------
 
 
-def test_refuses_offline_before_any_request(monkeypatch, tmp_path):
+def test_refuses_offline_before_any_request(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     _boom(monkeypatch)
     with pytest.raises(NikashaError, match="--online") as info:
         fetch_report("123456", online=False, env=CREDS, run_dir=tmp_path)
     assert "nothing was requested" in str(info.value)
 
 
-def test_refuses_without_credentials(monkeypatch, tmp_path):
+def test_refuses_without_credentials(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _boom(monkeypatch)
     with pytest.raises(NikashaError, match="HACKERONE_USER") as info:
         fetch_report("123456", online=True, env={}, run_dir=tmp_path)
@@ -203,7 +206,9 @@ def test_refuses_without_credentials(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("bad", ["", "abc", "12/../3", "1?x=1", "0", "1" * 13, "1 2", "-1"])
-def test_rejects_malformed_report_ids(bad, monkeypatch, tmp_path):
+def test_rejects_malformed_report_ids(
+    bad: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     _boom(monkeypatch)
     with pytest.raises(NikashaError, match="report ID"):
         fetch_report(bad, online=True, env=CREDS, run_dir=tmp_path)
@@ -215,7 +220,9 @@ def test_accepts_hash_prefixed_id() -> None:
 
 
 @pytest.mark.parametrize("token", ["with space", "line\nbreak", "tab\there", "é"])
-def test_credentials_must_be_printable_ascii(token, monkeypatch, tmp_path):
+def test_credentials_must_be_printable_ascii(
+    token: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     _boom(monkeypatch)
     with pytest.raises(NikashaError, match="printable ASCII"):
         fetch_report(
@@ -234,7 +241,7 @@ def test_basic_auth_header() -> None:
 # --- the request and the conversion ------------------------------------------------------------
 
 
-def test_fetch_builds_a_report(monkeypatch, tmp_path):
+def test_fetch_builds_a_report(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     calls = install(monkeypatch, _routes())
     fetched = fetch_report("123456", online=True, env=CREDS, run_dir=tmp_path / "att")
 
@@ -270,7 +277,7 @@ def test_fetch_builds_a_report(monkeypatch, tmp_path):
     assert "signature=abc" not in fetched.markdown()
 
 
-def test_reporter_identity_is_never_stored(monkeypatch, tmp_path):
+def test_reporter_identity_is_never_stored(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     install(monkeypatch, _routes())
     fetched = fetch_report("123456", online=True, env=CREDS, run_dir=tmp_path)
     for text in (report_json([fetched.report]), fetched.markdown(), fetched.report.body):
@@ -279,7 +286,7 @@ def test_reporter_identity_is_never_stored(monkeypatch, tmp_path):
     assert "The reporter's identity was not recorded." in fetched.markdown()
 
 
-def test_same_answer_same_json(monkeypatch, tmp_path):
+def test_same_answer_same_json(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     install(monkeypatch, _routes())
     first = fetch_report("123456", online=True, env=CREDS, run_dir=tmp_path / "1")
     second = fetch_report("123456", online=True, env=CREDS, run_dir=tmp_path / "2")
@@ -287,7 +294,9 @@ def test_same_answer_same_json(monkeypatch, tmp_path):
     assert first.markdown() == second.markdown()
 
 
-def test_markdown_round_trips_and_metadata_is_not_a_claim(monkeypatch, tmp_path):
+def test_markdown_round_trips_and_metadata_is_not_a_claim(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     install(monkeypatch, _routes())
     fetched = fetch_report("123456", online=True, env=CREDS, run_dir=tmp_path)
     markdown = fetched.markdown()
@@ -321,7 +330,9 @@ def test_intake_comment_cannot_be_closed_from_inside() -> None:
     assert "<script>" not in markdown.split("-->", 1)[0]
 
 
-def test_no_attachments_flag_skips_downloads(monkeypatch, tmp_path):
+def test_no_attachments_flag_skips_downloads(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     calls = install(monkeypatch, _routes())
     fetched = fetch_report(
         "123456", online=True, env=CREDS, run_dir=tmp_path, with_attachments=False
@@ -332,6 +343,7 @@ def test_no_attachments_flag_skips_downloads(monkeypatch, tmp_path):
 
 
 def test_parse_report_tolerates_garbage() -> None:
+    payload: object
     for payload in ("nonsense", [], {"data": 5}, {"data": {"attributes": {"title": 5}}}):
         parsed = parse_report(payload, "1")
         assert parsed.title == ""
@@ -362,7 +374,7 @@ def test_scope_repo_url_only_for_github_source_code() -> None:
 # --- transport hardening -----------------------------------------------------------------------
 
 
-def test_http_errors_become_nikasha_errors(monkeypatch, tmp_path):
+def test_http_errors_become_nikasha_errors(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     install(monkeypatch, {REPORT_URL: _http_error(REPORT_URL, 401)})
     with pytest.raises(NikashaError, match="HTTP 401") as info:
         fetch_report("123456", online=True, env=CREDS, run_dir=tmp_path)
@@ -376,7 +388,7 @@ def test_http_errors_become_nikasha_errors(monkeypatch, tmp_path):
         fetch_report("123456", online=True, env=CREDS, run_dir=tmp_path)
 
 
-def test_non_https_is_refused_without_a_request(monkeypatch):
+def test_non_https_is_refused_without_a_request(monkeypatch: pytest.MonkeyPatch) -> None:
     _boom(monkeypatch)
     with pytest.raises(NikashaError, match="non-HTTPS"):
         fetch_bytes("http://api.hackerone.com/v1/reports/1")
@@ -384,19 +396,19 @@ def test_non_https_is_refused_without_a_request(monkeypatch):
         fetch_bytes("file:///etc/passwd")
 
 
-def test_redirect_off_https_is_refused(monkeypatch):
+def test_redirect_off_https_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     install(monkeypatch, {REPORT_URL: FakeResponse(b"{}", url="http://evil.example/")})
     with pytest.raises(NikashaError, match="non-HTTPS"):
         fetch_json(REPORT_URL)
 
 
-def test_oversized_answer_is_refused(monkeypatch):
+def test_oversized_answer_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     install(monkeypatch, {REPORT_URL: b"[" + b"1," * 4_300_000 + b"1]"})
     with pytest.raises(NikashaError, match="exceeds"):
         fetch_json(REPORT_URL)
 
 
-def test_not_json_is_refused(monkeypatch):
+def test_not_json_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     install(monkeypatch, {REPORT_URL: b"<html>nope</html>"})
     with pytest.raises(NikashaError, match="not JSON"):
         fetch_json(REPORT_URL)
@@ -407,7 +419,7 @@ def test_not_json_is_refused(monkeypatch):
     [b"[" * 200_000 + b"]" * 200_000, b"1" * 5000, b'{"a": "\xff"}'],
     ids=["deep", "huge-int", "bad-utf8"],
 )
-def test_hostile_json_is_refused_cleanly(monkeypatch, body):
+def test_hostile_json_is_refused_cleanly(monkeypatch: pytest.MonkeyPatch, body: bytes) -> None:
     # Deep nesting (RecursionError) and a 5000-digit int (plain ValueError) used to escape.
     install(monkeypatch, {REPORT_URL: body})
     with pytest.raises(NikashaError, match="not JSON"):
@@ -415,18 +427,20 @@ def test_hostile_json_is_refused_cleanly(monkeypatch, body):
 
 
 def test_hostile_attachment_list_shapes_do_not_crash() -> None:
+    data: object
+    payload: dict[str, object]
     for data in ("x" * 10_000, {"k": 1}, 7, [None, "s", {"attributes": []}]):
         payload = {"data": {"relationships": {"attachments": {"data": data}}}}
         parsed = parse_report(payload, "1")
         assert len(parsed.attachments) <= 3
 
 
-def test_credentials_are_not_forwarded_on_redirect(monkeypatch):
+def test_credentials_are_not_forwarded_on_redirect(monkeypatch: pytest.MonkeyPatch) -> None:
     install(monkeypatch, _routes())
     fetch_report("123456", online=True, env=CREDS, with_attachments=False)
     seen: list[urllib.request.Request] = []
 
-    def capture(request, timeout=None):
+    def capture(request: urllib.request.Request, timeout: float | None = None) -> FakeResponse:
         seen.append(request)
         return h1_fake_response()
 
@@ -437,7 +451,12 @@ def test_credentials_are_not_forwarded_on_redirect(monkeypatch):
     assert request.unredirected_hdrs.get("Authorization") == "Basic c2VjcmV0"
     # urllib's own redirect handler builds the follow-up request: no credential on it.
     follow = urllib.request.HTTPRedirectHandler().redirect_request(
-        request, None, 302, "Found", email.message.Message(), "https://elsewhere.example/x"
+        request,
+        cast("IO[bytes]", None),
+        302,
+        "Found",
+        cast("HTTPMessage", email.message.Message()),
+        "https://elsewhere.example/x",
     )
     assert follow is not None
     assert all(k.lower() != "authorization" for k, _ in follow.header_items())
@@ -447,7 +466,9 @@ def h1_fake_response() -> FakeResponse:
     return FakeResponse(b"{}", url=REPORT_URL)
 
 
-def test_errors_never_carry_a_presigned_query(monkeypatch, tmp_path):
+def test_errors_never_carry_a_presigned_query(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     routes = _routes()
     routes[POC_URL] = urllib.error.URLError("boom " + POC_URL)
     install(monkeypatch, routes)
@@ -456,7 +477,9 @@ def test_errors_never_carry_a_presigned_query(monkeypatch, tmp_path):
     assert "signature=abc" not in fetched.markdown()
 
 
-def test_attachment_failures_are_warnings_not_errors(monkeypatch, tmp_path):
+def test_attachment_failures_are_warnings_not_errors(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     routes = _routes()
     routes[POC_URL] = _http_error(POC_URL, 403)
     install(monkeypatch, routes)
@@ -482,14 +505,14 @@ def _app() -> typer.Typer:
 
 
 @pytest.fixture
-def env(monkeypatch, tmp_path):
+def env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     monkeypatch.setenv("NIKASHA_CACHE_DIR", str(tmp_path / "cache"))
     for key, value in CREDS.items():
         monkeypatch.setenv(key, value)
     return tmp_path
 
 
-def test_cli_refuses_offline(env, monkeypatch):
+def test_cli_refuses_offline(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _boom(monkeypatch)
     result = runner.invoke(_app(), ["h1", "123456"])
     assert result.exit_code == 1
@@ -497,7 +520,7 @@ def test_cli_refuses_offline(env, monkeypatch):
     assert "Traceback" not in result.output
 
 
-def test_cli_refuses_without_credentials(env, monkeypatch):
+def test_cli_refuses_without_credentials(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _boom(monkeypatch)
     monkeypatch.delenv("HACKERONE_TOKEN")
     result = runner.invoke(_app(), ["h1", "123456", "--online"])
@@ -505,7 +528,7 @@ def test_cli_refuses_without_credentials(env, monkeypatch):
     assert "HACKERONE_TOKEN" in result.output
 
 
-def test_cli_prints_markdown_and_json(env, monkeypatch):
+def test_cli_prints_markdown_and_json(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     calls = install(monkeypatch, _routes())
     result = runner.invoke(_app(), ["h1", "123456", "--online"])
     assert result.exit_code == 0, result.output
@@ -520,7 +543,7 @@ def test_cli_prints_markdown_and_json(env, monkeypatch):
     assert data["attachments"] == []
 
 
-def test_cli_writes_to_a_file(env, monkeypatch):
+def test_cli_writes_to_a_file(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     install(monkeypatch, _routes())
     out = env / "report.md"
     result = runner.invoke(_app(), ["h1", "123456", "--online", "-o", str(out)])
@@ -530,7 +553,9 @@ def test_cli_writes_to_a_file(env, monkeypatch):
     assert ingest_markdown(out.read_text(encoding="utf-8")).title is not None
 
 
-def test_cli_check_prints_the_reply_markdown(env, monkeypatch, vulnlab_repo):
+def test_cli_check_prints_the_reply_markdown(
+    env: Path, monkeypatch: pytest.MonkeyPatch, vulnlab_repo: Path
+) -> None:
     install(monkeypatch, _routes())
     result = runner.invoke(
         _app(),

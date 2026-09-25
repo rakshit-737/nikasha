@@ -4,10 +4,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from code_helpers import VULNLAB, assert_clean, callees, calls, flags, parse_fixture, symbols
 
-from nikasha.code.facts import MacroDef
+from nikasha.code.facts import FileFacts, MacroDef
 from nikasha.code.languages import Lang, detect_language
 from nikasha.code.parser import parse_file
 
@@ -141,7 +143,7 @@ def test_deterministic() -> None:
 V120 = VULNLAB / "v1.2.0"
 
 
-def _vulnlab(relpath: str):
+def _vulnlab(relpath: str) -> FileFacts:
     path = V120 / relpath
     lang = detect_language(relpath, path.read_bytes())
     assert lang is Lang.C
@@ -191,7 +193,7 @@ def test_vulnlab_headers() -> None:
 
 
 @pytest.mark.parametrize("path", sorted(VULNLAB.glob("*/**/*.[ch]")), ids=str)
-def test_every_vulnlab_source_parses(path):
+def test_every_vulnlab_source_parses(path: Path) -> None:
     facts = parse_file(Lang.C, path.read_bytes())
     assert_clean(facts)
     assert any(s.kind == "function" for s in facts.symbols) or path.suffix == ".h"

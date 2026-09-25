@@ -35,7 +35,7 @@ def test_extract_stdin() -> None:
     assert json.loads(result.stdout)["claims"][0]["name"] == "foo_bar"
 
 
-def test_extract_missing_file_is_a_clean_error(tmp_path):
+def test_extract_missing_file_is_a_clean_error(tmp_path: Path) -> None:
     result = runner.invoke(app, ["extract", str(tmp_path / "nope.md")])
     assert result.exit_code == 1
     assert "Traceback" not in result.output
@@ -46,7 +46,7 @@ def test_extract_bad_input_format() -> None:
     assert result.exit_code != 0
 
 
-def test_extract_records_svg(tmp_path):
+def test_extract_records_svg(tmp_path: Path) -> None:
     svg = tmp_path / "view.svg"
     result = runner.invoke(app, ["extract", str(SAMPLE), "--record-svg", str(svg)])
     assert result.exit_code == 0

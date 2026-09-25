@@ -19,6 +19,7 @@ from check_helpers import MakeContext, claim
 from nikasha.checks.base import run_checks
 from nikasha.checks.c10_trace_version_fit import TraceVersionFit
 from nikasha.model.claims import Frame, TraceClaim
+from nikasha.model.evidence import Evidence
 
 #: Frame lines as they are at v1.2.0: the memcpy, the call to it, the block loop and main.
 FITS_V120 = (
@@ -67,7 +68,7 @@ def trace(frames: tuple[tuple[str, str, int | None], ...], **fields: object) -> 
     )
 
 
-def _run(make_ctx: MakeContext, claims: list[TraceClaim], tag: str = "v1.2.0") -> list:
+def _run(make_ctx: MakeContext, claims: list[TraceClaim], tag: str = "v1.2.0") -> list[Evidence]:
     ctx = make_ctx(claims=claims, tag=tag)
     return TraceVersionFit().run(ctx, claims)
 

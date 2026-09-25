@@ -10,6 +10,7 @@ from hypothesis import strategies as st
 
 from nikasha.extract import extract_claims
 from nikasha.extract.traces import PARSERS, go_panic
+from nikasha.extract.traces.common import ParsedTrace
 from nikasha.ingest import ingest_string
 from nikasha.model.claims import TraceClaim
 
@@ -21,7 +22,7 @@ def _load(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf-8")
 
 
-def _one(text: str):
+def _one(text: str) -> ParsedTrace:
     traces = PARSER.parse(text)
     assert len(traces) == 1, traces
     return traces[0]
@@ -44,7 +45,9 @@ FIXTURE_CASES = [
 
 
 @pytest.mark.parametrize(("name", "message", "path", "frames"), FIXTURE_CASES)
-def test_single_goroutine_fixture(name, message, path, frames):
+def test_single_goroutine_fixture(
+    name: str, message: str, path: str, frames: list[tuple[str, int]]
+) -> None:
     text = _load(name)
     trace = _one(text)
     data = trace.data
@@ -147,7 +150,7 @@ def test_function_line_without_arguments() -> None:
         (None, None, False),
     ],
 )
-def test_goroot_detection(function, path, runtime):
+def test_goroot_detection(function: str | None, path: str | None, runtime: bool) -> None:
     assert go_panic.is_goroot_frame(function, path) is runtime
 
 
@@ -158,7 +161,7 @@ def test_goroot_detection(function, path, runtime):
         "panic: x\n\ngoroutine 1 [running]:\nmain.f()\n\tnot-a-location\n",
     ],
 )
-def test_prose_and_broken_dumps(text):
+def test_prose_and_broken_dumps(text: str) -> None:
     for trace in PARSER.parse(text):
         assert trace.data.frames == ()
 
@@ -169,17 +172,19 @@ ALL_LINES = [line for p in sorted(FIXTURES.glob("*.txt")) for line in p.read_tex
 
 
 @pytest.mark.parametrize("name", sorted(p.name for p in FIXTURES.glob("*.txt")))
-def test_every_truncation_parses(name):
+def test_every_truncation_parses(name: str) -> None:
     lines = _load(name).splitlines(keepends=True)
     for n in range(len(lines) + 1):
         text = "".join(lines[:n])
         for trace in PARSER.parse(text):
             assert 0 <= trace.start < trace.end <= len(text)
-    assert _one("".join(lines[:5])).data.frames[0].function.startswith("main.")
+    function = _one("".join(lines[:5])).data.frames[0].function
+    assert function is not None
+    assert function.startswith("main.")
 
 
 @pytest.mark.parametrize("text", ["", "panic:", "goroutine 1 [running]:\n", "panic: \n\ngoroutine"])
-def test_garbage_does_not_raise(text):
+def test_garbage_does_not_raise(text: str) -> None:
     for trace in PARSER.parse(text):
         assert 0 <= trace.start <= trace.end <= len(text)
 
@@ -191,11 +196,11 @@ def _check(text: str) -> None:
 
 
 @given(st.text())
-def test_hypothesis_random_text(text):
+def test_hypothesis_random_text(text: str) -> None:
     _check(text)
 
 
 @settings(max_examples=200)
 @given(st.lists(st.one_of(st.sampled_from(ALL_LINES), st.text(max_size=30)), max_size=40))
-def test_hypothesis_shuffled_report_lines(lines):
+def test_hypothesis_shuffled_report_lines(lines: list[str]) -> None:
     _check("\n".join(lines))

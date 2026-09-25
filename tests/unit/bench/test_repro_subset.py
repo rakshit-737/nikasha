@@ -131,7 +131,7 @@ def test_reproducer_statuses(tmp_path: Path) -> None:
     )
     assert calls == []
     subset = _case(poc=tmp_path / "p", recipe="vulnlab", version="v1.2.0")
-    assert bench_repro.Reproducer(engine, attempt_fn=ok).attempt(subset, tmp_path) == ("ran", "RUN")
+    assert bench_repro.Reproducer(engine, attempt_fn=ok).attempt(subset, tmp_path) == ("ran", "RUN")  # type: ignore[comparison-overlap]
     status, failure = bench_repro.Reproducer(engine, attempt_fn=build_fails).attempt(
         subset, tmp_path
     )

@@ -4,6 +4,7 @@
 
 import time
 from pathlib import Path
+from typing import NoReturn
 
 import pytest
 from hypothesis import HealthCheck, given, settings
@@ -11,14 +12,16 @@ from hypothesis import strategies as st
 
 from nikasha.extract import MAX_CLAIMS, extract_claims
 from nikasha.extract import pipeline as pipeline_module
-from nikasha.extract.registry import EXTRACTORS
+from nikasha.extract.pipeline import Extraction
+from nikasha.extract.registry import EXTRACTORS, ExtractContext
 from nikasha.ingest import ingest_string
+from nikasha.model.report import Report
 from nikasha.model.result import Result
 
 APPENDIX_B = Path(__file__).parent / "appendix_b_sample.md"
 
 
-def _extract(text: str, fmt: str = "markdown"):
+def _extract(text: str, fmt: str = "markdown") -> tuple[Report, Extraction]:
     report = ingest_string(text, input_format=fmt)  # type: ignore[arg-type]
     return report, extract_claims(report)
 
@@ -80,8 +83,8 @@ def test_paths_inside_patch_are_dropped() -> None:
     assert kinds == ["patch"]
 
 
-def test_failing_extractor_becomes_a_warning(monkeypatch):
-    def boom(ctx):
+def test_failing_extractor_becomes_a_warning(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(ctx: ExtractContext) -> NoReturn:
         raise RuntimeError("kaput")
 
     monkeypatch.setitem(EXTRACTORS, "zz_broken", boom)
@@ -90,7 +93,7 @@ def test_failing_extractor_becomes_a_warning(monkeypatch):
     assert any(c.kind == "symbol" for c in extraction.claims)
 
 
-def test_claim_cap(monkeypatch):
+def test_claim_cap(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(pipeline_module, "MAX_CLAIMS", 3)
     text = " ".join(f"`func_{i}()`" for i in range(10))
     _, extraction = _extract(text)
@@ -101,7 +104,7 @@ def test_claim_cap(monkeypatch):
 
 @given(st.text(max_size=2000))
 @settings(max_examples=150, deadline=None, suppress_health_check=[HealthCheck.too_slow])
-def test_pipeline_never_crashes_on_arbitrary_text(text):
+def test_pipeline_never_crashes_on_arbitrary_text(text: str) -> None:
     for fmt in ("markdown", "text", "html"):
         report, extraction = _extract(text, fmt)
         assert not extraction.warnings, extraction.warnings

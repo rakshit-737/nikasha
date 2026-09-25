@@ -29,6 +29,7 @@ from nikasha.code.fingerprint import Token
 from nikasha.code.generated import GeneratedMatch
 from nikasha.code.gitio import HistoryTimeoutError
 from nikasha.model.claims import SnippetClaim
+from nikasha.model.evidence import Evidence
 
 #: ``util_copy_value()`` exactly as it stands at v1.2.0, src/util.c:8-18.
 AT_V120 = """char *util_copy_value(const char *value)
@@ -99,7 +100,7 @@ def _snippet(code: str, **fields: Any) -> SnippetClaim:
     return claim(SnippetClaim, code=code, lang_hint="c", n_lines=code.count("\n") + 1, **fields)
 
 
-def _run(make_ctx: MakeContext, claims: list[SnippetClaim], tag: str = "v1.2.0") -> list:
+def _run(make_ctx: MakeContext, claims: list[SnippetClaim], tag: str = "v1.2.0") -> list[Evidence]:
     ctx = make_ctx(claims=claims, tag=tag)
     return SnippetProvenance().run(ctx, claims)
 
@@ -429,7 +430,7 @@ class TestReviewFixes:
     def test_a_capped_search_at_the_ref_does_not_refute(
         self, make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        real = c07.literal_search
+        real = c07.literal_search  # type: ignore[attr-defined]
 
         def capped(*args: Any, **kwargs: Any) -> Any:
             result = real(*args, **kwargs)
@@ -461,3 +462,32 @@ class TestReviewFixes:
         window = _narrow(tokens, (), snip, anchor=n - 10)
         assert window[-1].line == n
         assert len(window) == ALIGN_WINDOW_TOKENS
+
+
+# --- a git failure is not an absence (P4) ---------------------------------------------------
+
+
+def test_a_failed_grep_is_neutral_for_each_claim(
+    make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every ``git grep`` exits 128: each snippet says so; none is refuted, the check runs."""
+    from nikasha.code.gitio import GitRepo, GitResult  # noqa: PLC0415
+
+    claims = [_snippet(AT_V120), _snippet(FABRICATED)]
+    ctx = make_ctx(claims=claims)
+    real_run = GitRepo.run
+
+    def run(self: GitRepo, argv: list[str], **kw: Any) -> GitResult:
+        if argv[:1] == ["grep"]:
+            return GitResult(tuple(argv), 128, b"", b"fatal: bad object", 0)
+        return real_run(self, argv, **kw)
+
+    monkeypatch.setattr(GitRepo, "run", run)
+    evidence = SnippetProvenance().run(ctx, claims)
+    assert len(evidence) == 2
+    for item in evidence:
+        assert item.outcome == "NEUTRAL"
+        assert item.strength == 0.0
+        assert item.details["outcome"] == "search_failed"
+        assert "exit code 128" in item.details["incomplete"]
+        assert item.details["history_complete"] is False

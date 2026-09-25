@@ -51,8 +51,8 @@ def test_parse_docker_daemon_unreachable() -> None:
     assert "Cannot connect" in (info.error or "")
 
 
-def test_missing_engine_is_reported_not_raised(monkeypatch):
-    monkeypatch.setattr(sandbox.shutil, "which", lambda _name: None)
+def test_missing_engine_is_reported_not_raised(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sandbox.shutil, "which", lambda _name: None)  # type: ignore[attr-defined]
     engines = sandbox.detect_engines()
     assert [e.name for e in engines] == ["podman", "docker"]
     assert not any(e.available for e in engines)
@@ -63,7 +63,7 @@ def test_missing_engine_is_reported_not_raised(monkeypatch):
     ("first", "second", "expected"),
     [(True, True, "podman"), (False, True, "docker"), (True, False, "podman")],
 )
-def test_podman_is_preferred(first, second, expected):
+def test_podman_is_preferred(first: bool, second: bool, expected: str) -> None:
     engines = [
         sandbox.EngineInfo(name="podman", available=first),
         sandbox.EngineInfo(name="docker", available=second),

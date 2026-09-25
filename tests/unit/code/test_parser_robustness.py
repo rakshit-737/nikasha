@@ -37,7 +37,7 @@ def test_every_grammar_and_query_loads() -> None:
 
 @pytest.mark.parametrize("lang", list(Lang), ids=str)
 @pytest.mark.parametrize("name", sorted(GARBAGE))
-def test_garbage_never_raises(lang, name):
+def test_garbage_never_raises(lang: Lang, name: str) -> None:
     source = GARBAGE[name]
     facts = parse_file(lang, source)
     assert facts.lang == lang.value
@@ -72,7 +72,7 @@ def test_over_the_size_cap_is_not_parsed() -> None:
 
 
 @pytest.mark.parametrize(("lang", "unit"), [(Lang.C, b"("), (Lang.C, b"{"), (Lang.PYTHON, b"(")])
-def test_two_megabytes_of_open_brackets(lang, unit):
+def test_two_megabytes_of_open_brackets(lang: Lang, unit: bytes) -> None:
     source = unit * TWO_MB
     assert len(source) <= MAX_FILE_BYTES
     start = time.monotonic()

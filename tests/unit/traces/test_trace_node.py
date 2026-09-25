@@ -10,6 +10,7 @@ from hypothesis import strategies as st
 
 from nikasha.extract import extract_claims
 from nikasha.extract.traces import PARSERS, node
+from nikasha.extract.traces.common import ParsedTrace
 from nikasha.ingest import ingest_string
 from nikasha.model.claims import TraceClaim
 
@@ -21,7 +22,7 @@ def _load(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf-8")
 
 
-def _one(text: str):
+def _one(text: str) -> ParsedTrace:
     traces = PARSER.parse(text)
     assert len(traces) == 1, traces
     return traces[0]
@@ -71,7 +72,13 @@ FIXTURE_CASES = [
 
 
 @pytest.mark.parametrize(("name", "bug_type", "message", "app", "runtime"), FIXTURE_CASES)
-def test_fixture(name, bug_type, message, app, runtime):
+def test_fixture(
+    name: str,
+    bug_type: str,
+    message: str,
+    app: list[tuple[str, int, int]],
+    runtime: list[str],
+) -> None:
     text = _load(name)
     trace = _one(text)
     data = trace.data
@@ -86,7 +93,8 @@ def test_fixture(name, bug_type, message, app, runtime):
     assert all(f.path == path and not f.is_runtime for f in data.frames[: len(app)])
     assert [f.function for f in data.frames[len(app) :]] == runtime
     assert all(
-        f.is_runtime and f.path.startswith("node:internal/") for f in data.frames[len(app) :]
+        f.is_runtime and f.path is not None and f.path.startswith("node:internal/")
+        for f in data.frames[len(app) :]
     )
 
 
@@ -175,7 +183,7 @@ def test_header_needs_caret_and_location() -> None:
         "not an error line!\n    at f (/a.js:1:1)\n",
     ],
 )
-def test_not_node_traces(text):
+def test_not_node_traces(text: str) -> None:
     assert PARSER.parse(text) == []
 
 
@@ -186,7 +194,7 @@ ALL_LINES += PROPS.splitlines()
 
 
 @pytest.mark.parametrize("name", [c[0] for c in FIXTURE_CASES])
-def test_every_truncation_parses(name):
+def test_every_truncation_parses(name: str) -> None:
     lines = _load(name).splitlines(keepends=True)
     for n in range(len(lines) + 1):
         text = "".join(lines[:n])
@@ -197,7 +205,7 @@ def test_every_truncation_parses(name):
 
 
 @pytest.mark.parametrize("text", ["", "    at ", "E: x\n    at (", "^\n\nE: x\n    at f (a:1:2)"])
-def test_garbage_does_not_raise(text):
+def test_garbage_does_not_raise(text: str) -> None:
     for trace in PARSER.parse(text):
         assert 0 <= trace.start <= trace.end <= len(text)
 
@@ -209,11 +217,11 @@ def _check(text: str) -> None:
 
 
 @given(st.text())
-def test_hypothesis_random_text(text):
+def test_hypothesis_random_text(text: str) -> None:
     _check(text)
 
 
 @settings(max_examples=200)
 @given(st.lists(st.one_of(st.sampled_from(ALL_LINES), st.text(max_size=30)), max_size=40))
-def test_hypothesis_shuffled_report_lines(lines):
+def test_hypothesis_shuffled_report_lines(lines: list[str]) -> None:
     _check("\n".join(lines))

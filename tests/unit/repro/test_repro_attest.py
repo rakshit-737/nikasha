@@ -192,7 +192,7 @@ def test_image_id_reads_inspect_format(monkeypatch: pytest.MonkeyPatch) -> None:
     ident = "sha256:" + "ab" * 32
     fake = _fake_run(ident.encode() + b"\n")
     monkeypatch.setattr(sandbox, "engine_executable", lambda e: "/usr/bin/docker")
-    monkeypatch.setattr(sandbox.subprocess, "run", fake)
+    monkeypatch.setattr(sandbox.subprocess, "run", fake)  # type: ignore[attr-defined]
     assert sandbox.image_id(DOCKER, "nikasha/recipe-c:1") == ident
     assert fake.calls == [
         ["/usr/bin/docker", "image", "inspect", "--format", "{{.Id}}", "nikasha/recipe-c:1"]
@@ -202,7 +202,7 @@ def test_image_id_reads_inspect_format(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.parametrize(("stdout", "code"), [(b"", 1), (b"garbage\n", 0), (b"sha256:zz", 0)])
 def test_image_id_unknown(monkeypatch: pytest.MonkeyPatch, stdout: bytes, code: int) -> None:
     monkeypatch.setattr(sandbox, "engine_executable", lambda e: "/usr/bin/docker")
-    monkeypatch.setattr(sandbox.subprocess, "run", _fake_run(stdout, code))
+    monkeypatch.setattr(sandbox.subprocess, "run", _fake_run(stdout, code))  # type: ignore[attr-defined]
     assert sandbox.image_id(DOCKER, "nikasha/recipe-c:1") is None
 
 

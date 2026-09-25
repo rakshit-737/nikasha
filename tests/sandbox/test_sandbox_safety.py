@@ -54,13 +54,15 @@ def _run(
     return sandbox.run_container(engine, spec, timeout_s=timeout_s, name=name)
 
 
-def test_repro_is_refused_when_no_engine_is_present(tmp_path, monkeypatch):
+def test_repro_is_refused_when_no_engine_is_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("PATH", str(tmp_path))
     with pytest.raises(NoEngineError, match="never run on the host"):
         sandbox.select_engine("auto")
 
 
-def test_network_egress_fails(engine):
+def test_network_egress_fails(engine: EngineInfo) -> None:
     script = (
         'python3 -c "import socket; s=socket.socket(); s.settimeout(5); '
         "s.connect(('1.1.1.1', 80)); print('CONNECTED')\""
@@ -72,7 +74,7 @@ def test_network_egress_fails(engine):
     assert only_lo.stdout.split() == [b"lo"]
 
 
-def test_fork_bomb_is_contained_by_the_pids_limit(engine):
+def test_fork_bomb_is_contained_by_the_pids_limit(engine: EngineInfo) -> None:
     counter = (
         'python3 -c "import os,sys\n'
         "n=0\n"
@@ -103,7 +105,7 @@ def test_fork_bomb_is_contained_by_the_pids_limit(engine):
     assert after.exit_code == 0 and after.stdout.strip() == b"alive"
 
 
-def test_writes_to_the_read_only_rootfs_fail(engine):
+def test_writes_to_the_read_only_rootfs_fail(engine: EngineInfo) -> None:
     for path in ("/usr/nikasha-probe", "/etc/nikasha-probe", "/nikasha-probe", "/var/tmp/x"):
         result = _run(engine, f"touch {path}")
         assert result.exit_code != 0, path
@@ -111,7 +113,7 @@ def test_writes_to_the_read_only_rootfs_fail(engine):
     assert _run(engine, "touch /tmp/ok && touch /work/ok").exit_code == 0
 
 
-def test_process_runs_as_uid_65534_without_new_privileges(engine):
+def test_process_runs_as_uid_65534_without_new_privileges(engine: EngineInfo) -> None:
     result = _run(engine, "id -u; id -g; grep -E '^(NoNewPrivs|CapEff)' /proc/self/status")
     lines = result.stdout.decode().split("\n")
     assert lines[0] == "65534"
@@ -121,7 +123,7 @@ def test_process_runs_as_uid_65534_without_new_privileges(engine):
     assert int(status["CapEff"].strip(), 16) == 0
 
 
-def test_timeout_kills_the_container_and_leaves_none_running(engine):
+def test_timeout_kills_the_container_and_leaves_none_running(engine: EngineInfo) -> None:
     name = sandbox.new_container_name("nikasha-timeout")
     result = _run(engine, "sleep 600", timeout_s=3, name=name)
     assert result.timed_out is True
@@ -129,13 +131,15 @@ def test_timeout_kills_the_container_and_leaves_none_running(engine):
     assert not sandbox.container_exists(engine, name)
 
 
-def test_output_is_truncated_at_the_limit(engine):
+def test_output_is_truncated_at_the_limit(engine: EngineInfo) -> None:
     result = _run(engine, "head -c 3000000 /dev/zero")
     assert result.truncated is True
     assert len(result.stdout) == 1024 * 1024
 
 
-def test_vulnlab_build_and_poc_reproduce_the_heap_overflow(engine, tmp_path):
+def test_vulnlab_build_and_poc_reproduce_the_heap_overflow(
+    engine: EngineInfo, tmp_path: Path
+) -> None:
     """End to end: export, sandboxed build, cached outputs, and one real PoC run."""
     if shutil.which("git") is None:
         pytest.fail("git is required")
@@ -188,7 +192,9 @@ def _hostile(steps: list[str]) -> recipes.LoadedRecipe:
         "mkfifo include/fifo",
     ],
 )
-def test_links_left_in_out_by_a_hostile_build_are_refused(engine, tmp_path, plant):
+def test_links_left_in_out_by_a_hostile_build_are_refused(
+    engine: EngineInfo, tmp_path: Path, plant: str
+) -> None:
     git_dir, commit = _vulnlab_repo(tmp_path)
     cache = tmp_path / "cache"
     loaded = _hostile(
@@ -205,7 +211,9 @@ def test_links_left_in_out_by_a_hostile_build_are_refused(engine, tmp_path, plan
     assert list((cache / "repro" / "tmp").iterdir()) == []  # the scratch tree is gone
 
 
-def test_scratch_is_removed_even_when_the_build_skips_its_exit_trap(engine, tmp_path):
+def test_scratch_is_removed_even_when_the_build_skips_its_exit_trap(
+    engine: EngineInfo, tmp_path: Path
+) -> None:
     """A build that drops the trap and locks its directories still leaves nothing behind."""
     git_dir, commit = _vulnlab_repo(tmp_path)
     cache = tmp_path / "cache"
@@ -223,7 +231,9 @@ def test_scratch_is_removed_even_when_the_build_skips_its_exit_trap(engine, tmp_
     assert list((cache / "repro" / "tmp").iterdir()) == []
 
 
-def test_scrub_container_empties_a_tree_the_host_cannot_delete(engine, tmp_path):
+def test_scrub_container_empties_a_tree_the_host_cannot_delete(
+    engine: EngineInfo, tmp_path: Path
+) -> None:
     out = tmp_path / "out"
     out.mkdir()
     out.chmod(0o777)
@@ -256,7 +266,9 @@ REAL_PROJECTS = [
 @pytest.mark.network
 @pytest.mark.slow
 @pytest.mark.parametrize(("recipe_id", "url", "tag", "binary"), REAL_PROJECTS)
-def test_real_project_recipe_builds(engine, tmp_path, recipe_id, url, tag, binary):  # noqa: PLR0917
+def test_real_project_recipe_builds(  # noqa: PLR0917
+    engine: EngineInfo, tmp_path: Path, recipe_id: str, url: str, tag: str, binary: str
+) -> None:
     """Nightly: the real-project recipes' build steps, which were never run offline."""
     from nikasha.resolve.repo import open_repo  # noqa: PLC0415
 

@@ -28,7 +28,7 @@ from nikasha.model.evidence import Evidence
 INVENTED = "--proxy-unsafe-fold"
 
 
-def _flag(token: str, **fields: object) -> OptionClaim:
+def _flag(token: str, **fields: Any) -> OptionClaim:
     fields.setdefault("option_kind", "cli_flag")
     return claim(OptionClaim, token=token, **fields)
 

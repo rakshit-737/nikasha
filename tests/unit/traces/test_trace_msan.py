@@ -31,7 +31,7 @@ def test_not_registered_by_default() -> None:
 
 
 @pytest.mark.parametrize("text", ["", "\n", "hello world", "#0 0x1 in main /a.c:1:2", "=" * 80])
-def test_no_trace_without_header(text):
+def test_no_trace_without_header(text: str) -> None:
     assert PARSER.parse(text) == []
 
 
@@ -51,7 +51,7 @@ def test_output_is_deterministic() -> None:
 
 @given(st.text(max_size=400))
 @settings(max_examples=200, deadline=None)
-def test_never_raises_on_arbitrary_text(text):
+def test_never_raises_on_arbitrary_text(text: str) -> None:
     PARSER.parse(text)
     PARSER.parse(HEADER + "\n" + text)
 
@@ -60,7 +60,7 @@ def test_never_raises_on_arbitrary_text(text):
     "seed",
     ["#0 0x1 in ", "    #0 ", HEADER + "\n", "(a+0x1) ", ":1:2 ", "SUMMARY: ", "a" * 7 + ":"],
 )
-def test_linear_time_on_hostile_input(seed):
+def test_linear_time_on_hostile_input(seed: str) -> None:
     text = HEADER + "\n" + seed * (200_000 // len(seed))
     started = time.perf_counter()
     PARSER.parse(text)
