@@ -30,7 +30,7 @@ is no "AI detection" anywhere in it.
 
 | Verdict | Meaning | Exit code |
 |---|---|---|
-| **REPRODUCED** | The proof of concept ran in the sandbox and produced the claimed crash signature. Needs the M5 sandbox, which is **not in this build**, so this verdict is unreachable today. | 0 |
+| **REPRODUCED** | The proof of concept ran in the sandbox and produced the claimed crash signature. `nikasha check` has no `--repro` option yet, so a `check` run cannot reach this verdict today; the sandbox itself (`nikasha repro`, M5) is built but not yet verified in CI. | 0 |
 | **GROUNDED** | A high grounding score and no substantial refutation anywhere. | 0 |
 | **MIXED** | Evidence on both sides, or findings that fit a *different* version than the report names (a wrong version header is a question, never an accusation). | 10 |
 | **UNGROUNDED** | The hardest verdict to reach: a low score *and* a core file, symbol, quoted line, snippet or option that never existed in the repository's history, corroborated by a second independent group of evidence (or strong refutations from three independent groups). | 20 |
@@ -48,6 +48,10 @@ git clone https://github.com/rakshit-737/nikasha && cd nikasha
 uv tool install .          # or: pipx install .   (or: uv sync && uv run nikasha ...)
 nikasha doctor             # Python, git, cache directory, container engines; no network
 ```
+
+Optional extras add the integrations: `web` (local web UI), `mcp` (MCP server), `llm`
+(Anthropic and OpenAI clients for `--llm`) and `bench` (NikashaBench plots), for example
+`uv tool install '.[web,mcp]'`.
 
 Build the demo repository. `scripts/build_vulnlab.py` replays a fixed commit plan into a
 new bare repository with `git fast-import`, so the five tags (`v1.0.0` to `v1.3.0`) land on
@@ -102,7 +106,11 @@ repository is cloned only with `--online`; a local path never touches the networ
 
 Other commands: `nikasha extract` (the claims, with `--json`), `nikasha index`,
 `nikasha timeline SYMBOL` (in which releases a symbol is defined, with "did you mean"
-suggestions) and `nikasha trace` (a stack trace against the code).
+suggestions), `nikasha trace` (a stack trace against the code), `nikasha lint` (check a
+draft report before submitting it, no verdict), `nikasha cve` (a CVE JSON 5.x record),
+`nikasha repro` and `nikasha recipes` (sandboxed reproduction), `nikasha bench`,
+`nikasha mcp`, `nikasha serve` (local web UI), and the read-only fetchers `nikasha h1` and
+`nikasha gh-advisories`. `nikasha --help` lists them all.
 
 ## What it checks
 
@@ -127,8 +135,8 @@ strengths in [`docs/checks.md`](docs/checks.md), generated from the code:
 | refs, meta, behavior | C15, C17, C18 | Do cited commits, links, CVE and CWE records check out? Does the CVSS vector recompute to the stated score? Does the named function really call the API? |
 | info | C13, C21 | Which later commits touch the reported locus? What is the report missing (version, PoC, trace, location)? |
 
-Two more checks sit outside that count. **C19** (reproduction) needs the M5 sandbox and
-is not in this build. **C20** (`LLM_REVIEW`) is on disk but inert unless you name a model
+Two more checks sit outside that count. **C19** (reproduction) scores a sandboxed PoC run
+and produces nothing without one; `nikasha check` does not start the sandbox yet. **C20** (`LLM_REVIEW`) is on disk but inert unless you name a model
 with `--llm` or in `nikasha.toml`: it may only tilt a score, because its strength is capped
 at |0.5| in `lr_defaults.yaml`, below every verdict threshold, and a model that cannot be
 reached yields an error at strength 0, never a refutation.
@@ -187,11 +195,11 @@ pass it.
 | Milestone | Status |
 |---|---|
 | M0 Bootstrap · M1 Models, intake, extraction · M2 Resolution and code intelligence · M3 Checks, fusion, CLI outputs · M4 HTML report | **done** (measurements in [`PROGRESS.md`](PROGRESS.md) and [ADR 0004](docs/adr/0004-timeline.md)) |
-| M3.5 Early real-world gate (curl corpus vs. slopcheck) | **not run**: needs network access and a check of HackerOne's terms for the disclosed-report endpoint before any report is fetched |
-| M5 Sandbox reproduction | **not started**: needs a container engine (rootless podman or docker); until it lands REPRODUCED cannot occur |
-| M6 NikashaBench and calibration | **not started**: needs the real-report corpus, under the same terms check as M3.5 |
-| M7 Integrations | **in progress in this tree** (a GitHub Action, `nikasha lint`, the optional model layer); `PROGRESS.md` still lists it as not started |
-| M8 Launch polish and v0.1.0 | **not started**: a release is a public, irreversible action that waits for the maintainer's approval |
+| M3.5 Early real-world gate (curl corpus vs. slopcheck) | **not started**: needs network access and a check of HackerOne's terms for the disclosed-report endpoint before any report is fetched |
+| M5 Sandbox reproduction | **built, not done**: done when the sandbox workflow is green in CI with the real recipe image |
+| M6 NikashaBench and calibration | **machinery done**; the real-report splits wait on M3.5 corpus access |
+| M7 Integrations | **done** (a GitHub Action, `nikasha lint`, the MCP server, the web UI, the optional model layer; network paths tested with stubs only) |
+| M8 Launch polish and v0.1.0 | **tooling done, not published**: a release is a public, irreversible action that waits for the maintainer's approval |
 | M9 Stretch | not started |
 
 ## More
