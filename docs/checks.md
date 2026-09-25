@@ -44,6 +44,7 @@ Two rules hold for every check:
 | [C16](#c16) | VERSION_RANGE_CONSISTENCY | `version` | `symbol`, `version` |
 | [C17](#c17) | IMPACT_CONSISTENCY | `meta` | `impact` |
 | [C18](#c18) | API_USAGE | `behavior` | `behavior` |
+| [C19](#c19) | DYNAMIC_REPRO | `dynamic` | `behavior`, `impact`, `poc`, `symbol`, `trace` |
 | [C20](#c20) | LLM_REVIEW | `llm` | `behavior` |
 | [C21](#c21) | REPORT_HYGIENE | `info` | `behavior`, `file`, `impact`, `line`, `option`, `patch`, `poc`, `reference`, `snippet`, `symbol`, `trace`, `version` |
 
@@ -316,6 +317,20 @@ Applies to: `behavior`
 | `calls_api` | +0.80 |
 | `does_not_call_api` | -1.20 |
 | `other_predicate` | +0.00 |
+
+## C19
+
+**DYNAMIC_REPRO** · group `dynamic`
+
+Compares the crash the sandboxed PoC produced with the crash the report describes (sanitizer, bug class, top application frames).
+
+Applies to: `behavior`, `impact`, `poc`, `symbol`, `trace`
+
+| Outcome | Strength |
+|---|---|
+| `different_signature` | +0.50 |
+| `no_crash` | -0.50 |
+| `signature_match` | +6.00 |
 
 ## C20
 

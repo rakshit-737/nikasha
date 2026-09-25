@@ -124,25 +124,21 @@ def _bug(cap, **kw):
 
 def test_capture_accepts_only_complete_sanitizer_output():
     cap = _capture_module()
-    good = b"==7==ERROR: LeakSanitizer: detected memory leaks
-"
+    good = b"==7==ERROR: LeakSanitizer: detected memory leaks\n"
     assert cap.acceptable("lsan", _result(good)) is None
     assert cap.acceptable("lsan", _result(good, timed_out=True)) == "timed out"
     assert cap.acceptable("lsan", _result(good, truncated=True)) == "output truncated"
     assert cap.acceptable("lsan", _result(b"x.c:1: error", exit_code=125)) == "build failed"
-    assert cap.acceptable("lsan", _result(b"clang: error
-", exit_code=1)) is not None
+    assert cap.acceptable("lsan", _result(b"clang: error\n", exit_code=1)) is not None
     assert cap.acceptable("lsan", _result(good, exit_code=1)) is not None
-    tsan = b"WARNING: ThreadSanitizer: data race (pid=9)
-"
+    tsan = b"WARNING: ThreadSanitizer: data race (pid=9)\n"
     assert cap.acceptable("tsan", _result(tsan, exit_code=66)) is None
     assert cap.acceptable("msan", _result(tsan, exit_code=77)) is not None
 
 
 def test_capture_requires_the_fixed_tag_to_be_clean():
     cap = _capture_module()
-    good = b"==7==ERROR: LeakSanitizer: detected memory leaks
-"
+    good = b"==7==ERROR: LeakSanitizer: detected memory leaks\n"
     assert cap.fixed_is_clean("lsan", _result(b"", exit_code=0)) is None
     assert cap.fixed_is_clean("lsan", _result(good)) is not None
     assert cap.fixed_is_clean("lsan", _result(b"", exit_code=125)) is not None
