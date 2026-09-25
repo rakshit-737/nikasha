@@ -417,3 +417,21 @@ def test_echo_drops_control_characters() -> None:
 def test_a_non_finite_score_is_never_refuted(make_ctx: MakeContext, score: float) -> None:
     c = claim(ImpactClaim, cvss_score=score, severity_word="Low")
     assert all(e.outcome != "REFUTES" for e in _run(make_ctx, [c]))
+
+
+def test_temporal_score_next_to_a_temporal_vector_is_not_refuted(make_ctx: MakeContext) -> None:
+    # Base 9.8; with E:U/RL:O/RC:C the temporal score is lower, and a report may print it.
+    vector = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/E:U/RL:O/RC:C"
+    c = claim(ImpactClaim, cvss_vector=vector, cvss_version="3.1", cvss_score=8.2)
+    [ev] = _run(make_ctx, [c])
+    assert ev.outcome == "NEUTRAL"
+    assert ev.strength == 0.0
+    assert ev.details["modifying_metrics"] == ["E", "RC", "RL"]
+
+
+def test_not_defined_modifiers_still_leave_a_mismatch_refutable(make_ctx: MakeContext) -> None:
+    vector = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/E:X/RL:X"
+    c = claim(ImpactClaim, cvss_vector=vector, cvss_version="3.1", cvss_score=5.0)
+    [ev] = _run(make_ctx, [c])
+    assert ev.outcome == "REFUTES"
+    assert ev.details["finding"] == "score_mismatch"

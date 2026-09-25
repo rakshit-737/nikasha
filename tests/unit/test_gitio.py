@@ -116,3 +116,21 @@ def test_pickaxe_failure_counts_as_incomplete_history(vulnlab_repo, tmp_path):
             obj.unlink()
     with pytest.raises(gitio.HistoryTimeoutError):
         gitio.GitRepo(clone).pickaxe_first("foo")
+
+
+def test_cat_file_missing_name_with_spaces_is_none(vulnlab_repo):
+    # "HEAD:a b missing" has three tokens; it must not be parsed as a size (crash).
+    with gitio.GitRepo(vulnlab_repo) as repo:
+        assert repo.read_file("HEAD", "a b") is None
+        assert repo.read_file("HEAD", "x 5") is None
+
+
+@pytest.mark.parametrize("text", ["", "a\x1b[31mb", "a\rb", "a\x7fb"])
+def test_pickaxe_unsearchable_text_is_not_absence(vulnlab_repo, text):
+    # "Could not search" must never read as "never in history" (P4).
+    with pytest.raises(gitio.HistoryUnavailableError):
+        gitio.GitRepo(vulnlab_repo).pickaxe_first(text)
+
+
+def test_pickaxe_allows_tab_indented_text(vulnlab_repo):
+    assert gitio.GitRepo(vulnlab_repo).pickaxe_first("\tno-such-text-anywhere-42") is None

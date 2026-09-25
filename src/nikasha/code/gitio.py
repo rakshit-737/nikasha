@@ -442,7 +442,9 @@ class CatFileBatch:
         stdin.write(name.encode("utf-8") + b"\n")
         stdin.flush()
         header = stdout.readline().rstrip(b"\n").split(b" ")
-        if len(header) != 3:  # noqa: PLR2004  ("<name> missing" / "ambiguous")
+        # "<sha> <type> <size>" on success; "<name> missing" / "<name> ambiguous" otherwise,
+        # where <name> may itself contain spaces ("v1:a b" -> three tokens, last not a size).
+        if len(header) != 3 or not header[2].isdigit():  # noqa: PLR2004
             return None
         obj_type, size = header[1].decode("ascii", "replace"), int(header[2])
         if size > self._max_bytes:
@@ -702,12 +704,16 @@ class GitRepo:
     ) -> str | None:
         """A commit on any ref whose diff adds or removes ``text`` (``log --all -S``), or
         ``None`` if history never contained it. Raises :class:`HistoryTimeoutError` when
-        the budget runs out, so callers can report incomplete history (SPEC §12 C03).
+        the budget runs out, and its subclass :class:`HistoryUnavailableError` when git
+        fails or ``text`` is empty or holds control characters other than tab, so callers
+        can report incomplete history (SPEC §12 C03).
 
         Nothing is appended to ``record`` when the search times out: there is no exit code
         and no output to hash, and inventing either would be a lie about what ran (P6)."""
-        if not text or any(ord(ch) < _PRINTABLE for ch in text):
-            return None
+        if not text or any((ord(ch) < _PRINTABLE and ch != "\t") or ch == "\x7f" for ch in text):
+            # Unsearchable is not "never in history": returning ``None`` here would let a
+            # caller refute a genuine quote (P4). Tabs are ordinary source indentation.
+            raise HistoryUnavailableError("text cannot be searched in history")
         try:
             result = self.run(
                 ["log", "--all", "-1", "--format=%H", f"-S{text}"], timeout=timeout, record=record

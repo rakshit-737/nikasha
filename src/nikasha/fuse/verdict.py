@@ -20,7 +20,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from nikasha.checks.strengths import Strengths, default_strengths
-from nikasha.fuse.scoring import Ledger, confidence_of
+from nikasha.fuse.scoring import Ledger, confidence_of, scoring_evidence
 from nikasha.model.claims import Claim
 from nikasha.model.evidence import Evidence
 from nikasha.model.verdict import VerdictLabel
@@ -96,6 +96,10 @@ def outcome_key(evidence: Evidence, strengths: Strengths | None = None) -> str |
     recorded = evidence.details.get("outcome")
     if isinstance(recorded, str):
         return recorded
+    if evidence.outcome == "ERROR":
+        # An errored check measured nothing; its zero strength must not be read as a
+        # zero-strength outcome such as C12's "already applied".
+        return None
     table = (strengths or default_strengths()).outcomes(evidence.check_id)
     withheld = evidence.details.get("withheld_strength")
     target = withheld if isinstance(withheld, (int, float)) else evidence.strength
@@ -141,7 +145,8 @@ def _version_mismatches(evidence: Sequence[Evidence], strengths: Strengths) -> l
     out = [
         item
         for item in evidence
-        if (item.check_id, outcome_key(item, strengths) or "") in VERSION_MISMATCH
+        if item.outcome != "ERROR"
+        and (item.check_id, outcome_key(item, strengths) or "") in VERSION_MISMATCH
     ]
     return sorted(out, key=lambda e: e.id)
 
@@ -242,8 +247,11 @@ def decide(  # noqa: PLR0911 - SPEC §14.3 is an ordered ladder; one return per 
             score=score,
             confidence=confidence,
             rule="5: a high grounding score with no substantial refutation",
+            # Only findings that moved the score: an errored or neutral check is not
+            # evidence for GROUNDED (P6).
             key_evidence=tuple(
-                e.id for e in sorted(evidence, key=lambda e: (-e.strength, e.id))[:5]
+                e.id
+                for e in sorted(scoring_evidence(evidence), key=lambda e: (-e.strength, e.id))[:5]
             ),
         )
 
@@ -264,6 +272,7 @@ def decide(  # noqa: PLR0911 - SPEC §14.3 is an ordered ladder; one return per 
         rule="6: evidence on both sides",
         notes=tuple(notes),
         key_evidence=tuple(
-            e.id for e in sorted(evidence, key=lambda e: (-abs(e.strength), e.id))[:5]
+            e.id
+            for e in sorted(scoring_evidence(evidence), key=lambda e: (-abs(e.strength), e.id))[:5]
         ),
     )

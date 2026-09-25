@@ -669,3 +669,20 @@ def test_an_llm_refutation_never_counts_as_a_corroborating_group() -> None:
 def test_rule_1_needs_a_supporting_deterministic_signature_match() -> None:
     errored = ev("repro", "C19", "signature_match", "repro", outcome="ERROR")
     assert verdict([errored, *SUPPORT_LIFT]).label != "REPRODUCED"
+
+
+def test_an_errored_c12_is_not_read_as_already_applied() -> None:
+    errored = Evidence(
+        id="c12-error",
+        check_id="C12",
+        claim_ids=("claim-patch",),
+        outcome="ERROR",
+        strength=0.0,
+        group="patch",
+        summary="apply failed to run",
+        details={},
+    )
+    assert outcome_key(errored) is None
+    decision = verdict([errored, *SUPPORT_LIFT])
+    assert not decision.capped
+    assert "c12-error" not in decision.key_evidence

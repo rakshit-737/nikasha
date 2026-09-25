@@ -236,6 +236,10 @@ def _window(states: list[State], claimed: int | None, total: int) -> tuple[int, 
     spare = MAX_RELEASES - (high - low + 1)
     # Centre the window on the interesting range when there is room, then clamp it inside.
     start = low if spare <= 0 else low - spare // 2
+    if claimed is not None:
+        # The release the report names is the one cell that must never be cut: without it
+        # the caption would say that release "is not among the sampled releases" (P6).
+        start = max(min(start, claimed), claimed - MAX_RELEASES + 1)
     start = max(0, min(start, total - MAX_RELEASES))
     return start, start + MAX_RELEASES
 

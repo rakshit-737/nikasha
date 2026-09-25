@@ -8,6 +8,7 @@ The CVE outcomes are driven through an injected fetcher: the default suite has n
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 from pathlib import Path
@@ -18,7 +19,11 @@ from check_helpers import MakeContext, claim
 
 from nikasha.checks.base import CheckError, run_checks
 from nikasha.checks.c15_references import (
+    CRASH_SIGNAL_BUG_TYPES,
     MAX_CVE_BYTES,
+    MAX_PRODUCT_CHARS,
+    MEMORY_FAMILIES,
+    UNIVERSAL_CWES,
     CveLookup,
     CweCompat,
     References,
@@ -174,6 +179,19 @@ def test_a_commit_cited_from_another_repository_is_not_reported_missing(
     assert outcomes == {"foreign_repo"}
 
 
+def test_a_fork_link_to_a_commit_this_project_has_is_not_foreign(
+    make_ctx: MakeContext, commits: dict[str, str]
+) -> None:
+    # Regression: a commit link on a fork under another name refuted the report although
+    # the commit is this project's own.
+    c = _reference(
+        ref_kind="commit",
+        value=commits["v1.2.0"],
+        repo_url="https://github.com/someone/my-hdr-fork",
+    )
+    assert _run(make_ctx, [c]) == []
+
+
 # --- repository links -----------------------------------------------------------------------
 
 
@@ -270,6 +288,33 @@ def test_a_cve_for_another_product_refutes(make_ctx: MakeContext) -> None:
     assert evidence.strength == -1.0
     assert evidence.details["outcome"] == "cve_other_product"
     assert evidence.details["products"] == ["OpenSSL", "openssl"]
+
+
+def test_a_cve_is_not_compared_against_an_unknown_project(make_ctx: MakeContext) -> None:
+    # Regression: with no known project the only names are the repository's, and a local
+    # checkout has none, so any CVE record was "recorded against X, not this project".
+    ctx = make_ctx(claims=[_reference(ref_kind="cve", value=CVE)], online=True)
+    target = ctx.resolution.target.model_copy(update={"repo_url": "/srv/src/libhdr"})
+    resolution = dataclasses.replace(ctx.resolution, project=None, target=target)
+    ctx = dataclasses.replace(ctx, resolution=resolution)
+    check = References(fetch=_canned(state="PUBLISHED", products=("libhdr",)))
+    (evidence,) = check.run(ctx, check.select(list(ctx.claims)))
+    assert evidence.outcome == "NEUTRAL"
+    assert evidence.strength == 0.0
+    assert evidence.details["outcome"] == "unknown_project"
+    assert "not this project" not in evidence.summary
+
+
+def test_a_missing_cve_record_mentions_reserved_ids(make_ctx: MakeContext) -> None:
+    (evidence,) = _run(
+        make_ctx, [_reference(ref_kind="cve", value=CVE)], online=True, fetch=_canned(status=404)
+    )
+    assert "reserved" in evidence.summary
+
+
+def test_record_product_names_are_clipped() -> None:
+    record = {"containers": {"cna": {"affected": [{"vendor": "x" * 10_000, "product": "p"}]}}}
+    assert max(len(name) for name in cve_products(record)) == MAX_PRODUCT_CHARS
 
 
 def test_a_rejected_cve_refutes(make_ctx: MakeContext) -> None:
@@ -440,6 +485,37 @@ def test_a_valgrind_bug_type_spelling_is_recognised(make_ctx: MakeContext) -> No
     claims = [_trace("invalid-write"), _reference(ref_kind="cwe", value="CWE-787")]
     (evidence,) = _run(make_ctx, claims)
     assert evidence.details["outcome"] == "compatible"
+
+
+def test_cwe_20_is_never_incompatible(make_ctx: MakeContext) -> None:
+    # Regression: NVD and many reporters file memory bugs under CWE-20, which refuted them.
+    claims = [_trace("heap-buffer-overflow"), claim(ImpactClaim, cwe="CWE-20")]
+    (evidence,) = _run(make_ctx, claims)
+    assert evidence.outcome == "NEUTRAL"
+    assert evidence.details["outcome"] == "universal_cwe"
+
+
+@pytest.mark.parametrize("cwe", ["CWE-122", "CWE-190", "CWE-416"])
+def test_a_crash_signal_does_not_contradict_a_memory_cwe(make_ctx: MakeContext, cwe: str) -> None:
+    # Regression: an ASan "SEGV on unknown address" from a far heap overflow refuted CWE-122.
+    claims = [_trace("SEGV"), claim(ImpactClaim, cwe=cwe)]
+    (evidence,) = _run(make_ctx, claims)
+    assert evidence.outcome == "NEUTRAL"
+    assert evidence.strength == 0.0
+
+
+def test_a_crash_signal_still_contradicts_a_web_cwe(make_ctx: MakeContext) -> None:
+    claims = [_trace("SEGV"), claim(ImpactClaim, cwe="CWE-79")]
+    (evidence,) = _run(make_ctx, claims)
+    assert evidence.outcome == "REFUTES"
+    assert evidence.details["outcome"] == "cwe_incompatible"
+
+
+def test_the_memory_families_exist_in_the_bundled_table() -> None:
+    table = cwe_compat()
+    assert table.families.keys() >= MEMORY_FAMILIES
+    assert all(table.family(bug) is not None for bug in CRASH_SIGNAL_BUG_TYPES)
+    assert table.titles.keys() >= UNIVERSAL_CWES
 
 
 # --- the bundled table ------------------------------------------------------------------------

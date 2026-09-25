@@ -195,7 +195,7 @@ def _date(epoch: int) -> str:
 
 def _tail(extra: int, truncated: bool, branch: str) -> str:
     if extra <= 0:
-        return " and possibly more" if truncated else ""
+        return f" and possibly more later commits on {branch}" if truncated else ""
     count = f"{extra} or more" if truncated else str(extra)
     plural = "" if extra == 1 and not truncated else "s"
     return f" and {count} later commit{plural} on {branch}"

@@ -14,12 +14,14 @@ from __future__ import annotations
 import shutil
 import time
 from pathlib import Path
+from typing import Any
 
+import pytest
 from check_helpers import MakeContext, claim
 
 from nikasha.checks.base import CheckContext, run_checks
 from nikasha.checks.c14_option_exists import OptionExists, generated_reasons, is_doc
-from nikasha.code.gitio import GitRepo
+from nikasha.code.gitio import GitRepo, GitResult
 from nikasha.model.claims import OptionClaim
 from nikasha.model.evidence import Evidence
 
@@ -268,3 +270,57 @@ def test_a_mis_cased_constant_is_not_refuted(make_ctx: MakeContext) -> None:
     evidence = _one(make_ctx, "hdr_value_max", option_kind="constant")
     assert evidence.outcome == "NEUTRAL"
     assert evidence.details["outcome"] == "case_variant_only"
+
+
+def test_a_failed_case_insensitive_history_search_is_not_absence(
+    make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """P4: a ``git log -i -S`` that exits non-zero printed nothing, which proves nothing."""
+    ctx = make_ctx(claims=[_flag(INVENTED)])
+    repo = ctx.resolution.repo
+    real_run = type(repo).run
+
+    def run(self: GitRepo, argv: list[str], **kw: Any) -> GitResult:
+        if "-i" in argv and argv[:1] == ["log"]:
+            return GitResult(tuple(argv), 128, b"", b"fatal: bad object", 0)
+        return real_run(self, argv, **kw)
+
+    monkeypatch.setattr(type(repo), "run", run)
+    (evidence,) = OptionExists().run(ctx, list(ctx.claims))
+    assert evidence.outcome == "NEUTRAL"
+    assert evidence.details["outcome"] == "search_incomplete"
+    assert evidence.details["history_complete"] is False
+    assert "exit code 128" in evidence.details["incomplete"]
+
+
+# --- P4: an option declared by name, never spelled out -------------------------------------
+
+
+def test_a_flag_whose_name_is_declared_in_code_is_not_refuted(make_ctx: MakeContext) -> None:
+    """clap derives ``--fold-lines`` from a ``fold_lines`` field; getopt tables hold ``"fold"``.
+
+    ``fold_lines`` is in ``tools/hdrcat.c``, so a missing ``--fold-lines`` literal is not
+    evidence the flag was invented.
+    """
+    evidence = _one(make_ctx, "--fold-lines")
+    assert evidence.outcome == "NEUTRAL"
+    assert evidence.details["outcome"] == "name_only"
+    assert evidence.details["names"] == ["fold_lines"]
+    assert evidence.details["paths"] == ["tools/hdrcat.c"]
+    assert "absence is not evidence" in evidence.summary
+    assert any("-e fold_lines " in command for command in evidence.details["commands"])
+
+
+def test_a_config_key_needs_every_part_of_its_name(make_ctx: MakeContext) -> None:
+    present = _one(make_ctx, "hdr.fold", option_kind="config_key")
+    assert present.outcome == "NEUTRAL"
+    assert present.details["names"] == ["fold", "hdr"]
+    half = _one(make_ctx, "hdr.proxy_unsafe_fold", option_kind="config_key")
+    assert half.outcome == "REFUTES"
+    assert half.details["outcome"] == "never_in_history"
+
+
+def test_an_invented_flag_whose_name_is_nowhere_is_still_refuted(make_ctx: MakeContext) -> None:
+    evidence = _one(make_ctx, INVENTED)
+    assert evidence.details["outcome"] == "never_in_history"
+    assert any("-e proxy_unsafe_fold " in c for c in evidence.details["commands"])

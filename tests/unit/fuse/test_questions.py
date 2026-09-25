@@ -543,3 +543,13 @@ def test_ranged(value: object, expected: str) -> None:
 )
 def test_listed(value: object, expected: str) -> None:
     assert listed(value) == expected
+
+
+def test_control_and_bidi_characters_never_reach_a_question() -> None:
+    text = render_question(
+        "C07", "absent_everywhere", {"target": "curl\x1b[2J\u202e 8.5.0\x07", "where": "8.5.0"}
+    )
+    assert "\x1b" not in text
+    assert "\u202e" not in text
+    assert "\x07" not in text
+    assert "curl [2J 8.5.0" in text

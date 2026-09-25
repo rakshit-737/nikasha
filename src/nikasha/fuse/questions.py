@@ -30,6 +30,7 @@ directly, where the failure is loud.
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import lru_cache
@@ -275,6 +276,17 @@ def _rationale(item: Evidence, outcome: str, decision: Decision) -> str:
 # --- rendering ---------------------------------------------------------------------------------
 
 
+def _plain(text: str) -> str:
+    """Drop control and format characters (ANSI escapes, bidi overrides) (P7).
+
+    Template variables carry report-derived text, and questions are pasted into terminals,
+    emails and review comments where those characters would rewrite what the reader sees.
+    """
+    return "".join(
+        " " if unicodedata.category(ch) in {"Cc", "Cf", "Zl", "Zp"} else ch for ch in text
+    )
+
+
 def render_question(check_id: str, outcome: str, context: dict[str, Any]) -> str:
     """Render one template and normalize it to a single paragraph.
 
@@ -286,7 +298,7 @@ def render_question(check_id: str, outcome: str, context: dict[str, Any]) -> str
     if name is None:
         raise TemplateError(f"unsafe template key {check_id!r}/{outcome!r}")
     rendered = environment().get_template(name).render(context)
-    text = _SPACE_BEFORE_PUNCTUATION.sub("", " ".join(rendered.split()))
+    text = _SPACE_BEFORE_PUNCTUATION.sub("", " ".join(_plain(rendered).split()))
     if not text:
         raise TemplateError(f"{name} rendered nothing")
     return text if text.endswith(CLOSING) else f"{text} {CLOSING}"
