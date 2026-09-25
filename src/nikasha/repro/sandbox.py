@@ -600,10 +600,11 @@ def image_id(engine: EngineInfo, tag: str) -> str | None:
     pattern as :func:`image_exists`: resolved executable, validated tag, no shell, bounded
     time. Output that is not exactly one image ID is treated as unknown.
     """
+    checked = check_image_tag(tag)  # refuse hostile input before touching the engine
     exe = engine_executable(engine)
     try:
         proc = subprocess.run(
-            [exe, "image", "inspect", "--format", "{{.Id}}", check_image_tag(tag)],
+            [exe, "image", "inspect", "--format", "{{.Id}}", checked],
             capture_output=True,
             timeout=_INFO_TIMEOUT_S,
             check=False,
