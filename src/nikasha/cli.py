@@ -436,6 +436,8 @@ def check(  # noqa: PLR0917 - a CLI command's options are its signature
             thresholds=settings.thresholds() if settings is not None else None,
             prior=settings.prior() if settings is not None else 0.0,
             llm=_llm_provider(llm, settings),
+            question_overrides=settings.question_overrides() if settings is not None else None,
+            ignore=settings.ignore.paths if settings is not None else (),
         )
     except NikashaError as exc:
         _fail(exc)
@@ -585,10 +587,20 @@ def _fail(exc: NikashaError) -> typer.Exit:
 
 
 class _SettingsLike(Protocol):
-    """The two things the CLI needs from ``nikasha.settings.Settings`` (SPEC §16.1)."""
+    """What the CLI needs from ``nikasha.settings.Settings`` (SPEC §16.1)."""
 
+    @property
+    def ignore(self) -> _IgnoreLike: ...
     def thresholds(self) -> Thresholds: ...
     def prior(self) -> float: ...
+    def question_overrides(self) -> dict[str, str]: ...
+
+
+class _IgnoreLike(Protocol):
+    """``Settings.ignore``: the ``[ignore]`` globs."""
+
+    @property
+    def paths(self) -> tuple[str, ...]: ...
 
 
 def _load_settings(explicit: str | None) -> _SettingsLike | None:

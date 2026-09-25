@@ -143,6 +143,14 @@ is rendered: a template containing `__` anywhere is refused ("template uses a re
 attribute"), and a template must be self-contained, with no `include`, `extends` or
 `import`.
 
+`nikasha check` passes the overrides to the question renderer
+(`nikasha.fuse.questions.questions_for(..., overrides)`), which renders an overridden
+question in that same sandbox; questions without an override keep the bundled template.
+An override changes only the wording: which findings are asked about, their order, the
+evidence each question cites and its rationale stay the same. An override that fails to
+render (a missing variable, a sandbox refusal) drops that one question, exactly as a
+broken bundled template would, and never fails the run.
+
 The tone rules for questions (SPEC §14.4) apply to overrides exactly as they apply to the
 bundled text: name the file, the symbol or the release, and ask about *that*. A template
 containing one of the words the bundled templates are tested against, words that describe
@@ -159,7 +167,15 @@ the author rather than the claim, is refused, and the error names the word (P1).
 | `paths` | array of globs | `[]` | Repository paths that are never judged, matched against repo-relative paths with the same dialect as `known_projects.yaml`: `*` stays inside one path component, `**` crosses components, `?` is one character, and a glob without a slash matches the file name anywhere (`config.h` also covers `build/config.h`). Forward slashes only. At most 512. Matching takes time linear in the glob and the path, whatever the glob. |
 
 An ignored path is treated like a generated file: a claim about it is neither confirmed nor
-refuted (P4).
+refuted (P4). `nikasha check` gives the globs to the pipeline
+(`nikasha.pipeline.check_report(..., ignore=...)`), whose check context answers "is this
+path generated?" with "yes, `ignored by nikasha.toml`" for a matching path. Every check that
+already skips generated files (C02 to C07, C09, C12 to C14, C18, C20) then records `NEUTRAL`
+evidence with strength 0, `outcome = "generated"` and `generated = "[ignore] <glob>"`
+naming the first matching glob in file order. The path as the report writes it is matched,
+and so is the real path it resolves to when it resolves to exactly one. Ignoring can
+only take judgements away; it never adds a refutation. Claims that name no path (a
+version, a CVSS score) are unaffected.
 
 ## `[llm]`
 

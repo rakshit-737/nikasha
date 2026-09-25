@@ -1093,3 +1093,11 @@ def test_docs_and_example_carry_spdx_headers() -> None:
     tag = "SPDX-License" + "-Identifier: "
     assert tag + "CC-BY-4.0" in DOCS.read_text(encoding="utf-8")
     assert tag + "Apache-2.0" in EXAMPLE.read_text(encoding="utf-8")
+
+
+def test_pipeline_ignore_agrees_with_is_ignored() -> None:
+    from nikasha.pipeline import ignored_glob  # noqa: PLC0415
+
+    settings = Settings.model_validate({"ignore": {"paths": ["vendor/**", "config.h"]}})
+    for path in ("vendor/a/b.c", "build/config.h", "src/hdr.c", "vendorx/a.c"):
+        assert (ignored_glob(settings.ignore.paths, path) is not None) == settings.is_ignored(path)
