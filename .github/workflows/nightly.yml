@@ -1,0 +1,49 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Nightly run of the tests that need network access (and, with a container engine, the
+# sandbox tests that also need the network). Actions are pinned by full commit SHA, checked
+# with `git ls-remote` on 2026-09-25 (both tags are lightweight, pointing at commits, so
+# there is no peeled `^{}` line).
+name: Nightly
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  UV_VERSION: "0.12.18"
+  FORCE_COLOR: "1"
+
+jobs:
+  nightly:
+    name: Network and sandbox+network tests (docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - run: uv sync --locked --all-groups
+      - run: docker version
+      # Images are built as their own steps so an image failure is not mistaken for a test
+      # failure.
+      - name: Build the capture image
+        run: docker build -f docker/capture/Containerfile -t localhost/nikasha-capture:latest docker/capture
+      - name: Build the recipe image
+        run: docker build -f docker/recipes/c-toolchain.Dockerfile -t nikasha/recipe-c:1 docker/recipes
+      - name: Network tests
+        run: uv run pytest -m "network and not sandbox" -q
+      - name: Sandbox and network tests
+        run: uv run pytest -m "sandbox and network" -q

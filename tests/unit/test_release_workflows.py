@@ -268,3 +268,44 @@ def test_release_check_requires_the_schema_in_the_sdist_not_the_wheel() -> None:
     good = ["nikasha-1.2.3/PKG-INFO", "nikasha-1.2.3/schema/result-v1.json"]
     assert rc.check_sdist_members(good, "1.2.3") == []
     assert rc.check_sdist_members(good[:1], "1.2.3") == ["sdist is missing schema/result-v1.json"]
+
+
+# --- nightly.yml -----------------------------------------------------------------------
+
+
+def test_nightly_is_scheduled_and_dispatchable_with_minimal_permissions() -> None:
+    wf = _load("nightly.yml")
+    assert set(_triggers(wf)) == {"schedule", "workflow_dispatch"}
+    assert wf["permissions"] == {"contents": "read"}
+    for job_id, job in wf["jobs"].items():
+        assert job.get("permissions", {"contents": "read"}) == {"contents": "read"}, job_id
+        assert job["runs-on"] == "ubuntu-latest"
+
+
+def test_nightly_pins_every_action_by_full_sha() -> None:
+    text = (ROOT / ".github" / "workflows" / "nightly.yml").read_text(encoding="utf-8")
+    uses = [m for m in map(_USES_LINE.match, text.splitlines()) if m]
+    assert uses
+    for match in uses:
+        assert _SHA_PIN.match(match.group(1)), match.group(0)
+        assert re.search(r"@[0-9a-f]{40}$", match.group(1))
+        assert match.group(2), f"missing version comment: {match.group(0)}"
+
+
+def test_nightly_checkout_and_run_hygiene() -> None:
+    wf = _load("nightly.yml")
+    for job_id, step in _steps(wf):
+        if str(step.get("uses", "")).startswith("actions/checkout@"):
+            assert step.get("with", {}).get("persist-credentials") is False, job_id
+        run = step.get("run")
+        if run is not None:
+            assert not _EVENT_EXPR.search(run), job_id
+            assert not _ANY_EXPR.search(run), job_id
+
+
+def test_nightly_builds_both_images_and_runs_the_network_markers() -> None:
+    runs = "\n".join(str(s.get("run", "")) for _, s in _steps(_load("nightly.yml")))
+    assert "docker build -f docker/capture/Containerfile" in runs
+    assert "docker build -f docker/recipes/c-toolchain.Dockerfile" in runs
+    assert 'pytest -m "network and not sandbox"' in runs
+    assert 'pytest -m "sandbox and network"' in runs
