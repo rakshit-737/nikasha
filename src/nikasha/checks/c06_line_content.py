@@ -37,6 +37,7 @@ from nikasha.checks.base import BaseCheck, CheckContext, make_evidence, register
 from nikasha.checks.strengths import Strengths, default_strengths
 from nikasha.code.gitio import GrepHit, HistoryTimeoutError
 from nikasha.code.literal import literal_search, searchable
+from nikasha.errors import ExternalToolError
 from nikasha.model.claims import Claim, ClaimKind, LineClaim
 from nikasha.model.evidence import CodeLocation, CommandRecord, Evidence, Outcome
 
@@ -111,7 +112,25 @@ class LineContent(BaseCheck):
         for claim in claims:
             if not isinstance(claim, LineClaim) or not claim.quoted_line:
                 continue
-            evidence = self._one(ctx, claim)
+            try:
+                evidence = self._one(ctx, claim)
+            except ExternalToolError as exc:
+                # A grep or pickaxe that git could not finish is not "absent": say so for
+                # this claim alone and keep judging the others (P4).
+                evidence = self._evidence(
+                    claim,
+                    outcome="NEUTRAL",
+                    strength=0.0,
+                    summary=f"the quoted line could not be searched for: {exc},"
+                    " so nothing is concluded",
+                    details={
+                        "path": claim.path,
+                        "line": claim.line,
+                        "outcome": "search_failed",
+                        "incomplete": str(exc),
+                        "history_complete": False,
+                    },
+                )
             if evidence is not None:
                 out.append(evidence)
         return out

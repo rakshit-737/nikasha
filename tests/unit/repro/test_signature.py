@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import itertools
+import time
 from pathlib import Path
 
 import pytest
@@ -12,6 +14,8 @@ from nikasha.extract.pipeline import extract_claims
 from nikasha.ingest import ingest_string
 from nikasha.model.claims import Frame, TraceClaim, TraceData
 from nikasha.repro.signature import (
+    ABORT_STATUS,
+    MAX_FRAMES,
     MAX_OBSERVED,
     STACK_AMBIGUOUS,
     anchored_alignment,
@@ -21,11 +25,13 @@ from nikasha.repro.signature import (
     bug_class_of_text,
     classes_equivalent,
     crash_in_project,
+    exit_status_fits,
     match_locus,
     match_traces,
     normalize_function,
     parse_run_output,
     signature,
+    terminating_report,
     terminating_trace,
 )
 
@@ -236,3 +242,84 @@ def test_prose_stack_overflow_is_ambiguous() -> None:
     assert classes_equivalent(cls, "stack-exhaustion")
     assert not classes_equivalent(cls, "heap-overflow")
     assert bug_class_of_text("stack-buffer-overflow", prose=True) == "stack-overflow"
+
+
+def _lcs(a: list[str], b: list[str]) -> int:
+    if not a or not b:
+        return 0
+    if a[0] == b[0]:
+        return 1 + _lcs(a[1:], b[1:])
+    return max(_lcs(a[1:], b), _lcs(a, b[1:]))
+
+
+def _brute_anchored(claimed: list[str], observed: list[str]) -> int:
+    best = 0
+    for i, j in itertools.product(range(min(2, len(claimed))), range(len(observed))):
+        if claimed[i] == observed[j]:
+            length = _lcs(claimed[:i], observed[:j]) + 1 + _lcs(claimed[i + 1 :], observed[j + 1 :])
+            best = max(best, length)
+    return best
+
+
+def _words(alphabet: str, max_len: int) -> list[list[str]]:
+    return [list(w) for n in range(max_len + 1) for w in itertools.product(alphabet, repeat=n)]
+
+
+def test_anchored_alignment_equals_the_definition() -> None:
+    for alphabet, max_len in (("abc", 3), ("ab", 5)):
+        words = _words(alphabet, max_len)
+        for claimed, observed in itertools.product(words, words):
+            assert anchored_alignment(claimed, observed) == _brute_anchored(claimed, observed)
+
+
+def test_alignment_work_is_bounded_when_anchors_recur() -> None:
+    # Every observed frame equals both anchors: the old per-anchor LCS was O(n^3).
+    frames = tuple(Frame(index=i, function="f", raw=f"#{i} f") for i in range(10_000))
+    trace = TraceData(format="asan", bug_type="heap-buffer-overflow", frames=frames)
+    start = time.perf_counter()
+    for _ in range(8):  # C19 compares at most 8 quoted traces
+        assert match_traces(trace, trace).alignment == MAX_FRAMES
+    assert time.perf_counter() - start < 1.0
+
+
+@pytest.mark.parametrize(
+    ("text", "cls"),
+    [
+        ("not a use after free but a heap overflow", "heap-overflow"),
+        ("this is no use-after-free; heap-buffer-overflow", "heap-overflow"),
+        ("rather than a double free, an invalid free", "invalid-free"),
+        ("There is no NULL pointer check in f()", "null-deref"),
+        ("not a use after free", None),
+    ],
+)
+def test_negated_class_keywords_are_skipped(text: str, cls: str | None) -> None:
+    assert bug_class_of_text(text, prose=True) == cls
+
+
+def test_terminating_report_must_end_the_output() -> None:
+    asan = (TRACES / ASAN).read_text(encoding="utf-8")
+    ended = terminating_report(asan + "\n\n")
+    assert ended is not None and ended.at_tail
+    echoed = terminating_report(asan + "hdrcat: 2 headers\n")
+    assert echoed is not None and not echoed.at_tail
+    assert terminating_report("") is None
+
+
+def test_exit_status_must_fit_the_report() -> None:
+    asan = fixture(ASAN)
+    assert exit_status_fits(asan, ABORT_STATUS)
+    assert not exit_status_fits(asan, 1)
+    assert not exit_status_fits(fixture("python/01-zero-division.txt"), 1)
+    assert not exit_status_fits(fixture("valgrind/01-vulnlab-invalid-write-v1.2.0.txt"), 1)
+
+
+def test_harness_frames_above_a_project_crash_are_dropped() -> None:
+    frames = (
+        Frame(index=0, function="util_copy_value", path="/work/src/util.c", line=15, raw="#0"),
+        Frame(index=1, function="drive", path="/poc/poc.c", line=3, raw="#1"),
+        Frame(index=2, function="main", path="/poc/poc.c", line=9, raw="#2"),
+    )
+    trace = TraceData(format="asan", bug_type="heap-buffer-overflow", frames=frames)
+    assert crash_in_project(trace)
+    assert app_function_names(trace) == ["util_copy_value"]
+    assert signature(trace).top_functions == ("util_copy_value",)

@@ -406,7 +406,7 @@ def test_every_claim_kind_reaches_the_rendered_table() -> None:
     )
     for claim in claims:
         head = claim_label(claim).split(" (")[0]
-        assert head in text, claim.kind
+        assert head in text, claim.kind  # type: ignore[attr-defined]
 
 
 # --- hostile input (P7) ------------------------------------------------------------------

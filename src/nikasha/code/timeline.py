@@ -22,8 +22,9 @@ import time
 from dataclasses import dataclass, field
 from typing import Literal
 
-from nikasha.code.gitio import HistoryTimeoutError
+from nikasha.code.gitio import HistoryTimeoutError, HistoryUnavailableError
 from nikasha.code.index import CodeIndex
+from nikasha.errors import ExternalToolError
 from nikasha.resolve.refs import Release, ReleaseList
 
 Strategy = Literal["lazy", "full"]
@@ -91,6 +92,10 @@ class Timeline:
         return [p.release for p in self.presence if p.uncertain]
 
 
+#: Cap on files the batched mention grep may return across all releases.
+MAX_MENTION_FILES = 200_000
+
+
 def _bare(name: str) -> str:
     return name.replace("::", ".").replace("#", ".").rsplit(".", 1)[-1]
 
@@ -107,18 +112,42 @@ def build_timeline(
     """Compute where ``name`` is defined across the final releases of the main line."""
     started = time.monotonic()
     finals = releases_subset if releases_subset is not None else releases.finals()
-    presence = _full(index, finals, name) if strategy == "full" else _lazy(index, finals, name)
+    gaps: list[str] = []
+    build = _full if strategy == "full" else _lazy
+    presence = build(index, finals, name, gaps)
     timeline = Timeline(name, strategy, presence)
-    if not timeline.ever_defined:
+    if gaps:
+        # A capped or failed mention search can hide a definition: no release's absence,
+        # and so no "introduced in", may be relied on (P4). History is not searched either.
+        timeline.history_complete = False
+        timeline.notes.extend(gaps)
+    elif not timeline.ever_defined:
         _history(index, timeline, history_timeout)
     timeline.seconds = time.monotonic() - started
     return timeline
 
 
-def _mentions(index: CodeIndex, releases: list[Release], name: str) -> dict[str, list[str]]:
-    """``commit -> sorted paths`` mentioning ``name`` as a word, one batched grep."""
+def _mentions(
+    index: CodeIndex, releases: list[Release], name: str, gaps: list[str]
+) -> dict[str, list[str]]:
+    """``commit -> sorted paths`` mentioning ``name`` as a word, one batched grep.
+
+    A search that hit :data:`MAX_MENTION_FILES` or that git could not run appends the
+    reason to ``gaps``: what it returned is a lower bound, never proof of absence (P4).
+    """
     commits = [r.commit for r in releases]
-    hits = index.repo.grep(_bare(name), commits, word=True, files_only=True, max_hits=200_000)
+    try:
+        hits = index.repo.grep(
+            _bare(name), commits, word=True, files_only=True, max_hits=MAX_MENTION_FILES
+        )
+    except ExternalToolError as exc:
+        gaps.append(f"the search for mentions in releases failed: {exc}")
+        return {}
+    if len(hits) >= MAX_MENTION_FILES:
+        gaps.append(
+            f"the search for mentions in releases stopped at {MAX_MENTION_FILES} files,"
+            " so later releases may be missing mentions"
+        )
     by_commit: dict[str, set[str]] = {}
     for hit in hits:
         by_commit.setdefault(hit.rev, set()).add(hit.path)
@@ -133,8 +162,10 @@ def _partial(index: CodeIndex, commit: str, paths: list[str]) -> tuple[str, ...]
     )  # fmt: skip
 
 
-def _lazy(index: CodeIndex, finals: list[Release], name: str) -> list[ReleasePresence]:
-    mentions = _mentions(index, finals, name)
+def _lazy(
+    index: CodeIndex, finals: list[Release], name: str, gaps: list[str]
+) -> list[ReleasePresence]:
+    mentions = _mentions(index, finals, name, gaps)
     out: list[ReleasePresence] = []
     for release in finals:
         paths = mentions.get(release.commit, [])
@@ -149,7 +180,9 @@ def _lazy(index: CodeIndex, finals: list[Release], name: str) -> list[ReleasePre
     return out
 
 
-def _full(index: CodeIndex, finals: list[Release], name: str) -> list[ReleasePresence]:
+def _full(
+    index: CodeIndex, finals: list[Release], name: str, gaps: list[str]
+) -> list[ReleasePresence]:
     defined: dict[str, tuple[str, ...]] = {}
     for release in finals:
         index.index_commit(release.commit)
@@ -158,7 +191,7 @@ def _full(index: CodeIndex, finals: list[Release], name: str) -> list[ReleasePre
         )
     # Mentions are only needed where nothing was found: one grep over those releases.
     missing = [r for r in finals if not defined[r.name]]
-    mentions = _mentions(index, missing, name) if missing else {}
+    mentions = _mentions(index, missing, name, gaps) if missing else {}
     out: list[ReleasePresence] = []
     for release in finals:
         paths = defined[release.name]
@@ -178,6 +211,11 @@ def _history(index: CodeIndex, timeline: Timeline, timeout: float) -> None:
         return
     try:
         first = index.repo.pickaxe_first(_bare(timeline.symbol), timeout=timeout)
+    except HistoryUnavailableError as exc:
+        # Checked first: it subclasses HistoryTimeoutError but did not time out (P6).
+        timeline.history_complete = False
+        timeline.notes.append(f"history search failed: {exc}")
+        return
     except HistoryTimeoutError:
         timeline.history_complete = False
         timeline.notes.append(f"history search timed out after {timeout:g}s")

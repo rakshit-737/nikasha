@@ -31,6 +31,7 @@ from typing import Any
 from nikasha.bench import metrics as bench_metrics
 from nikasha.bench.manifests import Manifest
 from nikasha.bench.mutations import generate
+from nikasha.bench.repro import Reproducer
 from nikasha.errors import NikashaError
 from nikasha.fuse.scoring import fuse
 from nikasha.fuse.verdict import decide
@@ -53,6 +54,9 @@ class Case:
     text: str
     mutation: str | None = None
     base: str | None = None
+    poc: Path | None = None
+    recipe: str | None = None
+    version: str | None = None
 
 
 def collect_cases(
@@ -74,7 +78,18 @@ def collect_cases(
                     f"{manifest.source}/{entry.id}: cannot read {entry.path} ({type(exc).__name__})"
                 ) from exc
             local[entry.id] = text
-            cases.append(Case(entry.id, manifest.source, entry.label, entry.expected, text))
+            cases.append(
+                Case(
+                    entry.id,
+                    manifest.source,
+                    entry.label,
+                    entry.expected,
+                    text,
+                    poc=None if entry.poc is None else root / entry.poc,
+                    recipe=entry.recipe,
+                    version=entry.version,
+                )
+            )
     for manifest in manifests:
         if manifest.generator is None:
             continue
@@ -98,8 +113,19 @@ def collect_cases(
     return tuple(sorted(cases, key=lambda c: c.id)), tuple(sorted(skipped))
 
 
-def run_case(case: Case, *, repo: Path, workdir: Path, index_path: Path) -> dict[str, Any]:
-    """Check one case and return its results record."""
+def run_case(
+    case: Case,
+    *,
+    repo: Path,
+    workdir: Path,
+    index_path: Path,
+    repro: Reproducer | None = None,
+) -> dict[str, Any]:
+    """Check one case and return its results record.
+
+    ``repro`` is set only by ``bench run --repro``; without it no container is ever started
+    and the record has no ``repro`` key, so static runs keep their exact shape.
+    """
     from nikasha.pipeline import check_report  # noqa: PLC0415 - keeps `bench --help` light
 
     report_path = workdir / f"{case.id}.md"
@@ -113,8 +139,17 @@ def run_case(case: Case, *, repo: Path, workdir: Path, index_path: Path) -> dict
         "base": case.base,
     }
     started = time.perf_counter()
+    dynamic = None
+    if repro is not None:
+        status, dynamic = repro.attempt(case, repo)
+        record["repro"] = status
     try:
-        checked = check_report(report_path, repo=str(repo), index_path=index_path)
+        checked = check_report(
+            report_path,
+            repo=str(repo),
+            index_path=index_path,
+            repro=dynamic,
+        )
     except Exception as exc:  # one bad case must not lose the whole run
         # Only the class name is recorded: exception messages can echo report text or
         # local paths, and results are meant to be shareable.
@@ -179,6 +214,7 @@ def run_bench(
     split: str,
     commit: str = "unknown",
     skipped: Sequence[str] = (),
+    repro: Reproducer | None = None,
 ) -> dict[str, Any]:
     """Run every case, write the three output files and return the metrics."""
     check_date(date)
@@ -192,10 +228,15 @@ def run_bench(
     with tempfile.TemporaryDirectory(prefix="nikasha-bench-") as tmp:
         work = Path(tmp)
         index_path = work / "index.sqlite"
-        records = [run_case(case, repo=repo, workdir=work, index_path=index_path) for case in cases]
+        records = [
+            run_case(case, repo=repo, workdir=work, index_path=index_path, repro=repro)
+            for case in cases
+        ]
     records.sort(key=lambda r: str(r["id"]))
     computed = bench_metrics.compute(records)
     computed["skipped_remote"] = list(skipped)
+    if repro is not None:
+        computed["repro"] = repro_summary(records)
     write_outputs(records, computed, target, date=date, split=split, commit=commit)
     return computed
 
@@ -222,3 +263,13 @@ def write_outputs(
         encoding="utf-8",
         newline="\n",
     )
+
+
+def repro_summary(records: Sequence[dict[str, Any]]) -> dict[str, int]:
+    """How many cases ended in each ``repro`` status (only for ``--repro`` runs)."""
+    counts: dict[str, int] = {}
+    for r in records:
+        status = r.get("repro")
+        if status is not None:
+            counts[str(status)] = counts.get(str(status), 0) + 1
+    return dict(sorted(counts.items()))

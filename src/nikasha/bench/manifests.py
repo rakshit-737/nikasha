@@ -61,6 +61,11 @@ class Entry(_Frozen):
     url: str | None = None
     repo: str | None = None
     version: str | None = None
+    #: Optional ``bench run --repro`` inputs: a repository-relative PoC file or directory and
+    #: the recipe id to build with. Both are needed (with ``version``) for a case to join
+    #: the repro subset; without them the case runs the static checks only.
+    poc: str | None = None
+    recipe: str | None = None
     notes: str = ""
 
     @field_validator("id")
@@ -70,7 +75,7 @@ class Entry(_Frozen):
             raise ValueError(f"bad entry id {value!r}")
         return value
 
-    @field_validator("path")
+    @field_validator("path", "poc")
     @classmethod
     def _check_path(cls, value: str | None) -> str | None:
         if value is None:
@@ -97,10 +102,21 @@ class Entry(_Frozen):
             raise ValueError(f"url must be https: {value!r}")
         return value
 
+    @field_validator("recipe")
+    @classmethod
+    def _check_recipe(cls, value: str | None) -> str | None:
+        if value is not None and not _ID.fullmatch(value):
+            raise ValueError(f"bad recipe id {value!r}")
+        return value
+
     @model_validator(mode="after")
     def _one_locator(self) -> Entry:
         if (self.path is None) == (self.url is None):
             raise ValueError(f"{self.id}: set exactly one of 'path' or 'url'")
+        if (self.poc is None) != (self.recipe is None):
+            raise ValueError(f"{self.id}: 'poc' and 'recipe' go together")
+        if self.poc is not None and self.version is None:
+            raise ValueError(f"{self.id}: a 'poc' needs the 'version' to build")
         return self
 
 

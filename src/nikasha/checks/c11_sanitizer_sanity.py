@@ -31,6 +31,7 @@ that as support would be measuring Nikasha, not the report.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Sequence
 from typing import Any, NamedTuple
 
@@ -76,6 +77,24 @@ _MAX_SHOWN_INDICES = 6
 #: Longest input-derived fragment quoted in a message (P7: the trace is attacker-controlled).
 _MAX_QUOTED = 60
 
+#: A line a reporter uses to say "frames were cut here": ``...``, ``…``, ``[...]``,
+#: ``<snip>``, ``(12 frames omitted)``. Bounded quantifiers only (linear time, P7).
+_ELISION_RE = re.compile(
+    r"^[ \t]{0,40}(?:"
+    r"(?:\.{3}|\u2026)[^\n]{0,120}"
+    r"|[\[(<{][^\n\])>}]{0,80}"
+    r"(?:\.{3}|\u2026|snip|trim|truncated?|omit|elided|elision|cut|removed|skipped|skipping)"
+    r"[^\n\])>}]{0,80}[\])>}]"
+    r")[ \t]{0,40}$",
+    re.IGNORECASE,
+)
+#: A SUMMARY's body before `` in func``: the bug type, then the location.
+_SUMMARY_FIELDS = 2
+#: The ``#N`` a frame line starts with.
+_FRAME_NUMBER_RE = re.compile(r"\A#(\d{1,6})\b")
+#: What ASan prints in place of a stack it has no frames for (``malloc_context_size=0``).
+_EMPTY_STACK = "<empty stack>"
+
 
 class Verdict(NamedTuple):
     """One rule's result: whether the trace carried the data, and what was wrong if so."""
@@ -90,6 +109,68 @@ OK = Verdict(checked=True)
 
 def broken(detail: str) -> Verdict:
     return Verdict(checked=True, detail=detail)
+
+
+class Pasted(NamedTuple):
+    """What the pasted text says about lines the parser does not keep as fields."""
+
+    #: Raw lines (stripped) of frames that directly follow an elision marker.
+    after_elision: frozenset[str] = frozenset()
+    #: Whether the reporter marked any cut at all.
+    trimmed: bool = False
+    #: Whether the sanitizer printed ``<empty stack>`` for a stack it could not unwind.
+    empty_stack: bool = False
+    #: Whether some cut could have removed a whole stack. A cut is confined only when it
+    #: sits between two frames of the crash stack (the first run of frames, printed before
+    #: the region line and every allocation or free stack) whose numbering runs on across
+    #: it; any other cut, including one that opens or closes the paste, is loose.
+    loose_cut: bool = False
+
+
+#: No cuts and no empty stacks: what a rule assumes when it is given no pasted text.
+NOTHING_PASTED = Pasted()
+
+
+def _frame_number(line: str) -> int | None:
+    match = _FRAME_NUMBER_RE.match(line)
+    return int(match.group(1)) if match else None
+
+
+def pasted(claim: TraceClaim) -> Pasted:
+    """Read the claim's own text for cuts the reporter marked and stacks ASan left empty."""
+    raws = {
+        frame.raw.strip()
+        for _, frames in _named_stacks(claim)
+        for frame in frames
+        if frame.raw.strip()
+    }
+    after: set[str] = set()
+    pending = trimmed = empty = loose = seen = False
+    # Inside the first unbroken run of frames and cut markers: the crash stack, which a
+    # sanitizer prints before the region line and so before every allocation or free stack.
+    first_run = True
+    last_index: int | None = None
+    for span in claim.spans:
+        for line in span.text.split("\n"):
+            stripped = line.strip()
+            if stripped in raws:
+                index = _frame_number(stripped)
+                if pending:
+                    after.add(stripped)
+                    # Confined: the numbering runs on inside the crash stack, so the cut
+                    # removed crash frames and no whole stack.
+                    runs_on = last_index is not None and index is not None and index > last_index
+                    loose = loose or not (first_run and runs_on)
+                pending, seen, last_index = False, True, index
+            elif _ELISION_RE.match(line):
+                pending = trimmed = True
+            else:
+                first_run = first_run and not seen
+                empty = empty or stripped == _EMPTY_STACK
+    loose = loose or pending  # a trailing cut may have dropped every stack after it
+    return Pasted(
+        after_elision=frozenset(after), trimmed=trimmed, empty_stack=empty, loose_cut=loose
+    )
 
 
 # --- formatting helpers ------------------------------------------------------------------
@@ -152,21 +233,59 @@ def _pid_consistent(trace: TraceData) -> Verdict:
     return broken(f"the report mixes process IDs {seen}, but one report carries one PID")
 
 
-def _frame_indices(trace: TraceData) -> Verdict:
-    """Rule 2: each stack is numbered ``#0, #1, #2, …`` with nothing missing."""
+def _numbering_holds(frames: Sequence[Frame], after_elision: frozenset[str]) -> bool:
+    """``#0, #1, …`` with no gap, except where the reporter marked a cut (``...``).
+
+    A frame right after a marked cut may skip ahead, but never back: the numbers the
+    reporter kept must still be the sanitizer's.
+    """
+    previous = -1
+    for frame in frames:
+        if frame.index != previous + 1 and not (
+            frame.index > previous and frame.raw.strip() in after_elision
+        ):
+            return False
+        previous = frame.index
+    return True
+
+
+def _frame_indices(trace: TraceData, paste: Pasted = NOTHING_PASTED) -> Verdict:
+    """Rule 2: each stack is numbered ``#0, #1, #2, …`` with nothing missing.
+
+    A gap the reporter marked (a ``...`` or ``[snip]`` line) is an edit they disclosed, not
+    a contradiction (P4); only an unmarked gap counts.
+    """
     stacks = _named_stacks(trace)
     if not stacks:
         return NOT_CHECKABLE
     bad: list[str] = []
     for name, frames in stacks:
         indices = [frame.index for frame in frames]
-        if indices != list(range(len(indices))):
+        if not _numbering_holds(frames, paste.after_elision):
             shown = ", ".join(f"#{i}" for i in indices[:_MAX_SHOWN_INDICES])
             more = ", …" if len(indices) > _MAX_SHOWN_INDICES else ""
             bad.append(f"the {name} stack is numbered {shown}{more}")
     if not bad:
         return OK
     return broken(f"{'; '.join(bad)}, but a sanitizer numbers every stack from #0 upwards")
+
+
+def _clamped_to_region_end(trace: TraceData, address: int) -> bool:
+    """Whether ASan moved the region line's address to the region's end for ``address``.
+
+    An access that *starts* inside a region and runs past its end (a 4-byte read two bytes
+    before the end) is described from the first byte past the end: ASan's
+    ``GetAccessToHeapChunkInformation`` (and the global equivalent) adds the negative offset
+    back, so the header says ``0x…3a`` while the region line says "``0x…3c`` is located 0
+    bytes after". That is one address seen two ways, not two addresses.
+    """
+    region = trace.region
+    if region is None or region.relation != "right" or region.distance != 0:
+        return False
+    if trace.region_address != region.end or not region.start <= address < region.end:
+        return False
+    size = trace.access.size if trace.access is not None else None
+    return size is None or address + size > region.end
 
 
 def _addresses_agree(trace: TraceData) -> Verdict:
@@ -180,6 +299,9 @@ def _addresses_agree(trace: TraceData) -> Verdict:
     if len(present) < _MIN_ADDRESSES:
         return NOT_CHECKABLE
     if len({addr for _, addr in present}) == 1:
+        return OK
+    accessed = {addr for label, addr in present if label != "the region line"}
+    if len(accessed) == 1 and _clamped_to_region_end(trace, next(iter(accessed))):
         return OK
     disagreement = ", ".join(f"{label} says {_hex(addr)}" for label, addr in present)
     return broken(f"the faulting address is not the same everywhere: {disagreement}")
@@ -240,6 +362,39 @@ def _summary_matches_summary_frame(trace: TraceData, frame: Frame) -> bool | Non
     return all(agreements) if agreements else None
 
 
+def _summary_location_text(trace: TraceData) -> str | None:
+    """The SUMMARY's location exactly as printed: the text between the bug type and `` in f``."""
+    if not trace.summary or not trace.summary_function:
+        return None
+    head, sep, tail = trace.summary.rpartition(f" in {trace.summary_function}")
+    if not sep or tail.strip():
+        return None
+    _, sep, body = head.partition("Sanitizer: ")
+    bug_type_and_location = body.split(maxsplit=1) if sep else []
+    if len(bug_type_and_location) != _SUMMARY_FIELDS:
+        return None
+    return bug_type_and_location[1].strip()
+
+
+def _summary_matches_frame_text(trace: TraceData, frame: Frame) -> bool:
+    """Whether the frame's own line prints the SUMMARY's function and location verbatim.
+
+    The field-by-field comparison depends on the parser splitting ``func path:line`` at the
+    right space, which it cannot do for a path with a space in it (``/home/u/My Projects``).
+    The sanitizer prints the same text in both places, so literal agreement is agreement.
+    """
+    function = trace.summary_function
+    location = _summary_location_text(trace)
+    if not function or not location:
+        return False
+    marker = f" {function} "
+    at = frame.raw.find(marker)
+    if at < 0:
+        return False
+    rest = frame.raw[at + len(marker) :].strip()
+    return rest == location or rest.startswith(location + " ")
+
+
 def _summary_matches_frames(trace: TraceData) -> Verdict:
     """Rule 5: the SUMMARY names the frame the crash was attributed to.
 
@@ -258,7 +413,7 @@ def _summary_matches_frames(trace: TraceData) -> Verdict:
         agrees = _summary_matches_summary_frame(trace, frame)
         if agrees is None:
             continue
-        if agrees:
+        if agrees or _summary_matches_frame_text(trace, frame):
             return OK
         compared = True
     if not compared:
@@ -275,14 +430,19 @@ def _expects_free_stack(bug_type: str) -> bool:
     return "use-after-free" in bug_type or bug_type in _RELEASED_REGION_BUGS
 
 
-def _stacks_present(trace: TraceData) -> Verdict:
+def _stacks_present(trace: TraceData, paste: Pasted = NOTHING_PASTED) -> Verdict:
     """Rule 6: heap bugs carry an allocation stack, use-after-free also carries a free one.
 
     Gated on the trace reaching past where those stacks belong: a sanitizer prints them
     between the region line and the SUMMARY, so only a trace carrying *both* of those can be
     missing one. A reporter who trimmed the paste after the region line is not contradicting
-    themselves (P4).
+    themselves (P4), and neither is one who marked a cut (``...``) that could have removed a
+    whole stack, or a report where ASan itself printed ``<empty stack>``
+    (``malloc_context_size=0``). A cut between two frames of one stack removed frames of that
+    stack only, so it excuses nothing else (``Pasted.loose_cut``).
     """
+    if paste.loose_cut or paste.empty_stack:
+        return NOT_CHECKABLE
     bug_type = (trace.bug_type or "").lower()
     wants_alloc = _expects_alloc_stack(bug_type)
     wants_free = _expects_free_stack(bug_type)
@@ -318,14 +478,19 @@ def _access_size(trace: TraceData) -> Verdict:
 
 
 #: The SPEC §12 rules in order, with the short name a summary uses for each.
-RULES: tuple[tuple[str, str, Callable[[TraceData], Verdict]], ...] = (
-    ("pid_consistent", "the process ID", _pid_consistent),
+#: Every rule sees the parsed trace and what its pasted text says about cuts and empty stacks.
+RULES: tuple[tuple[str, str, Callable[[TraceData, Pasted], Verdict]], ...] = (
+    ("pid_consistent", "the process ID", lambda trace, _: _pid_consistent(trace)),
     ("frame_indices", "the frame numbering", _frame_indices),
-    ("addresses_agree", "the faulting address", _addresses_agree),
-    ("region_arithmetic", "the region arithmetic", _region_arithmetic),
-    ("summary_matches_frames", "the SUMMARY line", _summary_matches_frames),
+    ("addresses_agree", "the faulting address", lambda trace, _: _addresses_agree(trace)),
+    ("region_arithmetic", "the region arithmetic", lambda trace, _: _region_arithmetic(trace)),
+    (
+        "summary_matches_frames",
+        "the SUMMARY line",
+        lambda trace, _: _summary_matches_frames(trace),
+    ),
     ("stacks_present", "the allocation and free stacks", _stacks_present),
-    ("access_size", "the access size", _access_size),
+    ("access_size", "the access size", lambda trace, _: _access_size(trace)),
 )
 
 
@@ -356,8 +521,9 @@ class SanitizerSanity(BaseCheck):
     def _one(self, claim: TraceClaim) -> Evidence | None:
         checked: list[str] = []
         violations: list[dict[str, str]] = []
+        paste = pasted(claim)
         for key, label, rule in RULES:
-            verdict = rule(claim)
+            verdict = rule(claim, paste)
             if not verdict.checked:
                 continue
             checked.append(key)

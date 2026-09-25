@@ -18,7 +18,7 @@ from typing import cast
 from nikasha.extract.polarity import is_negated
 from nikasha.extract.products import Product, product_table
 from nikasha.extract.registry import EXTRACTORS, ExtractContext, claim_id
-from nikasha.extract.roles import role_for
+from nikasha.extract.roles import role_for, top_frames
 from nikasha.extract.scope import scope_claim
 from nikasha.extract.spans import IntervalIndex
 from nikasha.extract.symbols import KIND_PRIORITY
@@ -156,7 +156,8 @@ def extract_claims(
     claims = drop_contained(merge(raw))
     scoped = [c.model_copy(update={"provenance": scope_claim(ctx, c, claims)}) for c in claims]
     negated = [c.model_copy(update={"negated": is_negated(report.body, c)}) for c in scoped]
-    final = [c.model_copy(update={"role": role_for(ctx, c)}) for c in negated]
+    top = top_frames(negated)
+    final = [c.model_copy(update={"role": role_for(ctx, c, top)}) for c in negated]
     final.sort(key=_sort_key)
     if len(final) > MAX_CLAIMS:
         warnings.append(f"claim count capped at {MAX_CLAIMS} (found {len(final)})")

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Rust panic parser: real fixtures (RUST_BACKTRACE=1/full), variants, embedding, robustness."""
 
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -10,8 +11,9 @@ from hypothesis import strategies as st
 
 from nikasha.extract import extract_claims
 from nikasha.extract.traces import PARSERS, rust_panic
+from nikasha.extract.traces.common import ParsedTrace
 from nikasha.ingest import ingest_string
-from nikasha.model.claims import TraceClaim
+from nikasha.model.claims import Frame, TraceClaim
 
 FIXTURES = Path(__file__).parents[2] / "fixtures" / "traces" / "rust"
 PARSER = PARSERS["rust"]
@@ -24,13 +26,13 @@ def _load(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf-8")
 
 
-def _one(text: str):
+def _one(text: str) -> ParsedTrace:
     traces = PARSER.parse(text)
     assert len(traces) == 1, traces
     return traces[0]
 
 
-def _first_app(frames):
+def _first_app(frames: Sequence[Frame]) -> Frame:
     return next(f for f in frames if not f.is_runtime)
 
 
@@ -64,7 +66,9 @@ FIXTURE_CASES = [
 
 
 @pytest.mark.parametrize("case", FIXTURE_CASES, ids=[c[0] for c in FIXTURE_CASES])
-def test_fixture(case):
+def test_fixture(
+    case: tuple[str, str, str, int, tuple[int, str, str, int, int], str],
+) -> None:
     name, thread, message, count, app, last_line = case
     text = _load(name)
     trace = _one(text)
@@ -82,7 +86,7 @@ def test_fixture(case):
     assert data.other_stacks == ()
 
 
-def test_full_backtrace_hashes_stripped_and_runtime_frames():
+def test_full_backtrace_hashes_stripped_and_runtime_frames() -> None:
     data = _one(_load("02-unwrap-none-backtrace-full.txt")).data
     frames = data.frames
     assert frames[19].raw.startswith(
@@ -109,14 +113,14 @@ def test_full_backtrace_hashes_stripped_and_runtime_frames():
     ]
 
 
-def test_compiler_warnings_before_the_panic_are_not_part_of_it():
+def test_compiler_warnings_before_the_panic_are_not_part_of_it() -> None:
     text = _load("03-thread-panic.txt")
     trace = _one(text)
     assert "warning:" not in text[trace.start : trace.end]
     assert trace.data.frames[3].function == "thread_panic::main::{closure#0}"
 
 
-def test_fixture_embedded_in_markdown_is_found_by_the_pipeline():
+def test_fixture_embedded_in_markdown_is_found_by_the_pipeline() -> None:
     trace_text = _load("01-index-oob-backtrace.txt")
     md = f"Output:\n\n```console-output\n{trace_text}```\n\npick() trusts the index.\n"
     report = ingest_string(md, input_format="markdown")
@@ -131,7 +135,7 @@ def test_fixture_embedded_in_markdown_is_found_by_the_pipeline():
 # --- variants ---------------------------------------------------------------------------
 
 
-def test_no_backtrace_synthesizes_the_panic_location():
+def test_no_backtrace_synthesizes_the_panic_location() -> None:
     text = (
         "thread 'main' panicked at src/main.rs:2:5:\n"
         "explicit panic\n"
@@ -154,7 +158,7 @@ def test_no_backtrace_synthesizes_the_panic_location():
     assert text[trace.start : trace.end].endswith("to display a backtrace")
 
 
-def test_pre_1_73_header_with_quoted_message_and_legacy_hash():
+def test_pre_1_73_header_with_quoted_message_and_legacy_hash() -> None:
     text = (
         "thread 'worker' panicked at 'bad input', src/lib.rs:10:9\n"
         "stack backtrace:\n"
@@ -168,7 +172,7 @@ def test_pre_1_73_header_with_quoted_message_and_legacy_hash():
     assert data.frames[1].is_runtime
 
 
-def test_two_panics_and_unparseable_location():
+def test_two_panics_and_unparseable_location() -> None:
     text = "thread 'a' panicked at nowhere:\nfirst\nthread 'b' (3) panicked at x.rs:1:1:\nsecond\n"
     first, second = PARSER.parse(text)
     assert (first.data.message, first.data.frames) == ("first", ())
@@ -185,7 +189,7 @@ def test_two_panics_and_unparseable_location():
         ("myapp::run", "/src/main.rs", False),
     ],
 )
-def test_is_rust_runtime(function, path, runtime):
+def test_is_rust_runtime(function: str, path: str | None, runtime: bool) -> None:
     assert rust_panic.is_rust_runtime(function, path) is runtime
 
 
@@ -195,7 +199,7 @@ ALL_LINES = [line for p in sorted(FIXTURES.glob("*.txt")) for line in p.read_tex
 
 
 @pytest.mark.parametrize("name", [c[0] for c in FIXTURE_CASES])
-def test_every_truncation_parses(name):
+def test_every_truncation_parses(name: str) -> None:
     lines = _load(name).splitlines(keepends=True)
     for n in range(len(lines) + 1):
         text = "".join(lines[:n])
@@ -207,7 +211,7 @@ def test_every_truncation_parses(name):
 @pytest.mark.parametrize(
     "text", ["", "thread '", "thread 'x' panicked at ", "stack backtrace:\n  0:"]
 )
-def test_garbage_does_not_raise(text):
+def test_garbage_does_not_raise(text: str) -> None:
     for trace in PARSER.parse(text):
         assert 0 <= trace.start <= trace.end <= len(text)
 
@@ -219,11 +223,11 @@ def _check(text: str) -> None:
 
 
 @given(st.text())
-def test_hypothesis_random_text(text):
+def test_hypothesis_random_text(text: str) -> None:
     _check(text)
 
 
 @settings(max_examples=200)
 @given(st.lists(st.one_of(st.sampled_from(ALL_LINES), st.text(max_size=30)), max_size=40))
-def test_hypothesis_shuffled_report_lines(lines):
+def test_hypothesis_shuffled_report_lines(lines: list[str]) -> None:
     _check("\n".join(lines))

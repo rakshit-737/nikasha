@@ -30,13 +30,14 @@ directly, where the failure is loud.
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+import unicodedata
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateError
+from jinja2 import Environment, FileSystemLoader, StrictUndefined, Template, TemplateError
 
 from nikasha.fuse.verdict import Decision, outcome_key
 from nikasha.model.claims import Claim, VersionClaim
@@ -275,24 +276,66 @@ def _rationale(item: Evidence, outcome: str, decision: Decision) -> str:
 # --- rendering ---------------------------------------------------------------------------------
 
 
-def render_question(check_id: str, outcome: str, context: dict[str, Any]) -> str:
+def _plain(text: str) -> str:
+    """Drop control and format characters (ANSI escapes, bidi overrides) (P7).
+
+    Template variables carry report-derived text, and questions are pasted into terminals,
+    emails and review comments where those characters would rewrite what the reader sees.
+    """
+    return "".join(
+        " " if unicodedata.category(ch) in {"Cc", "Cf", "Zl", "Zp"} else ch for ch in text
+    )
+
+
+@lru_cache(maxsize=512)
+def _override_template(text: str) -> Template:
+    """Compile a ``[questions]`` override in the sandboxed environment, once per text.
+
+    Imported lazily: :mod:`nikasha.settings` imports this module to validate overrides.
+    """
+    from nikasha.settings import override_environment  # noqa: PLC0415
+
+    return override_environment().from_string(text)
+
+
+def render_question(
+    check_id: str,
+    outcome: str,
+    context: dict[str, Any],
+    overrides: Mapping[str, str] | None = None,
+) -> str:
     """Render one template and normalize it to a single paragraph.
 
+    ``overrides`` is ``Settings.question_overrides()``: a template keyed
+    ``"<check>.<outcome>"`` there replaces the bundled one and is rendered in the sandboxed
+    :func:`nikasha.settings.override_environment`, never in the plain one.
+
     Raises :class:`~jinja2.TemplateError` when the template is missing or the context does
-    not carry a variable it needs. Callers inside a run use :func:`questions_for`, which
-    swallows both; tests call this, where a broken template must be loud.
+    not carry a variable it needs (a sandbox refusal is a ``TemplateError`` too). Callers
+    inside a run use :func:`questions_for`, which swallows both; tests call this, where a
+    broken template must be loud.
     """
     name = template_name(check_id, outcome)
     if name is None:
         raise TemplateError(f"unsafe template key {check_id!r}/{outcome!r}")
-    rendered = environment().get_template(name).render(context)
-    text = _SPACE_BEFORE_PUNCTUATION.sub("", " ".join(rendered.split()))
+    override = overrides.get(f"{check_id}.{outcome}") if overrides else None
+    if override is not None:
+        rendered = _override_template(override).render(context)
+    else:
+        rendered = environment().get_template(name).render(context)
+    text = _SPACE_BEFORE_PUNCTUATION.sub("", " ".join(_plain(rendered).split()))
     if not text:
         raise TemplateError(f"{name} rendered nothing")
     return text if text.endswith(CLOSING) else f"{text} {CLOSING}"
 
 
-def _try_render(item: Evidence, outcome: str, decision: Decision, subject: _Subject) -> str | None:
+def _try_render(
+    item: Evidence,
+    outcome: str,
+    decision: Decision,
+    subject: _Subject,
+    overrides: Mapping[str, str] | None = None,
+) -> str | None:
     """Render, or give up quietly.
 
     Most (check, outcome) pairs have no template, and that is the normal case, not an
@@ -301,7 +344,8 @@ def _try_render(item: Evidence, outcome: str, decision: Decision, subject: _Subj
     always better than failing a run that has already done all its work (P4).
     """
     try:
-        return render_question(item.check_id, outcome, _context(item, outcome, decision, subject))
+        context = _context(item, outcome, decision, subject)
+        return render_question(item.check_id, outcome, context, overrides)
     except TemplateError:
         return None
 
@@ -332,8 +376,12 @@ def questions_for(
     decision: Decision,
     evidence: Sequence[Evidence],
     claims: Sequence[Claim],
+    overrides: Mapping[str, str] | None = None,
 ) -> tuple[Question, ...]:
     """The questions to send back to the reporter, strongest first (SPEC §14.4).
+
+    ``overrides`` (``Settings.question_overrides()``) replaces the wording of individual
+    questions; it never changes which findings are asked about or their order.
 
     Deterministic for a given set of evidence: the order comes from :func:`_rank` and ties
     break on content-derived IDs, so two runs on the same report produce the same six
@@ -352,7 +400,7 @@ def questions_for(
         outcome = outcome_key(item)
         if outcome is None:
             continue
-        text = _try_render(item, outcome, decision, subject)
+        text = _try_render(item, outcome, decision, subject, overrides)
         if text is None:
             continue
         if text not in cited:

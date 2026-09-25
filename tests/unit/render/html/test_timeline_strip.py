@@ -602,3 +602,18 @@ def test_only_theme_variables_are_used() -> None:
     assert re.search(r"\brgba?\(", css) is None
     for variable in re.findall(r"var\((--[a-z-]+)\)", css):
         assert variable in {"--ok", "--bad", "--warn", "--muted", "--border", "--sans"}
+
+
+def test_a_claimed_release_beyond_a_wide_window_is_still_drawn() -> None:
+    """Review regression: a sampled claimed release was cut and then called "not sampled"."""
+    releases = [f"v1.{i}.0" for i in range(100)]
+    details = {
+        "outcome": "absent_here_present_elsewhere",
+        "symbol": "hdr_get",
+        "releases_searched": releases,
+        "defined_in": releases[:60],
+    }
+    html = render([evidence(details)], ref="v1.99.0")
+    assert "not among the sampled releases" not in html
+    assert "tl-claimed" in html
+    assert "The report names v1.99.0, where it is" in html

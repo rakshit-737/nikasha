@@ -10,6 +10,7 @@ from hypothesis import strategies as st
 
 from nikasha.extract import extract_claims
 from nikasha.extract.traces import PARSERS, ubsan
+from nikasha.extract.traces.common import ParsedTrace
 from nikasha.ingest import ingest_string
 from nikasha.model.claims import TraceClaim
 
@@ -21,7 +22,7 @@ def _load(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf-8")
 
 
-def _one(text: str):
+def _one(text: str) -> ParsedTrace:
     traces = PARSER.parse(text)
     assert len(traces) == 1, traces
     return traces[0]
@@ -54,7 +55,9 @@ FIXTURE_CASES = [
 
 
 @pytest.mark.parametrize(("name", "bug_type", "message", "path", "app"), FIXTURE_CASES)
-def test_fixture(name, bug_type, message, path, app):
+def test_fixture(
+    name: str, bug_type: str, message: str, path: str, app: list[tuple[str, int, int]]
+) -> None:
     text = _load(name)
     trace = _one(text)
     data = trace.data
@@ -72,14 +75,16 @@ def test_fixture(name, bug_type, message, path, app):
         "_start",
     ]
     assert all(f.is_runtime for f in data.frames[3:])
+    assert data.summary is not None
     assert data.summary.startswith("SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior ")
     assert (data.summary_path, data.summary_line) == (path, app[0][1])
     assert data.summary_function is None
-    assert data.alloc_frames == data.free_frames == data.other_stacks == ()
+    assert data.alloc_frames == data.free_frames == ()
+    assert data.other_stacks == ()
     assert data.pid is None
 
 
-def test_fixture_embedded_in_markdown_is_found_by_the_pipeline():
+def test_fixture_embedded_in_markdown_is_found_by_the_pipeline() -> None:
     trace_text = _load("02-shift-exponent.txt")
     md = (
         "## Summary\n\nencode_flags shifts by an attacker-controlled amount.\n\n"
@@ -96,7 +101,7 @@ def test_fixture_embedded_in_markdown_is_found_by_the_pipeline():
     assert claims[0].frames[0].function == "shift_left"
 
 
-def test_header_without_stack_synthesizes_frame_zero():
+def test_header_without_stack_synthesizes_frame_zero() -> None:
     text = "src/lib/parse.c:42:7: runtime error: load of null pointer of type 'char'\nnext line\n"
     trace = _one(text)
     frame = trace.data.frames[0]
@@ -111,14 +116,14 @@ def test_header_without_stack_synthesizes_frame_zero():
     assert text[trace.start : trace.end] == text.splitlines()[0]
 
 
-def test_unknown_location_and_missing_column():
+def test_unknown_location_and_missing_column() -> None:
     trace = _one("<unknown>:0: runtime error: something new\n")
     assert trace.data.bug_type == "unknown"
     assert trace.data.frames[0].path is None
     assert trace.data.frames[0].col is None
 
 
-def test_notes_are_kept_and_several_reports_split():
+def test_notes_are_kept_and_several_reports_split() -> None:
     text = (
         "a.c:5:3: runtime error: load of misaligned address 0x01 for type 'int'\n"
         "0x000000000001: note: pointer points here\n"
@@ -139,13 +144,13 @@ def test_notes_are_kept_and_several_reports_split():
     assert second.data.summary is None
 
 
-def test_prose_after_report_ends_it():
+def test_prose_after_report_ends_it() -> None:
     text = "x.c:1:1: runtime error: division by zero\n    #0 0x1 in f /x.c:1:1\nThis is prose.\n"
     trace = _one(text)
     assert text[trace.start : trace.end].endswith("/x.c:1:1")
 
 
-def test_summary_with_function():
+def test_summary_with_function() -> None:
     text = (
         "x.c:1:1: runtime error: division by zero\n"
         "SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior /x.c:1:1 in f\n"
@@ -184,7 +189,7 @@ def test_summary_with_function():
         ("something else entirely", "unknown"),
     ],
 )
-def test_bug_type_slugs(message, slug):
+def test_bug_type_slugs(message: str, slug: str) -> None:
     assert ubsan.bug_type_for(message) == slug
 
 
@@ -194,7 +199,7 @@ ALL_LINES = [line for p in sorted(FIXTURES.glob("*.txt")) for line in p.read_tex
 
 
 @pytest.mark.parametrize("name", [c[0] for c in FIXTURE_CASES])
-def test_every_truncation_parses(name):
+def test_every_truncation_parses(name: str) -> None:
     lines = _load(name).splitlines(keepends=True)
     for n in range(len(lines) + 1):
         text = "".join(lines[:n])
@@ -206,7 +211,7 @@ def test_every_truncation_parses(name):
 
 
 @pytest.mark.parametrize("text", ["", "\n", ": runtime error: ", "a.c:x:1: runtime error: y"])
-def test_garbage_does_not_raise(text):
+def test_garbage_does_not_raise(text: str) -> None:
     assert PARSER.parse(text) == []
 
 
@@ -217,11 +222,11 @@ def _check(text: str) -> None:
 
 
 @given(st.text())
-def test_hypothesis_random_text(text):
+def test_hypothesis_random_text(text: str) -> None:
     _check(text)
 
 
 @settings(max_examples=200)
 @given(st.lists(st.one_of(st.sampled_from(ALL_LINES), st.text(max_size=30)), max_size=30))
-def test_hypothesis_shuffled_report_lines(lines):
+def test_hypothesis_shuffled_report_lines(lines: list[str]) -> None:
     _check("\n".join(lines))

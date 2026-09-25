@@ -14,7 +14,7 @@ verdict.
 from __future__ import annotations
 
 import time
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 
 from nikasha.checks import load_checks
 from nikasha.checks.base import CheckContext, CheckRun, run_checks
+from nikasha.code.generated import GeneratedMatch
 from nikasha.code.index import CodeIndex
 from nikasha.errors import NikashaError
 from nikasha.extract import extract_claims
@@ -58,6 +59,50 @@ class _Timer:
             yield
         finally:
             self.timings[name] = round(time.perf_counter() - started, 4)
+
+
+#: The ``kind`` an ``[ignore]`` match reports; checks print it as "<path> is <kind>".
+IGNORED_KIND = "ignored by nikasha.toml"
+
+
+def ignored_glob(globs: Sequence[str], path: str) -> str | None:
+    """The first ``[ignore]`` glob matching ``path``, in file order, or ``None``.
+
+    Uses :func:`nikasha.settings.ignore_match`, the linear-time matcher, because the globs
+    come from a file a repository controls (P7).
+    """
+    if not globs:
+        return None
+    from nikasha.settings import ignore_match  # noqa: PLC0415
+
+    normalized = path.removeprefix("./").lstrip("/")
+    for glob in globs:
+        if ignore_match(glob, normalized):
+            return glob
+    return None
+
+
+@dataclass
+class IgnoringContext(CheckContext):
+    """A :class:`CheckContext` whose ``[ignore]`` paths read as never-judged files.
+
+    Every check already treats a generated or release-only file as "not judged, in either
+    direction" (SPEC §11.5). An ignored path takes that same route, so ignoring a path can
+    only withhold a judgement, never turn one into a refutation (P4). The report's own
+    spelling and, when it resolves to exactly one real path, that path are both matched.
+    """
+
+    ignore: tuple[str, ...] = ()
+
+    def generated(self, path: str) -> GeneratedMatch | None:
+        glob = ignored_glob(self.ignore, path)
+        if glob is None and self.ignore:
+            candidates = self.resolve_path(path)
+            if len(candidates) == 1:
+                glob = ignored_glob(self.ignore, candidates[0])
+        if glob is not None:
+            return GeneratedMatch(path=path, kind=IGNORED_KIND, reason=f"[ignore] {glob}")
+        return super().generated(path)
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,8 +161,14 @@ def check_report(
     index_path: Path | None = None,
     llm: object | None = None,
     repro: ReproRun | ReproFailure | None = None,
+    question_overrides: Mapping[str, str] | None = None,
+    ignore: Sequence[str] = (),
 ) -> CheckReport:
-    """Run the whole pipeline over one report and return its :class:`CheckReport`."""
+    """Run the whole pipeline over one report and return its :class:`CheckReport`.
+
+    ``question_overrides`` is ``Settings.question_overrides()`` (``[questions]``) and
+    ``ignore`` is ``Settings.ignore.paths`` (``[ignore]``); both default to nothing.
+    """
     timer = _Timer()
 
     with timer.stage("ingest"):
@@ -150,7 +201,8 @@ def check_report(
             with timer.stage("index"):
                 index.index_commit(commit)
 
-            ctx = CheckContext(
+            ctx = IgnoringContext(
+                ignore=tuple(ignore),
                 report=loaded,
                 claims=claims,
                 resolution=resolution,
@@ -180,7 +232,7 @@ def check_report(
             )
 
     with timer.stage("questions"):
-        questions = build_questions(decision, evidence, claims)
+        questions = build_questions(decision, evidence, claims, question_overrides)
 
     for run in runs:
         timer.timings[f"check.{run.check_id}"] = run.seconds
@@ -208,6 +260,7 @@ def build_questions(
     decision: Decision,
     evidence: Sequence[Evidence],
     claims: Sequence[Claim],
+    overrides: Mapping[str, str] | None = None,
 ) -> tuple[Question, ...]:
     """Questions for the reporter (SPEC §14.4). Implemented in :mod:`nikasha.fuse.questions`.
 
@@ -219,7 +272,7 @@ def build_questions(
         from nikasha.fuse.questions import questions_for  # noqa: PLC0415
     except ImportError:  # pragma: no cover - the template pack is optional
         return ()
-    return questions_for(decision, evidence, claims)
+    return questions_for(decision, evidence, claims, overrides)
 
 
 def report_of(path: str | Path, *, input_format: InputFormat = "auto") -> Report:
@@ -227,4 +280,13 @@ def report_of(path: str | Path, *, input_format: InputFormat = "auto") -> Report
     return load_report(path, input_format=input_format)
 
 
-__all__ = ["CheckFailedError", "CheckReport", "build_verdict", "check_report", "report_of"]
+__all__ = [
+    "IGNORED_KIND",
+    "CheckFailedError",
+    "CheckReport",
+    "IgnoringContext",
+    "build_verdict",
+    "check_report",
+    "ignored_glob",
+    "report_of",
+]

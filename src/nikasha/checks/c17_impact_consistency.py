@@ -57,6 +57,14 @@ _PR_WEIGHTS: dict[str, dict[str, float]] = {
 #: The eight mandatory base metrics, in the order the spec prints them.
 _BASE_METRICS = ("AV", "AC", "PR", "UI", "S", "C", "I", "A")
 
+#: The temporal and environmental metric keys each version defines (v3.0/v3.1 §3-4, v2.0
+#: §2.2-2.3). Only these can give a vector a score besides its base score; any other key
+#: is noise and never counts as a modifier.
+_V3_MODIFIER_METRICS = frozenset(
+    {"E", "RL", "RC", "CR", "IR", "AR", "MAV", "MAC", "MPR", "MUI", "MS", "MC", "MI", "MA"}
+)
+_V2_MODIFIER_METRICS = frozenset({"E", "RL", "RC", "CDP", "TD", "CR", "IR", "AR"})
+
 _EXPLOITABILITY_COEFFICIENT = 8.22
 _IMPACT_UNCHANGED = 6.42
 _IMPACT_CHANGED_LINEAR = 7.52
@@ -174,6 +182,25 @@ def parse_vector(vector: str) -> tuple[dict[str, str] | None, str]:
         metrics[key.upper()] = value.upper()
     reason = _base_metric_error(metrics)
     return (None, reason) if reason else (metrics, "")
+
+
+def modifying_metrics(vector: str, version: str | None = None) -> list[str]:
+    """The temporal or environmental metrics of a vector that are set to something but ``X``.
+
+    Such a vector has a temporal or environmental score besides its base score, and a report
+    may print either one next to it. ``X`` ("Not Defined") changes nothing, so it is ignored,
+    and so is a key that ``version`` (v3.x unless it says ``2.0``) does not define.
+    """
+    known = _V2_MODIFIER_METRICS if version == "2.0" else _V3_MODIFIER_METRICS
+    parts = vector.strip().strip("()").split("/")[:_MAX_METRICS]
+    out: set[str] = set()
+    for part in parts:
+        if not _METRIC_RE.match(part) or part[:5].upper() == "CVSS:":
+            continue
+        key, _, value = part.partition(":")
+        if key.upper() in known and value.upper() != "X":
+            out.add(key.upper())
+    return sorted(out)
 
 
 def severity_band(score: float, version: str | None = None) -> str:
@@ -302,6 +329,27 @@ class ImpactConsistency(BaseCheck):
             and abs(computed - claimed) > _SCORE_TOLERANCE
         ):
             computed_band = severity_band(computed, found.version)
+            modifiers = modifying_metrics(claim.cvss_vector or "", found.version)
+            if modifiers:
+                # A temporal or environmental score legitimately differs from the base
+                # score; the stated number may be one of those, so nothing is refuted (P4).
+                return make_evidence(
+                    check_id=CHECK_ID,
+                    group=GROUP,
+                    claims=[claim],
+                    outcome="NEUTRAL",
+                    strength=0.0,
+                    summary=f"the vector's base score computes to {computed:.1f}"
+                    f" ({computed_band}) under CVSS v{found.version}; the report states"
+                    f" {claimed:.1f}, which may be the temporal or environmental score"
+                    f" its {', '.join(modifiers)} metrics define",
+                    details={
+                        **details,
+                        "computed_severity": computed_band,
+                        "modifying_metrics": modifiers,
+                        "outcome": "non_base_score",
+                    },
+                )
             return self._refutes(
                 claim,
                 "score_mismatch",

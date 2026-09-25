@@ -20,11 +20,12 @@ from nikasha.checks.base import CheckContext, run_checks
 from nikasha.checks.c18_api_usage import ApiUsage, Site, absence_uncertainty, calls_inside
 from nikasha.code.facts import CallSite
 from nikasha.model.claims import BehaviorClaim
+from nikasha.model.evidence import Evidence
 
 OTHER_PREDICATES = ("missing_bounds_check", "missing_null_check", "uses_freed", "integer_overflow")
 
 
-def _run(make_ctx: MakeContext, claims: list[BehaviorClaim], tag: str = "v1.2.0") -> list:
+def _run(make_ctx: MakeContext, claims: list[BehaviorClaim], tag: str = "v1.2.0") -> list[Evidence]:
     ctx = make_ctx(claims=claims, tag=tag)
     return ApiUsage().run(ctx, claims)
 

@@ -22,7 +22,7 @@ than refused.
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 
@@ -49,12 +49,14 @@ HOSTILE = (
 #: ordinary prose, and the real assertion about handlers is :func:`tags` below.
 DANGEROUS = ("<script", "</script", "<img", "\x1b", "\u202e")
 
-CTX = " "
-ADD = "+"
-DEL = "-"
+PatchOp = Literal[" ", "+", "-"]
+
+CTX: PatchOp = " "
+ADD: PatchOp = "+"
+DEL: PatchOp = "-"
 
 
-def lines(*spec: tuple[str, str]) -> tuple[PatchLine, ...]:
+def lines(*spec: tuple[PatchOp, str]) -> tuple[PatchLine, ...]:
     return tuple(PatchLine(op=op, text=text) for op, text in spec)
 
 

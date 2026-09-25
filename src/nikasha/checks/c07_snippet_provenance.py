@@ -53,6 +53,7 @@ from nikasha.code.fingerprint import (
 from nikasha.code.gitio import HistoryTimeoutError
 from nikasha.code.languages import detect_language
 from nikasha.code.literal import literal_search, searchable
+from nikasha.errors import ExternalToolError
 from nikasha.model.claims import Claim, ClaimKind, SnippetClaim
 from nikasha.model.evidence import CodeLocation, CommandRecord, Evidence, Outcome
 from nikasha.resolve.refs import Release
@@ -491,7 +492,12 @@ class SnippetProvenance(BaseCheck):
         for claim in claims:
             if not isinstance(claim, SnippetClaim):
                 continue
-            evidence = self._one(scan, claim)
+            try:
+                evidence = self._one(scan, claim)
+            except ExternalToolError as exc:
+                # A grep git could not finish is not "absent": say so for this snippet alone
+                # and keep judging the others (P4).
+                evidence = self._search_failed(scan, claim, exc)
             if evidence is not None:
                 out.append(evidence)
         return out
@@ -691,6 +697,25 @@ class SnippetProvenance(BaseCheck):
             " so it is not located and not called absent",
             {"sampled_releases": [], "history_complete": False},
             label="budget_spent",
+        )
+
+    def _search_failed(
+        self, scan: _Scan, claim: SnippetClaim, exc: ExternalToolError
+    ) -> Evidence | None:
+        """NEUTRAL at strength 0: a failed search holds no finding either way (P4)."""
+        snippet = _prepare(claim)
+        if snippet is None:
+            return None
+        # What ran before the failure depends on where git broke; none of it is reported.
+        scan.commands.clear()
+        scan.records.clear()
+        return self._neutral(
+            claim,
+            snippet,
+            scan,
+            f"the snippet could not be searched for: {exc}, so nothing is concluded",
+            {"incomplete": str(exc), "history_complete": False},
+            label="search_failed",
         )
 
     # -- evidence -------------------------------------------------------------------------

@@ -24,7 +24,7 @@ import sys
 from collections.abc import Iterator
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -32,6 +32,9 @@ pytest.importorskip("fastapi")
 
 from fastapi.testclient import TestClient
 from starlette.datastructures import FormData, UploadFile
+
+if TYPE_CHECKING:
+    from httpx2 import Response
 
 from nikasha.errors import NikashaError
 from nikasha.fuse.scoring import fuse
@@ -117,7 +120,9 @@ def post_headers() -> dict[str, str]:
     return {"origin": ORIGIN}
 
 
-def submit(client: TestClient, token: str, git_dir: Path, text: str = "hdr_get overflows.\n"):
+def submit(
+    client: TestClient, token: str, git_dir: Path, text: str = "hdr_get overflows.\n"
+) -> Response:
     return client.post(
         url("/checks", token),
         data={"report_text": text, "repo": str(git_dir)},
@@ -204,7 +209,9 @@ def test_serve_binds_loopback_and_hands_uvicorn_the_bound_socket(
     assert config.host == "127.0.0.1"
     assert config.access_log is False, "the access log would print URLs carrying the token"
     assert lines[0].startswith("Nikasha web UI: http://127.0.0.1:")
-    port = int(re.search(r":(\d+)/", lines[0]).group(1))
+    found = re.search(r":(\d+)/", lines[0])
+    assert found is not None
+    port = int(found.group(1))
     assert port == config.port
     assert re.search(r"\?token=[A-Za-z0-9_-]{43,}$", lines[0])
 
@@ -479,10 +486,11 @@ def test_the_report_page_keeps_the_report_s_own_hashed_policy(
     assert submit(client, token, git_dir).status_code == 303
     response = client.get(url("/results/1/report", token))
     csp = response.headers["content-security-policy"]
-    meta = re.search(
-        r'content="([^"]+)"',
-        re.search(r"<meta http-equiv=\"Content-Security-Policy\"[^>]*>", response.text).group(0),
-    ).group(1)
+    tag = re.search(r"<meta http-equiv=\"Content-Security-Policy\"[^>]*>", response.text)
+    assert tag is not None
+    content = re.search(r'content="([^"]+)"', tag.group(0))
+    assert content is not None
+    meta = content.group(1)
     assert csp == f"{meta}; frame-ancestors 'self'"
     assert "script-src 'sha256-" in csp
     assert response.headers["x-frame-options"] == "SAMEORIGIN"

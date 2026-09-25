@@ -23,16 +23,18 @@ to undo — this check avoids creating it.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from nikasha.checks.base import BaseCheck, CheckContext, make_evidence, register
 from nikasha.checks.strengths import Strengths, default_strengths
+from nikasha.code.gitio import CommandSink, GitRepo, safe_rev
 from nikasha.code.index import FileEntry
 from nikasha.code.timeline import ReleasePresence, Timeline
+from nikasha.errors import NikashaError
 from nikasha.model.claims import Claim, ClaimKind, SymbolClaim, VersionClaim
-from nikasha.model.evidence import CodeLocation, Evidence
+from nikasha.model.evidence import CodeLocation, CommandRecord, Evidence
 from nikasha.resolve.refs import Release, spec_to_key
 
 CHECK_ID = "C16"
@@ -41,6 +43,10 @@ GROUP = "version"
 #: The relations that bound a range of versions; "tested_on" and "latest" say nothing here.
 RANGE_RELATIONS = frozenset({"affected_range", "fixed_in"})
 LABELS = {"affected_range": "affected range", "fixed_in": "fix release"}
+#: Support beats a refusal, and a refusal beats a refutation, when several core symbols are
+#: measured against one claim (P4).
+_OUTCOME_RANK = {"SUPPORTS": 0, "NEUTRAL": 1, "REFUTES": 2}
+_GIT_TIMEOUT_S = 10.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,17 +86,14 @@ class VersionRangeConsistency(BaseCheck):
         ranked = self._ranked_cores(ctx, cores)
         if not ranked:
             return []
-        core, timeline = ranked[0]
         out: list[Evidence] = []
         for claim in ranges:
             if ctx.expired():
                 break
             if not _about_target(ctx, claim):
                 continue  # a version of some other product is not this repository's history
-            if claim.relation == "fixed_in":
-                evidence = self._fixed_in_any(ctx, claim, ranked)
-            else:
-                evidence = self._affected_range(ctx, claim, core, timeline)
+            judge = self._fixed_in if claim.relation == "fixed_in" else self._affected_range
+            evidence = self._any_core(ctx, claim, ranked, judge)
             if evidence is not None:
                 out.append(evidence)
         return out
@@ -100,10 +103,9 @@ class VersionRangeConsistency(BaseCheck):
     ) -> list[tuple[SymbolClaim, Timeline]]:
         """The core symbols with their timelines, earliest introduced first.
 
-        Reports normally name one. When they name several, the earliest introduced one is
-        the conservative yardstick for an affected range: a range that starts before *that*
-        symbol existed starts before every symbol the report calls central (P4). A fix
-        release is measured against all of them (see :meth:`_fixed_in_any`).
+        Reports normally name one. When they name several, every claim is measured against
+        all of them (see :meth:`_any_core`); the order only decides which finding is shown
+        when several say the same thing.
         """
         scored: list[tuple[tuple[int, int, int], SymbolClaim, Timeline]] = []
         for order, symbol in enumerate(cores):
@@ -115,6 +117,29 @@ class VersionRangeConsistency(BaseCheck):
             scored.append((key, symbol, timeline))
         scored.sort(key=lambda entry: entry[0])
         return [(symbol, timeline) for _key, symbol, timeline in scored]
+
+    def _any_core(
+        self,
+        ctx: CheckContext,
+        claim: VersionClaim,
+        ranked: Sequence[tuple[SymbolClaim, Timeline]],
+        judge: Callable[[CheckContext, VersionClaim, SymbolClaim, Timeline], Evidence | None],
+    ) -> Evidence | None:
+        """Judge ``claim`` against every core symbol, refuting only if all of them refute.
+
+        The bug may sit in any function the report calls central. A range that starts
+        before one of them existed says nothing while another one already existed, or
+        while another one's history is incomplete; and a fix may land in any of them (P4).
+        Support wins over a refusal, and a refusal wins over a refutation.
+        """
+        found: list[Evidence] = []
+        for core, timeline in ranked:
+            if ctx.expired():
+                return None
+            evidence = judge(ctx, claim, core, timeline)
+            if evidence is not None:
+                found.append(evidence)
+        return min(found, key=lambda e: _OUTCOME_RANK.get(e.outcome, 1), default=None)
 
     # --- "affected from X" ---------------------------------------------------------------
 
@@ -173,28 +198,6 @@ class VersionRangeConsistency(BaseCheck):
 
     # --- "fixed in X" ----------------------------------------------------------------------
 
-    def _fixed_in_any(
-        self,
-        ctx: CheckContext,
-        claim: VersionClaim,
-        ranked: Sequence[tuple[SymbolClaim, Timeline]],
-    ) -> Evidence | None:
-        """Judge a fix release against every core symbol, refuting only if none changed.
-
-        A fix may land in any of the functions the report calls central, so one untouched
-        core symbol says nothing while another one changed in that release (P4). Support wins
-        over a refusal, and a refusal wins over a refutation.
-        """
-        found: list[Evidence] = []
-        for core, timeline in ranked:
-            if ctx.expired():
-                return None
-            evidence = self._fixed_in(ctx, claim, core, timeline)
-            if evidence is not None:
-                found.append(evidence)
-        rank = {"SUPPORTS": 0, "NEUTRAL": 1, "REFUTES": 2}
-        return min(found, key=lambda e: rank.get(e.outcome, 1), default=None)
-
     def _fixed_in(
         self, ctx: CheckContext, claim: VersionClaim, core: SymbolClaim, timeline: Timeline
     ) -> Evidence | None:
@@ -224,7 +227,9 @@ class VersionRangeConsistency(BaseCheck):
         self, ctx: CheckContext, claim: VersionClaim, by_name: dict[str, Release]
     ) -> Release | None:
         """The release the report says the fix shipped in, if it is a release of this repo."""
-        spec = claim.parsed or claim.lower or claim.upper
+        # Only a version the fix is said to ship *in*: "fixed after 1.2.0" (an exclusive
+        # lower bound) or an upper bound does not name 1.2.0 as the fix release.
+        spec = claim.parsed or (claim.lower if claim.lower_inclusive else None)
         if spec is None:
             return None
         matched = [r for r in ctx.resolution.releases.match(spec) if r.name in by_name]
@@ -266,8 +271,28 @@ class VersionRangeConsistency(BaseCheck):
                 )
             locus = found
         details["locus"] = locus.reason
-        outcome = "consistent" if locus.changed else "fixed_in_unchanged"
-        return self._verdict(ctx, claim, core, outcome, details)
+        if locus.changed:
+            return self._verdict(ctx, claim, core, "consistent", details)
+        # "Unchanged since the previous release" only means "not fixed here" when that
+        # release is part of this one's history. A maintenance release with a higher version
+        # number than the fix release's own predecessor (1.2.5 shipped after 1.3.0, both
+        # carrying a backported fix) is not a baseline for it (P4).
+        commands: list[CommandRecord] = []
+        ancestor = _is_ancestor(
+            ctx.resolution.repo, releases[0].commit, releases[1].commit, commands
+        )
+        if ancestor is not True:
+            summary = (
+                f"{before.release} is not part of the history of {here.release}"
+                if ancestor is False
+                else f"whether {before.release} is part of the history of {here.release}"
+                " could not be determined"
+            )
+            summary += f", so the claimed {LABELS[claim.relation]} {claim.raw!r} is not judged"
+            return self._neutral(
+                claim, core, summary, details, label="previous_release_not_ancestor"
+            )
+        return self._verdict(ctx, claim, core, "fixed_in_unchanged", details, commands=commands)
 
     def _locus(
         self,
@@ -314,6 +339,8 @@ class VersionRangeConsistency(BaseCheck):
         core: SymbolClaim,
         outcome: str,
         details: dict[str, Any],
+        *,
+        commands: Sequence[CommandRecord] = (),
     ) -> Evidence:
         return make_evidence(
             check_id=CHECK_ID,
@@ -324,6 +351,7 @@ class VersionRangeConsistency(BaseCheck):
             summary=_summary(outcome, claim, core, details),
             details={**details, "outcome": outcome},
             locations=_locations(ctx, core.name),
+            commands=commands,
         )
 
     def _incomplete(
@@ -418,6 +446,27 @@ def _within_upper(claim: VersionClaim, release: Release) -> bool:
         return True
     bound = spec_to_key(claim.upper)[0]
     return release.tag.trimmed < bound or (claim.upper_inclusive and release.tag.trimmed == bound)
+
+
+def _is_ancestor(
+    repo: GitRepo, older: str, newer: str, record: CommandSink | None = None
+) -> bool | None:
+    """Whether commit ``older`` is in the history of ``newer`` (``None``: git could not say).
+
+    ``rev-list older ^newer`` lists the commits of ``older`` that ``newer`` lacks: none at
+    all means ``older`` is an ancestor of (or the same commit as) ``newer``.
+    """
+    try:
+        result = repo.run(
+            ["rev-list", "-n", "1", "--end-of-options", safe_rev(older), "^" + safe_rev(newer)],
+            timeout=_GIT_TIMEOUT_S,
+            record=record,
+        )
+    except NikashaError:
+        return None  # a timeout says nothing about the history, so nothing is refuted (P4)
+    if result.returncode != 0:
+        return None
+    return not result.stdout.strip()
 
 
 def _partial_note(releases: Sequence[str]) -> str:

@@ -15,6 +15,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import ast
+import inspect
 import sys
 from pathlib import Path
 
@@ -49,7 +51,92 @@ Two rules hold for every check:
 - **Absence is never proof** (P4). When history is incomplete, a file did not parse
   cleanly, or a path is generated, a check reports uncertainty rather than a refutation.
 
+Each check lists every outcome key it can record: the scored ones from the strengths table,
+and the ones read statically from its source. Outcomes marked *not scored* are NEUTRAL or
+ERROR results that move no score.
+
 """
+
+
+#: A judgement tuple is ``(outcome, key, ...)``.
+_MIN_JUDGEMENT = 2
+_OUTCOME_KINDS = frozenset({"SUPPORTS", "REFUTES", "NEUTRAL", "ERROR"})
+
+
+def _literals(node: ast.expr | None, consts: dict[str, str]) -> set[str]:
+    """String values ``node`` can take: a literal, a module constant, or a ternary of them."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return {node.value}
+    if isinstance(node, ast.Name) and node.id in consts:
+        return {consts[node.id]}
+    if isinstance(node, ast.IfExp):
+        return _literals(node.body, consts) | _literals(node.orelse, consts)
+    if isinstance(node, ast.BoolOp):
+        return set().union(*(_literals(v, consts) for v in node.values))
+    return set()
+
+
+def _module_constants(tree: ast.Module) -> dict[str, str]:
+    consts: dict[str, str] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            value, targets = node.value, node.targets
+        elif isinstance(node, ast.AnnAssign):
+            value, targets = node.value, [node.target]
+        else:
+            continue
+        if not (isinstance(value, ast.Constant) and isinstance(value.value, str)):
+            continue
+        for target in targets:
+            if isinstance(target, ast.Name):
+                consts[target.id] = value.value
+    return consts
+
+
+def emitted_outcomes(source: str) -> set[str]:
+    """Outcome keys a check module records, found statically in its source.
+
+    Many outcomes (the NEUTRAL ones above all) carry no strength and so never appear in
+    ``lr_defaults.yaml``; reading them from the code keeps the catalogue complete without a
+    hand-written list. Recognised forms: ``{"outcome": X}``, ``d["outcome"] = X``,
+    ``label=X`` keyword arguments, ``("NEUTRAL", X, ...)`` judgement tuples, and
+    ``{"status": ("NEUTRAL", None)}`` tables whose key is the recorded outcome.
+    """
+    tree = ast.parse(source)
+    consts = _module_constants(tree)
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Dict):
+            for key, value in zip(node.keys, node.values, strict=True):
+                if isinstance(key, ast.Constant) and key.value == "outcome":
+                    found |= _literals(value, consts)
+                if (
+                    isinstance(value, ast.Tuple)
+                    and len(value.elts) >= _MIN_JUDGEMENT
+                    and isinstance(value.elts[0], ast.Constant)
+                    and value.elts[0].value in _OUTCOME_KINDS
+                    and isinstance(value.elts[1], ast.Constant)
+                    and value.elts[1].value is None
+                ):
+                    found |= _literals(key, consts)
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if (
+                    isinstance(target, ast.Subscript)
+                    and isinstance(target.slice, ast.Constant)
+                    and target.slice.value == "outcome"
+                ):
+                    found |= _literals(node.value, consts)
+        elif isinstance(node, ast.keyword) and node.arg == "label":
+            found |= _literals(node.value, consts)
+        elif (
+            isinstance(node, ast.Tuple)
+            and len(node.elts) >= _MIN_JUDGEMENT
+            and isinstance(node.elts[0], ast.Constant)
+            and node.elts[0].value in _OUTCOME_KINDS
+        ):
+            found |= _literals(node.elts[1], consts)
+    return found
 
 
 def build() -> str:
@@ -78,12 +165,14 @@ def build() -> str:
         lines.append(f"Applies to: {kinds}")
         lines.append("")
         outcomes = strengths.outcomes(check.id)
-        if outcomes:
+        emitted = emitted_outcomes(inspect.getsource(sys.modules[type(check).__module__]))
+        names = set(outcomes) | emitted
+        if names:
             lines.append("| Outcome | Strength |")
             lines.append("|---|---|")
-            for name in sorted(outcomes):
-                value = outcomes[name]
-                lines.append(f"| `{name}` | {value:+.2f} |")
+            for name in sorted(names):
+                value = f"{outcomes[name]:+.2f}" if name in outcomes else "— (not scored)"
+                lines.append(f"| `{name}` | {value} |")
             lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 

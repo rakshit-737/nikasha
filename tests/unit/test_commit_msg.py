@@ -24,29 +24,29 @@ SIGNOFF = "Signed-off-by: Ada Lovelace <ada@example.org>"
         "docs(adr): 0003",
     ],
 )
-def test_valid_messages(header):
+def test_valid_messages(header: str) -> None:
     assert ccm.problems(f"{header}\n\nBody.\n\n{SIGNOFF}\n") == []
 
 
-def test_missing_signoff():
+def test_missing_signoff() -> None:
     assert any("sign-off" in p for p in ccm.problems("feat: x\n"))
 
 
 @pytest.mark.parametrize("header", ["Add stuff", "feature: x", "feat:x", "feat(Big): x", ""])
-def test_bad_headers(header):
+def test_bad_headers(header: str) -> None:
     assert any("Conventional" in p for p in ccm.problems(f"{header}\n\n{SIGNOFF}\n"))
 
 
-def test_comment_lines_are_ignored():
+def test_comment_lines_are_ignored() -> None:
     msg = f"# Please enter the commit message\nfeat: x\n\n{SIGNOFF}\n# comment\n"
     assert ccm.problems(msg) == []
 
 
-def test_merge_commits_are_exempt():
+def test_merge_commits_are_exempt() -> None:
     assert ccm.problems("Merge pull request #1 from x/y\n") == []
 
 
-def test_cli_reads_file(tmp_path):
+def test_cli_reads_file(tmp_path: Path) -> None:
     f = tmp_path / "MSG"
     f.write_text("fix: y\n", encoding="utf-8")
     assert ccm.main(["prog", str(f)]) == 1

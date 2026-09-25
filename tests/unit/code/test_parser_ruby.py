@@ -12,11 +12,11 @@ from nikasha.code.parser import parse_file
 FACTS = parse_fixture(Lang.RUBY, "ruby/sample.rb")
 
 
-def test_parses_cleanly():
+def test_parses_cleanly() -> None:
     assert_clean(FACTS)
 
 
-def test_symbols():
+def test_symbols() -> None:
     assert symbols(FACTS) == [
         ("module", "Billing", "Billing", 5, 31),
         ("class", "Invoice", "Billing::Invoice", 6, 26),
@@ -30,7 +30,7 @@ def test_symbols():
     assert flags(FACTS, "Billing::Invoice.parse") == {"singleton"}
 
 
-def test_calls():
+def test_calls() -> None:
     assert calls(FACTS) == [
         (None, "require", 3, False),
         (None, "attr_reader", 7, False),
@@ -46,7 +46,7 @@ def test_calls():
     ]
 
 
-def test_compact_class_name():
+def test_compact_class_name() -> None:
     src = b"class Api::V1::Users\n  def index\n    render json: all\n  end\nend\n"
     facts = parse_file(Lang.RUBY, src)
     assert symbols(facts) == [

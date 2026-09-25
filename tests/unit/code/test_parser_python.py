@@ -12,12 +12,12 @@ from nikasha.code.parser import parse_file
 FACTS = parse_fixture(Lang.PYTHON, "python/sample.py")
 
 
-def test_parses_cleanly():
+def test_parses_cleanly() -> None:
     assert_clean(FACTS)
     assert FACTS.n_lines == 38
 
 
-def test_symbols():
+def test_symbols() -> None:
     assert symbols(FACTS) == [
         ("function", "load", "load", 6, 8),
         ("class", "Store", "Store", 11, 29),
@@ -33,7 +33,7 @@ def test_symbols():
     assert flags(FACTS, "Store.fetch") == {"async"}
 
 
-def test_calls():
+def test_calls() -> None:
     assert calls(FACTS) == [
         ("load", "open", 7, False),
         ("load", "load", 8, True),  # json.load: attribute call, last attribute name
@@ -49,13 +49,13 @@ def test_calls():
     ]
 
 
-def test_enclosing_prefers_innermost():
+def test_enclosing_prefers_innermost() -> None:
     inner = FACTS.enclosing(23)
     assert inner is not None
     assert inner.qname == "Store.fetch.pick"
 
 
-def test_chained_calls_in_source_order():
+def test_chained_calls_in_source_order() -> None:
     facts = parse_file(Lang.PYTHON, b"def f(x):\n    return x.strip().lower().split(sep())\n")
     assert calls(facts) == [
         ("f", "strip", 2, True),
@@ -65,7 +65,7 @@ def test_chained_calls_in_source_order():
     ]
 
 
-def test_syntax_error_is_partial_not_fatal():
+def test_syntax_error_is_partial_not_fatal() -> None:
     facts = parse_file(Lang.PYTHON, b"def ok():\n    run()\n\ndef broken(:\n    pass\n")
     assert not facts.parsed_ok
     assert facts.error_nodes >= 1

@@ -810,7 +810,7 @@ def test_tables_follow_the_order_of_the_claims() -> None:
         evidence("zz", check_id="C08", claim_id="t2", details=GENUINE_FRAMES),
         evidence("aa", check_id="C08", claim_id="t1", details=FABRICATED_FRAMES),
     )
-    html = render(*items, claims=claims).html  # type: ignore[arg-type]
+    html = render(*items, claims=claims).html
     assert html.index("hdr_parse_line") < html.index("hdr_get")
 
 

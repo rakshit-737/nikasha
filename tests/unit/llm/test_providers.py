@@ -13,8 +13,9 @@ import json
 import sys
 import urllib.error
 import urllib.request
+from http.client import HTTPMessage
 from types import SimpleNamespace
-from typing import Any
+from typing import IO, Any, cast
 
 import pytest
 
@@ -493,4 +494,12 @@ def test_the_default_ollama_opener_ignores_proxy_env_and_refuses_redirects(
     assert redirects
     request = urllib.request.Request("http://localhost:11434/api/chat", data=b"{}")
     for handler in redirects:
-        assert handler.redirect_request(request, None, 307, "x", {}, "http://evil.example/") is None
+        followed = handler.redirect_request(
+            request,
+            cast("IO[bytes]", None),
+            307,
+            "x",
+            cast("HTTPMessage", {}),
+            "http://evil.example/",
+        )
+        assert followed is None

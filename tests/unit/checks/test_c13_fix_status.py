@@ -199,3 +199,28 @@ def test_a_capped_log_is_reported_as_truncated_even_after_date_filtering(
     assert evidence.details["n_commits"] == c13.MAX_COMMITS - 1
     assert evidence.details["truncated"] is True
     assert "or more later commits" in evidence.summary
+
+
+def test_a_capped_log_with_one_later_commit_says_what_more_there_may_be(
+    make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """P6: "and possibly more" alone does not say more of what, or where."""
+    c = claim(FileClaim, path="src/util.c")
+    ctx = make_ctx(claims=[c], tag="v1.2.0")
+    repo = ctx.resolution.repo
+    lines = [f"{1:040x} 2000000000"] + [f"{i:040x} 1" for i in range(100, 100 + c13.MAX_COMMITS)]
+    fake = subprocess.CompletedProcess([], 0, ("\n".join(lines) + "\n").encode(), b"")
+    real_run = type(repo).run
+
+    def run(self: object, argv: list[str], **kw: object) -> object:
+        if any(a.startswith("--max-count=") for a in argv):
+            return fake
+        return real_run(self, argv, **kw)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(type(repo), "run", run)
+    (evidence,) = FixStatus().run(ctx, [c])
+    assert evidence.details["n_commits"] == 1
+    assert evidence.details["truncated"] is True
+    assert evidence.summary.endswith(
+        "and possibly more later commits on main, which may already be fixed"
+    )

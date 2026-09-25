@@ -11,6 +11,7 @@ C10 exists to recognise.
 
 from __future__ import annotations
 
+import json
 import time
 
 from check_helpers import MakeContext, claim
@@ -18,6 +19,7 @@ from check_helpers import MakeContext, claim
 from nikasha.checks.base import run_checks
 from nikasha.checks.c10_trace_version_fit import TraceVersionFit
 from nikasha.model.claims import Frame, TraceClaim
+from nikasha.model.evidence import Evidence
 
 #: Frame lines as they are at v1.2.0: the memcpy, the call to it, the block loop and main.
 FITS_V120 = (
@@ -66,7 +68,7 @@ def trace(frames: tuple[tuple[str, str, int | None], ...], **fields: object) -> 
     )
 
 
-def _run(make_ctx: MakeContext, claims: list[TraceClaim], tag: str = "v1.2.0") -> list:
+def _run(make_ctx: MakeContext, claims: list[TraceClaim], tag: str = "v1.2.0") -> list[Evidence]:
     ctx = make_ctx(claims=claims, tag=tag)
     return TraceVersionFit().run(ctx, claims)
 
@@ -152,6 +154,16 @@ def test_every_release_scanned_is_in_the_details_in_release_order(make_ctx: Make
     ratios = evidence.details["ratios"]
     assert list(ratios) == ["v1.0.0", "v1.1.0", "v1.2.0", "v1.2.1", "v1.3.0"]
     assert ratios["v1.2.0"] == 1.0
+
+
+def test_release_order_survives_a_sorted_key_json_round_trip(make_ctx: MakeContext) -> None:
+    """``Result.to_json`` sorts keys; the ordered list keeps the release order regardless."""
+    (evidence,) = _run(make_ctx, [trace(FITS_V120)])
+    ordered = evidence.details["ratios_in_release_order"]
+    assert [name for name, _ in ordered] == list(evidence.details["ratios"])
+    assert dict(ordered) == evidence.details["ratios"]
+    loaded = json.loads(json.dumps(evidence.details, sort_keys=True))
+    assert loaded["ratios_in_release_order"] == [list(pair) for pair in ordered]
 
 
 class TestP4Safeguards:

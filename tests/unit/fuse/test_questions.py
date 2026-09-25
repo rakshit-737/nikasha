@@ -204,7 +204,7 @@ def decision(label: str = "UNGROUNDED", **kwargs: Any) -> Decision:
         "confidence": "high",
         "rule": "3a: a core locus that never existed",
     }
-    return Decision(**(base | kwargs))  # type: ignore[arg-type]
+    return Decision(**(base | kwargs))
 
 
 # --- the templates themselves ------------------------------------------------------------------
@@ -543,3 +543,53 @@ def test_ranged(value: object, expected: str) -> None:
 )
 def test_listed(value: object, expected: str) -> None:
     assert listed(value) == expected
+
+
+def test_control_and_bidi_characters_never_reach_a_question() -> None:
+    text = render_question(
+        "C07", "absent_everywhere", {"target": "curl\x1b[2J\u202e 8.5.0\x07", "where": "8.5.0"}
+    )
+    assert "\x1b" not in text
+    assert "\u202e" not in text
+    assert "\x07" not in text
+    assert "curl [2J 8.5.0" in text
+
+
+# --- [questions] overrides ---------------------------------------------------------------------
+
+
+def test_an_override_replaces_the_bundled_wording() -> None:
+    from nikasha.settings import Settings  # noqa: PLC0415
+
+    overrides = Settings.model_validate(
+        {"questions": {"C03.never_in_history_core": "Where is `{{ symbol }}` defined?"}}
+    ).question_overrides()
+    item = make_evidence(details={"symbol": "hdr_parse_chunk", "releases_searched": ["1.0.0"]})
+    plain = questions_for(decision(), [item], [version_claim()])
+    custom = questions_for(decision(), [item], [version_claim()], overrides)
+    assert custom[0].text == f"Where is `hdr_parse_chunk` defined? {CLOSING}"
+    assert custom[0].text != plain[0].text
+    assert custom[0].evidence_ids == plain[0].evidence_ids
+    assert custom[0].rationale == plain[0].rationale
+
+
+def test_an_override_for_another_outcome_changes_nothing() -> None:
+    item = make_evidence(details={"symbol": "hdr_parse_chunk", "releases_searched": ["1.0.0"]})
+    plain = questions_for(decision(), [item], [version_claim()])
+    other = questions_for(decision(), [item], [version_claim()], {"C02.absent": "Hi?"})
+    assert other == plain
+
+
+def test_an_override_is_rendered_in_the_sandbox() -> None:
+    """Even a template that bypassed load-time validation cannot reach Python internals."""
+    context = {"symbol": "x", "where": "1.2.0"}
+    with pytest.raises(TemplateError):
+        render_question(
+            "C03",
+            "never_in_history_core",
+            context,
+            {"C03.never_in_history_core": "{{ symbol.__class__.__mro__ }}"},
+        )
+    item = make_evidence(details={"symbol": "hdr_parse_chunk", "releases_searched": ["1.0.0"]})
+    hostile = {"C03.never_in_history_core": "{{ ''.__class__.__mro__[1].__subclasses__() }}"}
+    assert questions_for(decision(), [item], [version_claim()], hostile) == ()

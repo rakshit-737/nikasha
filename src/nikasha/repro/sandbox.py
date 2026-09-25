@@ -368,9 +368,11 @@ def run_argv(
         argv.append("--read-only-tmpfs=false")
     argv += [
         "--tmpfs",
-        "/tmp:rw,size=64m",  # noqa: S108 - a tmpfs inside the container
+        # mode=1777: an image's WORKDIR creates /work as root 0755, and the tmpfs would
+        # inherit that, leaving uid 65534 unable to write either scratch directory.
+        "/tmp:rw,size=64m,mode=1777",  # noqa: S108 - a tmpfs inside the container
         "--tmpfs",
-        f"/work:rw,exec,size={_check_size(spec.work_size, 'work size')}",
+        f"/work:rw,exec,size={_check_size(spec.work_size, 'work size')},mode=1777",
         "--cap-drop",
         "ALL",
         "--security-opt",
@@ -585,6 +587,34 @@ def image_exists(engine: EngineInfo, tag: str) -> bool:
     except (OSError, subprocess.TimeoutExpired):
         return False
     return proc.returncode == 0
+
+
+#: ``image inspect`` output is one ``sha256:<64 hex>`` line; anything else is refused.
+_IMAGE_ID_RE = re.compile(r"sha256:[0-9a-f]{64}")
+
+
+def image_id(engine: EngineInfo, tag: str) -> str | None:
+    """The local image ID (``sha256:...``) of ``tag``, or ``None`` if it is absent.
+
+    Runs ``<engine> image inspect --format {{.Id}} <tag>`` through the same hardened
+    pattern as :func:`image_exists`: resolved executable, validated tag, no shell, bounded
+    time. Output that is not exactly one image ID is treated as unknown.
+    """
+    checked = check_image_tag(tag)  # refuse hostile input before touching the engine
+    exe = engine_executable(engine)
+    try:
+        proc = subprocess.run(
+            [exe, "image", "inspect", "--format", "{{.Id}}", checked],
+            capture_output=True,
+            timeout=_INFO_TIMEOUT_S,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if proc.returncode != 0:
+        return None
+    value = proc.stdout.decode("utf-8", "replace").strip()
+    return value if _IMAGE_ID_RE.fullmatch(value) else None
 
 
 def build_image_argv(engine: EngineName, dockerfile: Path, context: Path, tag: str) -> list[str]:

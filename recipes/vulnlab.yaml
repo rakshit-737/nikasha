@@ -19,14 +19,16 @@ build:
   timeout_s: 600
   work_size: 512m
 run:
+  # attested_output: only file_input (hdrcat parses a file; the input cannot script it).
   kinds:
-    cli: {cmd: ["/build/hdrcat", "{args}"]}
-    file_input: {cmd: ["/build/hdrcat", "/poc/{file}"]}
+    cli: {cmd: ["/build/hdrcat", "{args}"], attested_output: false}
+    file_input: {cmd: ["/build/hdrcat", "/poc/{file}"], attested_output: true}
     c_harness:
       compile: ["clang", "-fsanitize=address,undefined", "-g", "-I/build/include", "/poc/poc.c", "/build/libhdr.a", "-o", "/work/poc"]
       cmd: ["/work/poc"]
+      attested_output: false
   env:
     ASAN_OPTIONS: "abort_on_error=1:detect_leaks=0:symbolize=1"
-    UBSAN_OPTIONS: "print_stacktrace=1:halt_on_error=1"
+    UBSAN_OPTIONS: "abort_on_error=1:print_stacktrace=1:halt_on_error=1"
   timeout_s: 30
 limits: {cpus: 2, memory: "2g", pids: 256, output_bytes: 1048576}

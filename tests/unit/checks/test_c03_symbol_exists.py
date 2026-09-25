@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
+from typing import Any
 
+import pytest
 from check_helpers import MakeContext, claim
 
 from nikasha.checks.base import CheckContext, run_checks
@@ -21,12 +23,13 @@ from nikasha.checks.c03_symbol_exists import SymbolExists
 from nikasha.code.gitio import GitRepo
 from nikasha.code.timeline import ReleasePresence, Timeline
 from nikasha.model.claims import SymbolClaim
+from nikasha.model.evidence import Evidence
 
 #: A name that is in no release and in no commit: the only kind that may be called absent.
 NEVER = "hdr_parse_lines"
 
 
-def _run(make_ctx: MakeContext, claims: list[SymbolClaim], tag: str = "v1.2.0") -> list:
+def _run(make_ctx: MakeContext, claims: list[SymbolClaim], tag: str = "v1.2.0") -> list[Evidence]:
     ctx = make_ctx(claims=claims, tag=tag)
     return SymbolExists().run(ctx, claims)
 
@@ -233,7 +236,19 @@ class TestP4NeverSaysNeverOnIncompleteEvidence:
         assert evidence.outcome == "NEUTRAL"
         assert evidence.strength == 0.0
         assert evidence.details["uncertain_releases"] == ["v1.2.0"]
+        assert evidence.details["defined_in"] == []
         assert "did not parse cleanly" in evidence.summary
+
+    def test_an_uncertain_outcome_still_names_the_releases_that_define_it(
+        self, make_ctx: MakeContext
+    ) -> None:
+        c = claim(SymbolClaim, name="hdr_find", role="core")
+        ctx = make_ctx(claims=[c])
+        _seed_uncertain(ctx, "hdr_find", release="v1.2.0", path="src/hdr.c")
+        (evidence,) = SymbolExists().run(ctx, [c])
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.details["outcome"] == "uncertain"
+        assert evidence.details["defined_in"] == ["v1.3.0"]
 
     def test_a_generated_file_is_never_judged(self, make_ctx: MakeContext) -> None:
         c = claim(SymbolClaim, name=NEVER, role="core", context_path="src/config.h")
@@ -369,3 +384,34 @@ def test_a_definition_wins_over_a_generated_context_path(make_ctx: MakeContext) 
     (evidence,) = _run(make_ctx, [c])
     assert evidence.outcome == "SUPPORTS"
     assert evidence.details["definitions"][0]["path"] == "src/util.c"
+
+
+# --- a git failure is not an absence (P4) ---------------------------------------------------
+
+
+def test_a_failed_grep_is_neutral_for_that_claim_only(
+    make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A ``git grep`` that exits 128 is not "undefined", and must not sink the other claims."""
+    from nikasha.code.gitio import GitResult  # noqa: PLC0415
+
+    bad = claim(SymbolClaim, name=NEVER)
+    good = claim(SymbolClaim, name="util_copy_value")
+    ctx = make_ctx(claims=[bad, good])
+    real_run = GitRepo.run
+
+    def run(self: GitRepo, argv: list[str], **kw: Any) -> GitResult:
+        if argv[:1] == ["grep"] and any(NEVER in arg for arg in argv):
+            return GitResult(tuple(argv), 128, b"", b"fatal: bad object", 0)
+        return real_run(self, argv, **kw)
+
+    monkeypatch.setattr(GitRepo, "run", run)
+    evidence = SymbolExists().run(ctx, [bad, good])
+    by_name = {e.details["symbol"]: e for e in evidence}
+    failed = by_name[NEVER]
+    assert failed.outcome == "NEUTRAL"
+    assert failed.strength == 0.0
+    assert failed.details["outcome"] == "search_failed"
+    assert "exit code 128" in failed.details["incomplete"]
+    assert failed.details["history_complete"] is False
+    assert by_name["util_copy_value"].outcome == "SUPPORTS"

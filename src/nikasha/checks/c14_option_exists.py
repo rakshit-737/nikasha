@@ -29,7 +29,7 @@ from typing import Any
 
 from nikasha.checks.base import BaseCheck, CheckContext, make_evidence, register
 from nikasha.checks.strengths import Strengths, default_strengths
-from nikasha.code.gitio import GitRepo, HistoryTimeoutError
+from nikasha.code.gitio import GitRepo, HistoryTimeoutError, HistoryUnavailableError
 from nikasha.code.literal import LiteralResult, literal_search
 from nikasha.errors import ExternalToolError
 from nikasha.model.claims import Claim, ClaimKind, OptionClaim
@@ -111,7 +111,12 @@ class OptionExists(BaseCheck):
         for claim in claims:
             if not isinstance(claim, OptionClaim):
                 continue
-            evidence = self._one(ctx, claim)
+            try:
+                evidence = self._one(ctx, claim)
+            except ExternalToolError as exc:
+                # A grep that git could not finish is not "absent": say so for this claim
+                # alone and keep judging the others (P4).
+                evidence = _search_failed(claim, exc)
             if evidence is not None:
                 out.append(evidence)
         return out
@@ -163,6 +168,9 @@ class OptionExists(BaseCheck):
         # stays in ``details['commands']``; the release sweep and the pickaxe below run
         # through ``GitRepo``, which hands back real records (P6).
         records: list[CommandRecord] = []
+        named, name_commands = self._named_only(ctx, claim, at_ref)
+        if named is not None:
+            return named
         others = [r for r in ctx.resolution.releases.finals() if r.commit != ctx.commit]
         if ctx.expired():
             # Nothing was searched beyond the ref, so there is no refutation to withhold.
@@ -176,10 +184,56 @@ class OptionExists(BaseCheck):
                 records=records,
             )
         found, command = self._sweep(ctx, at_ref.literal, others, records)
-        commands = [at_ref.command, command]
+        commands = [at_ref.command, *name_commands, command]
         if found:
             return self._other_release_only(ctx, claim, at_ref, found, commands, records=records)
         return self._never(ctx, claim, at_ref, others, commands, records=records)
+
+    def _named_only(
+        self, ctx: CheckContext, claim: OptionClaim, at_ref: LiteralResult
+    ) -> tuple[Evidence | None, list[str]]:
+        """NEUTRAL when the option's *name* is in the tree at the ref though its spelling is not.
+
+        Many real options never appear spelled the way a user types them: a getopt table or
+        Go's ``flag`` package holds ``"fold"`` for ``--fold``, clap derives ``--max-lines``
+        from a ``max_lines`` field, a man page writes ``\\-\\-fold``, and an INI file keeps
+        ``key`` under ``[section]`` rather than ``section.key``. When every part of the name
+        is there, a missing literal is not evidence the option was invented (P4).
+
+        Also returns the searches that ran, so a later refutation can show them (P6).
+        """
+        commands: list[str] = []
+        found: dict[str, list[str]] = {}
+        forms = _name_forms(claim.option_kind, at_ref.literal)
+        for form in forms:
+            if ctx.expired():
+                break
+            result = literal_search(
+                ctx.resolution.repo, form, ctx.commit, word=True, max_hits=MAX_LOCATIONS
+            )
+            if result is None:
+                continue
+            commands.append(result.command)
+            if result.hits:
+                found[form] = sorted(result.paths)
+        needed = forms if claim.option_kind == "config_key" else list(found)
+        if not found or any(form not in found for form in needed):
+            return None, commands
+        names = sorted(found)
+        paths = sorted({path for form_paths in found.values() for path in form_paths})
+        details = self._common(claim, at_ref, [at_ref.command, *commands])
+        details |= {"outcome": "name_only", "names": names, "paths": paths[:MAX_PATHS]}
+        return make_evidence(
+            check_id=CHECK_ID,
+            group=GROUP,
+            claims=[claim],
+            outcome="NEUTRAL",
+            strength=0.0,
+            summary=f"{at_ref.literal} is not spelled out at {_where(ctx)}, but its name"
+            f" ({_listed(names)}) is, in {_listed(paths)}; the option may be declared by name,"
+            " so its absence is not evidence",
+            details=details,
+        ), commands
 
     def _sweep(
         self,
@@ -388,8 +442,43 @@ class OptionExists(BaseCheck):
         }
 
 
+def _search_failed(claim: OptionClaim, exc: ExternalToolError) -> Evidence:
+    """NEUTRAL, with nothing withheld: a failed search holds no finding either way (P4)."""
+    return make_evidence(
+        check_id=CHECK_ID,
+        group=GROUP,
+        claims=[claim],
+        outcome="NEUTRAL",
+        strength=0.0,
+        summary=f"{claim.token} could not be searched for: {exc}, so nothing is concluded",
+        details={
+            "token": claim.token,
+            "option_kind": claim.option_kind,
+            "outcome": "search_failed",
+            "incomplete": str(exc),
+            "history_complete": False,
+        },
+    )
+
+
 def _where(ctx: CheckContext) -> str:
     return ctx.ref_name or ctx.commit[:12]
+
+
+def _name_forms(option_kind: str, token: str) -> list[str]:
+    """The spellings a real option's name can take in code that declares it by name.
+
+    ``--max-lines`` → ``max-lines`` and ``max_lines``; ``server.port`` → ``server`` and
+    ``port`` (all of which must be present). Constants are declared as spelled: none.
+    """
+    if option_kind == "cli_flag":
+        bare = token.lstrip("-")
+        forms = [bare, bare.replace("-", "_")]
+    elif option_kind == "config_key":
+        forms = token.split(".")
+    else:
+        return []
+    return sorted({form for form in forms if form and form != token})
 
 
 def _any_case_command(token: str) -> str:
@@ -407,5 +496,8 @@ def _pickaxe_any_case(
     result = repo.run(
         ["log", "--all", "-1", "--format=%H", "-i", f"-S{token}"], timeout=timeout, record=records
     )
+    if result.returncode != 0:
+        # An empty stdout from a failed log is not "never in history" (P4).
+        raise HistoryUnavailableError(f"git log -i -S failed with exit code {result.returncode}")
     sha = result.stdout.decode("ascii", "replace").strip()
     return sha or None

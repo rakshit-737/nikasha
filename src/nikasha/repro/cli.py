@@ -23,25 +23,37 @@ RecipesDirOption = Annotated[
 ]
 
 
-MAX_TIMEOUT_S = 3600.0
+MAX_TIMEOUT_S = 3600.0  # the recipe schema's run.timeout_s maximum
 
 # C0 controls except tab and LF, DEL, and C1 controls. PoC output is hostile, and ESC/CSI/OSC
 # sequences would reach the maintainer's terminal (screen clears, title or link spoofing,
-# OSC 52 clipboard writes). Rich does not strip these.
+# OSC 52 clipboard writes). Rich does not strip these. Bidirectional overrides and isolates
+# are escaped too, so hostile text cannot reorder what is displayed (Trojan Source).
 _UNSAFE_CONTROLS = frozenset(
     [chr(c) for c in range(0x20) if chr(c) not in "\t\n"]
     + ["\x7f"]
     + [chr(c) for c in range(0x80, 0xA0)]
+    + [chr(c) for c in (*range(0x202A, 0x202F), *range(0x2066, 0x206A), 0x200E, 0x200F, 0x061C)]
 )
 
 
 def terminal_safe(text: str) -> str:
-    """Replace terminal control characters with visible ``\\xNN`` escapes."""
-    return "".join(f"\\x{ord(ch):02x}" if ch in _UNSAFE_CONTROLS else ch for ch in text)
+    """Replace terminal control characters with visible ``\\xNN``/``\\uNNNN`` escapes."""
+    return "".join(_escape_char(ch) if ch in _UNSAFE_CONTROLS else ch for ch in text)
+
+
+def _escape_char(ch: str) -> str:
+    code = ord(ch)
+    return f"\\x{code:02x}" if code <= 0xFF else f"\\u{code:04x}"  # noqa: PLR2004
+
+
+def _safe(text: object) -> str:
+    """Input-derived text for plain ``typer.echo`` output."""
+    return terminal_safe(str(text))
 
 
 def _fail(exc: NikashaError) -> typer.Exit:
-    Console(stderr=True).print(f"[red]error:[/] {escape(str(exc))}", highlight=False)
+    Console(stderr=True).print(f"[red]error:[/] {escape(_safe(exc))}", highlight=False)
     raise typer.Exit(code=1)
 
 
@@ -58,7 +70,7 @@ def recipes_list(recipes_dir: RecipesDirOption = None) -> None:
         for path in list_recipes(_dir(recipes_dir)):
             recipe = load_recipe(path).recipe
             products = ",".join(recipe.match.products)
-            typer.echo(f"{recipe.id}\t{products}\t{recipe.title}")
+            typer.echo(_safe(f"{recipe.id}\t{products}\t{recipe.title}"))
     except NikashaError as exc:
         _fail(exc)
 
@@ -99,9 +111,9 @@ def recipes_validate(
             load_recipe(path)
         except NikashaError as exc:
             bad += 1
-            typer.echo(f"invalid\t{path.name}\t{exc}")
+            typer.echo(f"invalid\t{_safe(path.name)}\t{_safe(exc)}")
         else:
-            typer.echo(f"ok\t{path.name}")
+            typer.echo(f"ok\t{_safe(path.name)}")
     if bad:
         raise typer.Exit(code=1)
 
@@ -145,7 +157,7 @@ def repro(  # noqa: PLR0917 - a CLI command's options are its signature
 
     try:
         if timeout is not None and not 0 < timeout <= MAX_TIMEOUT_S:
-            raise NikashaError(f"--timeout must be > 0 and <= {MAX_TIMEOUT_S} seconds")
+            raise NikashaError(f"--timeout must be > 0 and <= {MAX_TIMEOUT_S:g} seconds")
         engine = sandbox.select_engine(sandbox_choice)  # refuse before touching anything
         loaded = find_recipe(recipe, _dir(recipes_dir))
         poc_path = Path(poc)
@@ -206,8 +218,8 @@ def repro(  # noqa: PLR0917 - a CLI command's options are its signature
         + (" (output truncated)" if outcome.truncated else "")
     )
     tail = terminal_safe("\n".join(outcome.stderr.strip().splitlines()[-40:]))
-    if tail:
-        console.print(escape(tail), markup=True)
+    if tail:  # verbatim: no markup, emoji codes or highlighting applied to hostile text
+        console.print(tail, markup=False, emoji=False, highlight=False, soft_wrap=True)
 
 
 def register(app: typer.Typer) -> None:

@@ -8,9 +8,10 @@ from __future__ import annotations
 import email.message
 import json
 import urllib.error
+import urllib.request
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import pytest
 import typer
@@ -111,10 +112,10 @@ class FakeResponse:
         return None
 
 
-def install(monkeypatch, routes: dict[str, object]) -> list[dict[str, Any]]:
+def install(monkeypatch: pytest.MonkeyPatch, routes: dict[str, object]) -> list[dict[str, Any]]:
     calls: list[dict[str, Any]] = []
 
-    def fake_urlopen(request, timeout=None):
+    def fake_urlopen(request: urllib.request.Request, timeout: float | None = None) -> object:
         assert timeout is not None and timeout > 0
         url = request.full_url
         calls.append(
@@ -137,8 +138,8 @@ def install(monkeypatch, routes: dict[str, object]) -> list[dict[str, Any]]:
     return calls
 
 
-def _boom(monkeypatch) -> None:
-    def boom(*args, **kwargs):
+def _boom(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(*args: object, **kwargs: object) -> NoReturn:
         raise AssertionError("the network was reached")
 
     monkeypatch.setattr("urllib.request.urlopen", boom)
@@ -161,14 +162,14 @@ def _routes() -> dict[str, object]:
 # --- refusals (before any request) -------------------------------------------------------------
 
 
-def test_refuses_offline_before_any_request(monkeypatch):
+def test_refuses_offline_before_any_request(monkeypatch: pytest.MonkeyPatch) -> None:
     _boom(monkeypatch)
     with pytest.raises(NikashaError, match="--online") as info:
         fetch_advisories("libhdr/libhdr", online=False, env=TOKEN)
     assert "nothing was requested" in str(info.value)
 
 
-def test_refuses_without_a_token(monkeypatch):
+def test_refuses_without_a_token(monkeypatch: pytest.MonkeyPatch) -> None:
     _boom(monkeypatch)
     with pytest.raises(NikashaError, match="GITHUB_TOKEN"):
         fetch_advisories("libhdr/libhdr", online=True, env={})
@@ -176,7 +177,7 @@ def test_refuses_without_a_token(monkeypatch):
         fetch_advisories("libhdr/libhdr", online=True, env={"GITHUB_TOKEN": "bad\ntoken"})
 
 
-def test_gh_token_is_a_fallback(monkeypatch):
+def test_gh_token_is_a_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     install(monkeypatch, {PAGE1: b"[]"})
     fetched = fetch_advisories("libhdr/libhdr", online=True, env={"GH_TOKEN": "gho_x"})
     assert fetched.reports == ()
@@ -185,18 +186,18 @@ def test_gh_token_is_a_fallback(monkeypatch):
 @pytest.mark.parametrize(
     "bad", ["", "libhdr", "a/b/c", "owner/", "/repo", "-bad/x", "o/..", "o/.", "o w/r", "o/r?x=1"]
 )
-def test_rejects_malformed_owner_repo(bad, monkeypatch):
+def test_rejects_malformed_owner_repo(bad: str, monkeypatch: pytest.MonkeyPatch) -> None:
     _boom(monkeypatch)
     with pytest.raises(NikashaError, match="OWNER/REPO"):
         fetch_advisories(bad, online=True, env=TOKEN)
 
 
-def test_owner_repo_accepts_github_names():
+def test_owner_repo_accepts_github_names() -> None:
     assert validate_owner_repo("curl/curl") == ("curl", "curl")
     assert validate_owner_repo(" python/cpython.git ") == ("python", "cpython.git")
 
 
-def test_rejects_unknown_state(monkeypatch):
+def test_rejects_unknown_state(monkeypatch: pytest.MonkeyPatch) -> None:
     _boom(monkeypatch)
     with pytest.raises(NikashaError, match="--state"):
         fetch_advisories("libhdr/libhdr", state="open", online=True, env=TOKEN)
@@ -206,7 +207,7 @@ def test_rejects_unknown_state(monkeypatch):
 # --- requests and conversion -----------------------------------------------------------------
 
 
-def test_fetch_follows_pagination_and_builds_reports(monkeypatch):
+def test_fetch_follows_pagination_and_builds_reports(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = install(monkeypatch, _routes())
     fetched = fetch_advisories("libhdr/libhdr", online=True, env=TOKEN)
 
@@ -240,7 +241,7 @@ def test_fetch_follows_pagination_and_builds_reports(monkeypatch):
     )
 
 
-def test_author_and_credits_are_never_stored(monkeypatch):
+def test_author_and_credits_are_never_stored(monkeypatch: pytest.MonkeyPatch) -> None:
     install(monkeypatch, _routes())
     fetched = fetch_advisories("libhdr/libhdr", online=True, env=TOKEN)
     for text in (report_json(fetched.reports), fetched.markdown()):
@@ -249,7 +250,7 @@ def test_author_and_credits_are_never_stored(monkeypatch):
         assert "publisher-login" not in text
 
 
-def test_markdown_lists_every_advisory_and_round_trips(monkeypatch):
+def test_markdown_lists_every_advisory_and_round_trips(monkeypatch: pytest.MonkeyPatch) -> None:
     install(monkeypatch, _routes())
     fetched = fetch_advisories("libhdr/libhdr", online=True, env=TOKEN)
     markdown = fetched.markdown()
@@ -268,14 +269,14 @@ def test_markdown_lists_every_advisory_and_round_trips(monkeypatch):
     assert ingest_markdown(first_doc).body.endswith(fetched.reports[0].body)
 
 
-def test_empty_listing_is_a_comment(monkeypatch):
+def test_empty_listing_is_a_comment(monkeypatch: pytest.MonkeyPatch) -> None:
     install(monkeypatch, {PAGE1: b"[]"})
     fetched = fetch_advisories("libhdr/libhdr", online=True, env=TOKEN)
     assert fetched.markdown() == "<!-- nikasha intake: no triage advisories in libhdr/libhdr -->\n"
     assert report_json(fetched.reports) == "[]\n"
 
 
-def test_next_link_only_stays_on_the_api_host():
+def test_next_link_only_stays_on_the_api_host() -> None:
     assert next_link(f'<{PAGE2}>; rel="next"') == PAGE2
     assert next_link(f'<{PAGE1}>; rel="prev", <{PAGE2}>; rel="next"') == PAGE2
     assert next_link('<https://evil.example/steal>; rel="next"') is None
@@ -284,7 +285,7 @@ def test_next_link_only_stays_on_the_api_host():
     assert next_link("") is None
 
 
-def test_foreign_next_link_is_not_followed(monkeypatch):
+def test_foreign_next_link_is_not_followed(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = install(
         monkeypatch,
         {PAGE1: FakeResponse(b"[]", headers={"Link": '<https://evil.example/steal>; rel="next"'})},
@@ -293,7 +294,7 @@ def test_foreign_next_link_is_not_followed(monkeypatch):
     assert [c["url"] for c in calls] == [PAGE1]
 
 
-def test_page_cap_warns(monkeypatch):
+def test_page_cap_warns(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(gh, "MAX_PAGES", 2)
     calls = install(
         monkeypatch,
@@ -307,13 +308,13 @@ def test_page_cap_warns(monkeypatch):
     assert any("more than 2 pages" in w for w in fetched.warnings)
 
 
-def test_non_list_answer_is_refused(monkeypatch):
+def test_non_list_answer_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     install(monkeypatch, {PAGE1: b'{"message": "Not Found"}'})
     with pytest.raises(NikashaError, match="not a list"):
         fetch_advisories("libhdr/libhdr", online=True, env=TOKEN)
 
 
-def test_http_errors_carry_hints(monkeypatch):
+def test_http_errors_carry_hints(monkeypatch: pytest.MonkeyPatch) -> None:
     install(monkeypatch, {PAGE1: _http_error(PAGE1, 403)})
     with pytest.raises(NikashaError, match="HTTP 403") as info:
         fetch_advisories("libhdr/libhdr", online=True, env=TOKEN)
@@ -324,10 +325,10 @@ def test_http_errors_carry_hints(monkeypatch):
         fetch_advisories("libhdr/libhdr", online=True, env=TOKEN)
 
 
-def test_token_is_never_forwarded_on_redirect_nor_printed(monkeypatch):
+def test_token_is_never_forwarded_on_redirect_nor_printed(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: list[Any] = []
 
-    def capture(request, timeout=None):
+    def capture(request: urllib.request.Request, timeout: float | None = None) -> NoReturn:
         seen.append(request)
         raise urllib.error.URLError("refused")
 
@@ -341,7 +342,8 @@ def test_token_is_never_forwarded_on_redirect_nor_printed(monkeypatch):
     assert request.unredirected_hdrs["Authorization"] == "Bearer ghp_testtokenvalue"
 
 
-def test_parse_advisory_tolerates_garbage():
+def test_parse_advisory_tolerates_garbage() -> None:
+    item: object
     for item in ("nonsense", [], {"ghsa_id": 5, "cvss": "x", "vulnerabilities": "y", "cwes": 3}):
         parsed = parse_advisory(item)
         assert parsed.ghsa_id == ""
@@ -372,14 +374,14 @@ def _app() -> typer.Typer:
 
 
 @pytest.fixture
-def env(monkeypatch, tmp_path):
+def env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     monkeypatch.setenv("NIKASHA_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("GITHUB_TOKEN", TOKEN["GITHUB_TOKEN"])
     monkeypatch.delenv("GH_TOKEN", raising=False)
     return tmp_path
 
 
-def test_cli_refuses_offline(env, monkeypatch):
+def test_cli_refuses_offline(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _boom(monkeypatch)
     result = runner.invoke(_app(), ["gh-advisories", "libhdr/libhdr"])
     assert result.exit_code == 1
@@ -387,7 +389,7 @@ def test_cli_refuses_offline(env, monkeypatch):
     assert "Traceback" not in result.output
 
 
-def test_cli_refuses_without_a_token(env, monkeypatch):
+def test_cli_refuses_without_a_token(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _boom(monkeypatch)
     monkeypatch.delenv("GITHUB_TOKEN")
     result = runner.invoke(_app(), ["gh-advisories", "libhdr/libhdr", "--online"])
@@ -395,7 +397,7 @@ def test_cli_refuses_without_a_token(env, monkeypatch):
     assert "GITHUB_TOKEN" in result.output
 
 
-def test_cli_prints_markdown_and_json(env, monkeypatch):
+def test_cli_prints_markdown_and_json(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     calls = install(monkeypatch, _routes())
     result = runner.invoke(_app(), ["gh-advisories", "libhdr/libhdr", "--online"])
     assert result.exit_code == 0, result.output
@@ -409,14 +411,16 @@ def test_cli_prints_markdown_and_json(env, monkeypatch):
     assert [d["source"]["kind"] for d in data] == ["gh_advisory", "gh_advisory"]
 
 
-def test_cli_rejects_bad_state(env, monkeypatch):
+def test_cli_rejects_bad_state(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _boom(monkeypatch)
     result = runner.invoke(_app(), ["gh-advisories", "libhdr/libhdr", "--online", "--state", "x"])
     assert result.exit_code == 1
     assert "--state" in result.output
 
 
-def test_cli_out_dir_writes_one_file_per_advisory(env, monkeypatch):
+def test_cli_out_dir_writes_one_file_per_advisory(
+    env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     install(monkeypatch, _routes())
     out_dir = env / "advisories"
     result = runner.invoke(
@@ -429,7 +433,9 @@ def test_cli_out_dir_writes_one_file_per_advisory(env, monkeypatch):
     assert result.stdout == ""
 
 
-def test_cli_check_prints_reply_markdown(env, monkeypatch, vulnlab_repo):
+def test_cli_check_prints_reply_markdown(
+    env: Path, monkeypatch: pytest.MonkeyPatch, vulnlab_repo: Path
+) -> None:
     install(monkeypatch, {PAGE1: json.dumps([_advisory()]).encode("utf-8")})
     result = runner.invoke(
         _app(),

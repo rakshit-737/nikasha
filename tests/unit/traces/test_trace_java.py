@@ -10,6 +10,7 @@ from hypothesis import strategies as st
 
 from nikasha.extract import extract_claims
 from nikasha.extract.traces import PARSERS, java
+from nikasha.extract.traces.common import ParsedTrace
 from nikasha.ingest import ingest_string
 from nikasha.model.claims import TraceClaim
 
@@ -21,7 +22,7 @@ def _load(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf-8")
 
 
-def _one(text: str):
+def _one(text: str) -> ParsedTrace:
     traces = PARSER.parse(text)
     assert len(traces) == 1, traces
     return traces[0]
@@ -58,7 +59,9 @@ FIXTURE_CASES = [
 
 
 @pytest.mark.parametrize(("name", "bug_type", "message", "frames", "path"), FIXTURE_CASES)
-def test_fixture(name, bug_type, message, frames, path):
+def test_fixture(
+    name: str, bug_type: str, message: str, frames: list[tuple[str, int]], path: str
+) -> None:
     text = _load(name)
     trace = _one(text)
     data = trace.data
@@ -70,7 +73,7 @@ def test_fixture(name, bug_type, message, frames, path):
     assert [f.index for f in data.frames] == list(range(len(frames)))
 
 
-def test_caused_by_stack():
+def test_caused_by_stack() -> None:
     data = _one(_load("03-caused-by.txt")).data
     assert len(data.other_stacks) == 1
     cause = data.other_stacks[0]
@@ -99,7 +102,7 @@ def test_caused_by_stack():
     )
 
 
-def test_fixture_embedded_in_markdown_is_found_by_the_pipeline():
+def test_fixture_embedded_in_markdown_is_found_by_the_pipeline() -> None:
     trace_text = _load("01-null-pointer.txt")
     md = f"When the user is missing:\n\n```java\n{trace_text}```\n\nThe NPE leaks the parameter.\n"
     report = ingest_string(md, input_format="markdown")
@@ -131,7 +134,7 @@ Next log line
 """
 
 
-def test_bare_header_suppressed_and_frame_shapes():
+def test_bare_header_suppressed_and_frame_shapes() -> None:
     trace = _one(BARE)
     data = trace.data
     assert BARE[trace.start : trace.end].startswith("java.lang.IllegalStateException: boom")
@@ -173,11 +176,11 @@ def test_bare_header_suppressed_and_frame_shapes():
         "\tat userName (/src/x.js:7:23)\n",  # a Node frame
     ],
 )
-def test_non_java_headers(text):
+def test_non_java_headers(text: str) -> None:
     assert PARSER.parse(text) == []
 
 
-def test_split_header_and_bare_type():
+def test_split_header_and_bare_type() -> None:
     assert java.split_header("java.lang.Error") == ("java.lang.Error", None)
     assert java.split_header("MyError:") == ("MyError", None)
     trace = _one("MyError: x\n\tat Foo.bar(Foo.java:3)\n")
@@ -192,7 +195,7 @@ ALL_LINES += BARE.splitlines()
 
 
 @pytest.mark.parametrize("name", [c[0] for c in FIXTURE_CASES])
-def test_every_truncation_parses(name):
+def test_every_truncation_parses(name: str) -> None:
     lines = _load(name).splitlines(keepends=True)
     for n in range(len(lines) + 1):
         text = "".join(lines[:n])
@@ -202,7 +205,7 @@ def test_every_truncation_parses(name):
 
 
 @pytest.mark.parametrize("text", ["", "\tat (", 'Exception in thread "', "\tat a(b)\n"])
-def test_garbage_does_not_raise(text):
+def test_garbage_does_not_raise(text: str) -> None:
     assert PARSER.parse(text) == []
 
 
@@ -213,11 +216,11 @@ def _check(text: str) -> None:
 
 
 @given(st.text())
-def test_hypothesis_random_text(text):
+def test_hypothesis_random_text(text: str) -> None:
     _check(text)
 
 
 @settings(max_examples=200)
 @given(st.lists(st.one_of(st.sampled_from(ALL_LINES), st.text(max_size=30)), max_size=40))
-def test_hypothesis_shuffled_report_lines(lines):
+def test_hypothesis_shuffled_report_lines(lines: list[str]) -> None:
     _check("\n".join(lines))

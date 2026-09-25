@@ -236,8 +236,8 @@ def compiler_version(engine: sandbox.EngineInfo) -> str:
     return first[0] if first else "unknown"
 
 
-#: ``nikasha.repro.sandbox`` exposes no image-ID query yet (ADR 0009); say so in the README.
-IMAGE_ID_UNRECORDED = "not recorded: nikasha.repro.sandbox has no image-ID query yet"
+#: Written to the README only if the engine cannot report the image ID after the build.
+IMAGE_ID_UNKNOWN = "unknown: the engine did not report an image ID"
 
 
 def readme(
@@ -309,10 +309,12 @@ def main(argv: list[str]) -> int:
             commits[bug.name] = stage(bug, work, online=args.online)
             result = run(engine, bug, work / "vulnerable")
             problem = acceptable(bug.fmt, result)
+            shown = result  # the run the problem is about
             if problem is None:
-                problem = fixed_is_clean(bug.fmt, run(engine, bug, work / "fixed"))
+                shown = run(engine, bug, work / "fixed")
+                problem = fixed_is_clean(bug.fmt, shown)
             if problem is not None:
-                tail = result.stderr[-2000:].decode("utf-8", "replace")
+                tail = shown.stderr[-2000:].decode("utf-8", "replace")
                 print(f"!! {bug.fmt}/{bug.name}: {problem}; nothing written\n{tail}")
                 return 1
             staged = out / bug.fmt / f"{bug.name}.txt"
@@ -323,7 +325,7 @@ def main(argv: list[str]) -> int:
             "engine": engine.name,
             "base": base_digest(),
             "clang": compiler_version(engine),
-            "image_id": IMAGE_ID_UNRECORDED,
+            "image_id": sandbox.image_id(engine, IMAGE) or IMAGE_ID_UNKNOWN,
         }
         for fmt in sorted({b.fmt for b in selected}):
             fmt_bugs = [b for b in selected if b.fmt == fmt]

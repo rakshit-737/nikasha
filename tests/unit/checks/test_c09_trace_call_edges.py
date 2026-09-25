@@ -9,6 +9,7 @@ The call chain the fixtures assert is the one documented in ``examples/vulnlab/R
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 from check_helpers import ROOT, MakeContext, claim
@@ -24,6 +25,7 @@ from nikasha.checks.strengths import default_strengths
 from nikasha.code.facts import FileFacts, SymbolDef
 from nikasha.extract.traces import parse_traces
 from nikasha.model.claims import Frame, TraceClaim
+from nikasha.model.evidence import Evidence
 
 ASAN = ROOT / "tests" / "fixtures" / "traces" / "asan"
 GENUINE = ASAN / "01-vulnlab-heap-overflow-v1.2.0.txt"
@@ -48,18 +50,18 @@ def frame(
     )
 
 
-def stack(*frames: Frame, **overrides: object) -> TraceClaim:
+def stack(*frames: Frame, **overrides: Any) -> TraceClaim:
     """A trace claim over ``frames``, innermost first (as every real stack is printed)."""
     return claim(TraceClaim, format="asan", frames=tuple(frames), **overrides)
 
 
-def real_trace(path: Path, **overrides: object) -> TraceClaim:
+def real_trace(path: Path, **overrides: Any) -> TraceClaim:
     """The one trace in a captured fixture or an example report, parsed for real."""
     (parsed,) = parse_traces(path.read_text(encoding="utf-8"))
     return claim(TraceClaim, **parsed.data.model_dump(), **overrides)
 
 
-def run(make_ctx: MakeContext, trace: TraceClaim, tag: str = "v1.2.0") -> list:
+def run(make_ctx: MakeContext, trace: TraceClaim, tag: str = "v1.2.0") -> list[Evidence]:
     ctx = make_ctx(claims=[trace], tag=tag)
     return TraceCallEdges().run(ctx, [trace])
 
@@ -412,3 +414,30 @@ def test_a_huge_function_name_is_bounded_in_the_evidence(make_ctx: MakeContext) 
     (record,) = evidence.details["unknown"]
     assert len(record["caller"]) <= 120
     assert all(len(r) < 400 for r in record["reasons"])
+
+
+# --- a git failure is not a missing edge (P4) -----------------------------------------------
+
+
+def test_a_failed_grep_is_neutral_for_that_trace(
+    make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every ``git grep`` exits 128: the trace is not refuted and the check does not error."""
+
+    from nikasha.code.gitio import GitRepo, GitResult  # noqa: PLC0415
+
+    trace = real_trace(FABRICATED)
+    real_run = GitRepo.run
+
+    def failing_run(self: GitRepo, argv: list[str], **kw: Any) -> GitResult:
+        if argv[:1] == ["grep"]:
+            return GitResult(tuple(argv), 128, b"", b"fatal: bad object", 0)
+        return real_run(self, argv, **kw)
+
+    monkeypatch.setattr(GitRepo, "run", failing_run)
+    (evidence,) = run(make_ctx, trace)
+    assert evidence.outcome == "NEUTRAL"
+    assert evidence.strength == 0.0
+    assert evidence.details["outcome"] == "search_failed"
+    assert "exit code 128" in evidence.details["incomplete"]
+    assert evidence.details["history_complete"] is False

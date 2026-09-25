@@ -31,16 +31,16 @@ from nikasha.code.languages import Lang, detect_language
         ("SRC/MAIN.C", Lang.C),  # case-insensitive extensions
     ],
 )
-def test_extension(path, lang):
+def test_extension(path: str, lang: Lang) -> None:
     assert detect_language(path) is lang
 
 
 @pytest.mark.parametrize("path", ["README.md", "Makefile", "data.json", "noext", "x.h.orig"])
-def test_unknown(path):
+def test_unknown(path: str) -> None:
     assert detect_language(path) is None
 
 
-def test_plain_header_is_c():
+def test_plain_header_is_c() -> None:
     head = b"#ifndef X_H\n#define X_H\nstruct s { int a; };\nint f(void);\n#endif\n"
     assert detect_language("include/x.h", head) is Lang.C
 
@@ -55,11 +55,11 @@ def test_plain_header_is_c():
         b"struct A {\nprivate:\n  int x;\n};\n",
     ],
 )
-def test_header_with_cpp_constructs_is_cpp(head):
+def test_header_with_cpp_constructs_is_cpp(head: bytes) -> None:
     assert detect_language("include/x.h", head) is Lang.CPP
 
 
-def test_header_override_from_config():
+def test_header_override_from_config() -> None:
     assert detect_language("include/x.h", b"int f(void);\n", headers_are_cpp=True) is Lang.CPP
 
 
@@ -74,11 +74,11 @@ def test_header_override_from_config():
         (b"#!/usr/bin/php\n<?php\n", Lang.PHP),
     ],
 )
-def test_shebang(head, lang):
+def test_shebang(head: bytes, lang: Lang) -> None:
     assert detect_language("bin/tool", head) is lang
 
 
-def test_shebang_does_not_override_extension():
+def test_shebang_does_not_override_extension() -> None:
     assert detect_language("tool.rb", b"#!/usr/bin/env python\n") is Lang.RUBY
 
 
@@ -86,9 +86,9 @@ def test_shebang_does_not_override_extension():
     "head",
     [b"#!/bin/sh\necho hi\n", b"#!\n", b"#!\xff\xfe\x00garbage", b"", b"\x00\x01\x02"],
 )
-def test_unknown_or_garbage_script(head):
+def test_unknown_or_garbage_script(head: bytes) -> None:
     assert detect_language("bin/tool", head) is None
 
 
-def test_garbage_header_is_still_c():
+def test_garbage_header_is_still_c() -> None:
     assert detect_language("x.h", b"\xff\xfe\x00\x00" * 1000) is Lang.C

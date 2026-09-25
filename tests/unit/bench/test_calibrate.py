@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -92,3 +93,66 @@ def test_only_the_real_split_counts() -> None:
     assert class_counts(records) == {"genuine": 1, "fabricated": 0}
     many = [rec("genuine", source="S6")] * 60 + [rec("fabricated", source="S6")] * 60
     assert calibrate(many).fitted is False
+
+
+def _fitted() -> Any:
+    from nikasha.bench.calibrate import CalibrationOutcome  # noqa: PLC0415
+
+    return CalibrationOutcome(
+        fitted=True,
+        reason="fitting",
+        counts={"genuine": 50, "fabricated": 50},
+        strengths={"C03.SUPPORTS": 1.2},
+        brier=0.1,
+        ece=0.05,
+    )
+
+
+def test_calibration_files_take_the_next_free_version(tmp_path: Path) -> None:
+    from nikasha.bench.calibrate import next_version, write_calibration  # noqa: PLC0415
+
+    assert next_version(tmp_path / "missing") == 1
+    first = write_calibration(_fitted(), tmp_path)
+    assert first.name == "calibration-v1.yaml"
+    (tmp_path / "calibration-v7.yaml").write_text("keep me", encoding="utf-8")
+    (tmp_path / "calibration-vx.yaml").write_text("ignored", encoding="utf-8")
+    second = write_calibration(_fitted(), tmp_path)
+    assert second.name == "calibration-v8.yaml"
+    assert (tmp_path / "calibration-v7.yaml").read_text(encoding="utf-8") == "keep me"
+    assert first.read_bytes().replace(b"v1", b"v8") == second.read_bytes()
+    assert "version: calibration-v8" in second.read_text(encoding="utf-8")
+
+
+def test_write_calibration_refuses_an_unfitted_outcome(tmp_path: Path) -> None:
+    from nikasha.bench.calibrate import write_calibration  # noqa: PLC0415
+
+    with pytest.raises(CalibrationError):
+        write_calibration(calibrate([]), tmp_path)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_calibrate_cli_writes_next_version_when_fitted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import typer  # noqa: PLC0415
+    from typer.testing import CliRunner  # noqa: PLC0415
+
+    import nikasha.bench.cli as bench_cli  # noqa: PLC0415
+
+    monkeypatch.setattr(bench_cli, "calibrate", lambda _records: _fitted())
+    app = typer.Typer()
+    bench_cli.register(app)
+
+    @app.command()
+    def other() -> None:
+        """Placeholder."""
+
+    results = tmp_path / "results.jsonl"
+    results.write_text("{}\n", encoding="utf-8")
+    out = tmp_path / "cal"
+    out.mkdir()
+    (out / "calibration-v1.yaml").write_text("old", encoding="utf-8")
+    result = CliRunner().invoke(app, ["bench", "calibrate", str(results), "--out", str(out)])
+    assert result.exit_code == 0, result.output
+    assert "calibration-v2.yaml" in result.output
+    assert (out / "calibration-v1.yaml").read_text(encoding="utf-8") == "old"

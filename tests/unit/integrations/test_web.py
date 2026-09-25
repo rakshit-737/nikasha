@@ -15,7 +15,7 @@ import json
 import re
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 import typer
@@ -24,6 +24,9 @@ from typer.testing import CliRunner
 pytest.importorskip("fastapi")
 
 from fastapi.testclient import TestClient
+
+if TYPE_CHECKING:
+    from httpx2 import Response
 
 from nikasha.errors import NikashaError
 from nikasha.fuse.scoring import fuse
@@ -38,7 +41,7 @@ from nikasha.integrations.web.app import (
     report_policy,
 )
 from nikasha.model.result import ResolvedTarget, Result
-from nikasha.model.verdict import Verdict
+from nikasha.model.verdict import Verdict, VerdictLabel
 from nikasha.pipeline import CheckReport
 from nikasha.render.html import render_html_result
 
@@ -51,7 +54,7 @@ REPORTS = ROOT / "examples" / "reports"
 def fake_check_report(path: Path, **options: Any) -> CheckReport:
     text = Path(path).read_text(encoding="utf-8")
     report = ingest_string(text, input_format="text", uri=str(path))
-    label = "UNGROUNDED" if "fabricated" in text else "GROUNDED"
+    label: VerdictLabel = "UNGROUNDED" if "fabricated" in text else "GROUNDED"
     result = Result(
         tool_version="0.0.0-test",
         report=report,
@@ -106,7 +109,7 @@ def url(path: str, token: str) -> str:
     return f"{path}?token={token}"
 
 
-def post(client: TestClient, token: str, data: dict[str, str], **kwargs: Any):
+def post(client: TestClient, token: str, data: dict[str, str], **kwargs: Any) -> Response:
     return client.post(
         url("/checks", token),
         data=data,

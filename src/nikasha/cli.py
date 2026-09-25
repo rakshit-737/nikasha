@@ -436,6 +436,8 @@ def check(  # noqa: PLR0917 - a CLI command's options are its signature
             thresholds=settings.thresholds() if settings is not None else None,
             prior=settings.prior() if settings is not None else 0.0,
             llm=_llm_provider(llm, settings),
+            question_overrides=settings.question_overrides() if settings is not None else None,
+            ignore=settings.ignore.paths if settings is not None else (),
         )
     except NikashaError as exc:
         _fail(exc)
@@ -585,10 +587,20 @@ def _fail(exc: NikashaError) -> typer.Exit:
 
 
 class _SettingsLike(Protocol):
-    """The two things the CLI needs from ``nikasha.settings.Settings`` (SPEC §16.1)."""
+    """What the CLI needs from ``nikasha.settings.Settings`` (SPEC §16.1)."""
 
+    @property
+    def ignore(self) -> _IgnoreLike: ...
     def thresholds(self) -> Thresholds: ...
     def prior(self) -> float: ...
+    def question_overrides(self) -> dict[str, str]: ...
+
+
+class _IgnoreLike(Protocol):
+    """``Settings.ignore``: the ``[ignore]`` globs."""
+
+    @property
+    def paths(self) -> tuple[str, ...]: ...
 
 
 def _load_settings(explicit: str | None) -> _SettingsLike | None:
@@ -621,10 +633,11 @@ def _llm_provider(spec: str | None, settings: _SettingsLike | None) -> object | 
     return provider
 
 
-#: Integration commands (SPEC §16). Each module exposes ``register(app)``. A module whose
-#: optional extra is missing still imports — it fails lazily, inside the command, with an
-#: "install nikasha[...]" message — so a *missing module* here is a packaging fault, which
-#: ``tests/unit/test_cli.py`` turns into a failure rather than a silently shorter CLI.
+#: Integration commands (SPEC §16), plus the repro (§13) and bench (§14) groups. Each module
+#: exposes ``register(app)``. A module whose optional extra is missing still imports — it fails
+#: lazily, inside the command, with an "install nikasha[...]" message — so a *missing module* here
+#: is a packaging fault, which ``tests/unit/test_cli.py`` turns into a failure rather than a
+#: silently shorter CLI.
 INTEGRATIONS = (
     "nikasha.integrations.lint",
     "nikasha.integrations.cve",
@@ -632,6 +645,8 @@ INTEGRATIONS = (
     "nikasha.integrations.gh_advisories",
     "nikasha.integrations.mcp_server",
     "nikasha.integrations.web",
+    "nikasha.repro.cli",
+    "nikasha.bench.cli",
 )
 
 

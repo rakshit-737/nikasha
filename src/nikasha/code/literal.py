@@ -63,7 +63,12 @@ def literal_search(
     word: bool = False,
     max_hits: int = DEFAULT_MAX_HITS,
 ) -> LiteralResult | None:
-    """Search ``commit`` for ``literal``; ``None`` if the literal is not searchable."""
+    """Search ``commit`` for ``literal``; ``None`` if the literal is not searchable.
+
+    Raises :class:`~nikasha.errors.ExternalToolError` when git cannot finish the search
+    (a bad revision, a broken object store, a timeout). That is deliberately not an empty
+    result: callers must report the claim as unsearched, never as absent (P4).
+    """
     text = searchable(literal)
     if text is None:
         return None

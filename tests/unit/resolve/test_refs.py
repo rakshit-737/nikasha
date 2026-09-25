@@ -46,7 +46,7 @@ TAGS = Path(__file__).parents[2] / "fixtures" / "tags"
         ("v1.0-pre", "v", (1, 0), "pre", ""),
     ],
 )
-def test_parse_tag(tag, family, numbers, kind, letter):
+def test_parse_tag(tag: str, family: str, numbers: tuple[int, ...], kind: str, letter: str) -> None:
     parsed = parse_tag(tag)
     assert parsed is not None
     assert (parsed.family, parsed.numbers, parsed.kind, parsed.qual_letter) == (
@@ -72,11 +72,11 @@ def test_parse_tag(tag, family, numbers, kind, letter):
         "v",
     ],
 )
-def test_non_release_tags_are_ignored(tag):
+def test_non_release_tags_are_ignored(tag: str) -> None:
     assert parse_tag(tag) is None
 
 
-def test_ordering_appendix_c():
+def test_ordering_appendix_c() -> None:
     order = ["1.2.3-rc1", "1.2.3", "1.2.3a"]
     parsed = [parse_tag(t) for t in order]
     assert all(parsed)
@@ -92,7 +92,7 @@ def test_ordering_appendix_c():
     assert pre.sort_key[1] == beta.sort_key[1]
 
 
-def test_trailing_zeros_are_equal():
+def test_trailing_zeros_are_equal() -> None:
     assert parse_tag("8.5").trimmed == parse_tag("curl-8_5_0").trimmed  # type: ignore[union-attr]
 
 
@@ -100,7 +100,7 @@ _TAG_TEXT = st.from_regex(r"\A(v|curl-|release-)?\d{1,3}([._]\d{1,3}){0,3}(-rc\d
 
 
 @given(st.lists(_TAG_TEXT, min_size=1, max_size=30))
-def test_sort_key_is_a_total_order(tags):
+def test_sort_key_is_a_total_order(tags: list[str]) -> None:
     parsed = [p for p in (parse_tag(t) for t in tags) if p is not None]
     keys = [p.sort_key for p in parsed]
     ordered = sorted(keys)
@@ -133,7 +133,9 @@ def _releases(project: str) -> ReleaseList:
         ("zlib", "1.3.1", "v1.3.1", ()),
     ],
 )
-def test_real_tag_lists_match_claims(project, claim, expected, families):
+def test_real_tag_lists_match_claims(
+    project: str, claim: str, expected: str, families: tuple[str, ...]
+) -> None:
     releases = _releases(project)
     spec = parse_version(claim)
     assert spec is not None
@@ -145,7 +147,7 @@ def test_real_tag_lists_match_claims(project, claim, expected, families):
 @pytest.mark.parametrize(
     "project", ["curl", "sqlite", "openssl", "httpd", "nginx", "node", "django", "libxml2", "zlib"]
 )
-def test_real_tag_lists_parse_mostly(project):
+def test_real_tag_lists_parse_mostly(project: str) -> None:
     names = (TAGS / f"{project}.txt").read_text(encoding="utf-8").split()
     releases = _releases(project)
     assert len(releases.releases) >= 0.5 * len(names)
@@ -153,7 +155,7 @@ def test_real_tag_lists_parse_mostly(project):
     assert keys == sorted(keys)
 
 
-def test_prereleases_only_match_when_named():
+def test_prereleases_only_match_when_named() -> None:
     releases = _releases("node")
     assert all(not r.tag.is_prerelease for r in releases.match(parse_version("4.0.0")))  # type: ignore[arg-type]
     rc = releases.match(parse_version("4.0.0-rc2"))  # type: ignore[arg-type]
@@ -161,7 +163,7 @@ def test_prereleases_only_match_when_named():
     assert rc[0].name == "v4.0.0-rc.2"
 
 
-def test_neighbours_window_and_latest_before():
+def test_neighbours_window_and_latest_before() -> None:
     releases = _releases("curl")
     below, above = releases.neighbours(parse_version("8.4.7"))  # type: ignore[arg-type]
     assert below is not None
@@ -175,7 +177,7 @@ def test_neighbours_window_and_latest_before():
     assert releases.latest_before(-1) is None
 
 
-def test_family_filter():
+def test_family_filter() -> None:
     releases = ReleaseList.from_tags(
         [TagRef("OpenSSL-fips-2_0_9", "a", 1), TagRef("OpenSSL_1_1_1w", "b", 2)],
         families=["openssl"],
@@ -193,7 +195,7 @@ def test_family_filter():
         ("node", {"v"}, set()),
     ],
 )
-def test_main_release_line(project, included, excluded):
+def test_main_release_line(project: str, included: set[str], excluded: set[str]) -> None:
     main = _releases(project).main_families
     assert included <= main
     assert not (excluded & main)

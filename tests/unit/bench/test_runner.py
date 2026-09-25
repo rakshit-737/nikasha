@@ -161,7 +161,7 @@ def test_calibrate_writes_a_file_only_when_fitted(tmp_path: Path) -> None:
     out = tmp_path / "cal"
     result = CliRunner().invoke(app, ["bench", "calibrate", str(results), "--out", str(out)])
     assert result.exit_code == 0, result.output
-    assert "No calibration file written" in result.output
+    assert "no calibration file written" in result.output
     assert not out.exists()
 
 
@@ -210,7 +210,7 @@ def test_c10_budget_expiring_after_the_last_release_keeps_the_scan_complete(
     assert all(complete for _, complete in baseline)
 
     scored = {"n": 0}
-    real = c10.analyze_trace
+    real = c10.analyze_trace  # type: ignore[attr-defined]
 
     def counting(*args: object, **kwargs: object) -> object:
         scored["n"] += 1

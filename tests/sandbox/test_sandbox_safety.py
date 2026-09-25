@@ -14,6 +14,8 @@ that image build, never by a container).
 from __future__ import annotations
 
 import importlib.util
+import os
+import re
 import shutil
 from pathlib import Path
 
@@ -29,12 +31,13 @@ ROOT = Path(__file__).resolve().parents[2]
 VULNLAB = recipes.find_recipe("vulnlab")
 IMAGE = VULNLAB.recipe.image.tag
 PIDS = 64
+FORK_REFUSED = re.compile(rb"Cannot fork|fork: (?:retry: )?Resource temporarily unavailable")
 
 
 @pytest.fixture(scope="module")
 def engine() -> EngineInfo:
     try:
-        chosen = sandbox.select_engine("auto")
+        chosen = sandbox.select_engine(os.environ.get("NIKASHA_TEST_SANDBOX", "auto"))
     except NoEngineError as exc:  # a sandbox run without an engine is a failure, not a skip
         pytest.fail(f"the sandbox suite needs a container engine: {exc}")
     if not sandbox.image_exists(chosen, IMAGE):
@@ -51,13 +54,15 @@ def _run(
     return sandbox.run_container(engine, spec, timeout_s=timeout_s, name=name)
 
 
-def test_repro_is_refused_when_no_engine_is_present(tmp_path, monkeypatch):
+def test_repro_is_refused_when_no_engine_is_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("PATH", str(tmp_path))
     with pytest.raises(NoEngineError, match="never run on the host"):
         sandbox.select_engine("auto")
 
 
-def test_network_egress_fails(engine):
+def test_network_egress_fails(engine: EngineInfo) -> None:
     script = (
         'python3 -c "import socket; s=socket.socket(); s.settimeout(5); '
         "s.connect(('1.1.1.1', 80)); print('CONNECTED')\""
@@ -69,7 +74,7 @@ def test_network_egress_fails(engine):
     assert only_lo.stdout.split() == [b"lo"]
 
 
-def test_fork_bomb_is_contained_by_the_pids_limit(engine):
+def test_fork_bomb_is_contained_by_the_pids_limit(engine: EngineInfo) -> None:
     counter = (
         'python3 -c "import os,sys\n'
         "n=0\n"
@@ -89,15 +94,18 @@ def test_fork_bomb_is_contained_by_the_pids_limit(engine):
     bomb = _run(
         engine, "bomb() { bomb | bomb & }; bomb; sleep 5; echo SURVIVED", timeout_s=30, name=name
     )
-    # A contained shell bomb may still reach its echo; what matters is that it stayed inside
-    # the pids limit (checked above), its container is gone, and the engine still works.
-    del bomb
+    # The effect of the limit: forks were refused (dash says "Cannot fork", bash says
+    # "fork: ... Resource temporarily unavailable"), and the bomb burned out on its own
+    # well before the wall-clock timeout instead of having to be killed.
+    assert FORK_REFUSED.search(bomb.stderr), bomb.stderr[:400]
+    assert bomb.timed_out is False
+    assert bomb.duration_ms < 25_000
     assert not sandbox.container_exists(engine, name)
     after = _run(engine, "echo alive")
     assert after.exit_code == 0 and after.stdout.strip() == b"alive"
 
 
-def test_writes_to_the_read_only_rootfs_fail(engine):
+def test_writes_to_the_read_only_rootfs_fail(engine: EngineInfo) -> None:
     for path in ("/usr/nikasha-probe", "/etc/nikasha-probe", "/nikasha-probe", "/var/tmp/x"):
         result = _run(engine, f"touch {path}")
         assert result.exit_code != 0, path
@@ -105,7 +113,7 @@ def test_writes_to_the_read_only_rootfs_fail(engine):
     assert _run(engine, "touch /tmp/ok && touch /work/ok").exit_code == 0
 
 
-def test_process_runs_as_uid_65534_without_new_privileges(engine):
+def test_process_runs_as_uid_65534_without_new_privileges(engine: EngineInfo) -> None:
     result = _run(engine, "id -u; id -g; grep -E '^(NoNewPrivs|CapEff)' /proc/self/status")
     lines = result.stdout.decode().split("\n")
     assert lines[0] == "65534"
@@ -115,7 +123,7 @@ def test_process_runs_as_uid_65534_without_new_privileges(engine):
     assert int(status["CapEff"].strip(), 16) == 0
 
 
-def test_timeout_kills_the_container_and_leaves_none_running(engine):
+def test_timeout_kills_the_container_and_leaves_none_running(engine: EngineInfo) -> None:
     name = sandbox.new_container_name("nikasha-timeout")
     result = _run(engine, "sleep 600", timeout_s=3, name=name)
     assert result.timed_out is True
@@ -123,13 +131,15 @@ def test_timeout_kills_the_container_and_leaves_none_running(engine):
     assert not sandbox.container_exists(engine, name)
 
 
-def test_output_is_truncated_at_the_limit(engine):
+def test_output_is_truncated_at_the_limit(engine: EngineInfo) -> None:
     result = _run(engine, "head -c 3000000 /dev/zero")
     assert result.truncated is True
     assert len(result.stdout) == 1024 * 1024
 
 
-def test_vulnlab_build_and_poc_reproduce_the_heap_overflow(engine, tmp_path):
+def test_vulnlab_build_and_poc_reproduce_the_heap_overflow(
+    engine: EngineInfo, tmp_path: Path
+) -> None:
     """End to end: export, sandboxed build, cached outputs, and one real PoC run."""
     if shutil.which("git") is None:
         pytest.fail("git is required")
@@ -157,6 +167,95 @@ def test_vulnlab_build_and_poc_reproduce_the_heap_overflow(engine, tmp_path):
     assert not any(str(tmp_path) in arg for arg in outcome.record.argv)
 
 
+def _vulnlab_repo(tmp_path: Path) -> tuple[Path, str]:
+    spec = importlib.util.spec_from_file_location("bv", ROOT / "scripts" / "build_vulnlab.py")
+    assert spec is not None and spec.loader is not None
+    bv = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bv)
+    git_dir = tmp_path / "vulnlab.git"
+    return git_dir, bv.build_vulnlab(git_dir)["v1.2.0"]
+
+
+def _hostile(steps: list[str]) -> recipes.LoadedRecipe:
+    """vulnlab with other build steps (same image), as if the project's build were hostile."""
+    data = VULNLAB.recipe.model_dump(mode="json")
+    data["build"]["steps"] = steps
+    return recipes.LoadedRecipe(recipes.Recipe.model_validate(data), VULNLAB.path, "b" * 64)
+
+
+@pytest.mark.parametrize(
+    "plant",
+    [
+        "ln -s /etc/passwd build/hdrcat",
+        "ln -s ../../../../../../../../etc/passwd include/x.h",
+        "ln -s / include/root",
+        "mkfifo include/fifo",
+    ],
+)
+def test_links_left_in_out_by_a_hostile_build_are_refused(
+    engine: EngineInfo, tmp_path: Path, plant: str
+) -> None:
+    git_dir, commit = _vulnlab_repo(tmp_path)
+    cache = tmp_path / "cache"
+    loaded = _hostile(
+        [
+            "mkdir -p build include",
+            "touch build/libhdr.a",
+            plant,
+            "[ -L build/hdrcat ] || touch build/hdrcat",
+        ]
+    )
+    with GitRepo(git_dir) as repo, pytest.raises(build.BuildFailedError, match="not a regular"):
+        build.build(repo, commit, loaded, engine, cache_root=cache)
+    assert build.load_cached(build.build_dir(loaded, commit, cache)) is None
+    assert list((cache / "repro" / "tmp").iterdir()) == []  # the scratch tree is gone
+
+
+def test_scratch_is_removed_even_when_the_build_skips_its_exit_trap(
+    engine: EngineInfo, tmp_path: Path
+) -> None:
+    """A build that drops the trap and locks its directories still leaves nothing behind."""
+    git_dir, commit = _vulnlab_repo(tmp_path)
+    cache = tmp_path / "cache"
+    loaded = _hostile(
+        [
+            "trap - EXIT",
+            "mkdir -p build include/deep/er && touch build/hdrcat build/libhdr.a",
+            "touch include/deep/er/f && chmod 0500 include/deep/er include/deep include",
+            "cp -R include /out/locked && chmod 0500 /out/locked/deep/er /out/locked/deep"
+            " /out/locked && exit 3",
+        ]
+    )
+    with GitRepo(git_dir) as repo, pytest.raises(build.BuildFailedError, match="exited with 3"):
+        build.build(repo, commit, loaded, engine, cache_root=cache)
+    assert list((cache / "repro" / "tmp").iterdir()) == []
+
+
+def test_scrub_container_empties_a_tree_the_host_cannot_delete(
+    engine: EngineInfo, tmp_path: Path
+) -> None:
+    out = tmp_path / "out"
+    out.mkdir()
+    out.chmod(0o777)
+    locked = (
+        "mkdir -p /out/a/b /out/.hidden && touch /out/a/b/f /out/.hidden/g /out/..x"
+        " && chmod 0500 /out/a/b /out/a /out/.hidden"
+    )
+    spec = ContainerSpec(
+        image=IMAGE,
+        cmd=("/bin/sh", "-c", locked),
+        mounts=(sandbox.Mount(out, "/out", read_only=False),),
+        limits=Limits(pids=PIDS),
+    )
+    assert sandbox.run_container(engine, spec, timeout_s=60).exit_code == 0
+    # Only the top level is checked: as a non-root host user (CI) the 0500 directories
+    # owned by uid 65534 cannot even be stat'ed into, which is the point of the test.
+    assert sorted(p.name for p in out.iterdir()) == ["..x", ".hidden", "a"]
+    result = sandbox.run_container(engine, build.scrub_spec(IMAGE, out), timeout_s=60)
+    assert result.exit_code == 0
+    assert list(out.iterdir()) == []
+
+
 REAL_PROJECTS = [
     ("curl", "https://github.com/curl/curl", "curl-8_10_1", "curl"),
     ("sqlite", "https://github.com/sqlite/sqlite", "version-3.46.1", "sqlite3"),
@@ -167,7 +266,9 @@ REAL_PROJECTS = [
 @pytest.mark.network
 @pytest.mark.slow
 @pytest.mark.parametrize(("recipe_id", "url", "tag", "binary"), REAL_PROJECTS)
-def test_real_project_recipe_builds(engine, tmp_path, recipe_id, url, tag, binary):  # noqa: PLR0917
+def test_real_project_recipe_builds(  # noqa: PLR0917
+    engine: EngineInfo, tmp_path: Path, recipe_id: str, url: str, tag: str, binary: str
+) -> None:
     """Nightly: the real-project recipes' build steps, which were never run offline."""
     from nikasha.resolve.repo import open_repo  # noqa: PLC0415
 

@@ -9,15 +9,18 @@ v1.2.1 only adds comments, so functions there keep their exact text while the fi
 
 from __future__ import annotations
 
+import dataclasses
 from typing import Any
 
 from check_helpers import MakeContext, claim
 
 from nikasha.checks.base import CheckContext, run_checks
 from nikasha.checks.c16_version_range_consistency import VersionRangeConsistency
+from nikasha.code.gitio import TagRef
 from nikasha.code.timeline import ReleasePresence
 from nikasha.model.claims import Claim, SymbolClaim, VersionClaim, VersionSpec
 from nikasha.model.evidence import Evidence
+from nikasha.resolve.refs import ReleaseList
 
 
 def spec(raw: str) -> VersionSpec:
@@ -321,3 +324,99 @@ def test_registered_and_runnable_through_the_runner(make_ctx: MakeContext) -> No
     assert run.check_id == "C16"
     assert run.error is None
     assert [e.outcome for e in run.evidence] == ["REFUTES"]
+
+
+class TestEveryCoreSymbol:
+    """A claim is refuted only when every core symbol the report names refutes it (P4)."""
+
+    def test_an_unlocated_core_symbol_blocks_a_range_refutation(
+        self, make_ctx: MakeContext
+    ) -> None:
+        # Regression: util_copy_value alone decided the verdict and refuted the range, although
+        # hdr_nope (a macro, a renamed function...) might well have existed in v1.0.0.
+        claims: list[Claim] = [affected("1.0.0", lower=spec("1.0.0")), core(), core("hdr_nope")]
+        evidence = _only(make_ctx, claims)
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.strength == 0.0
+        assert evidence.details["symbol"] == "hdr_nope"
+
+    def test_an_uncertain_core_symbol_blocks_a_range_refutation(
+        self, make_ctx: MakeContext
+    ) -> None:
+        claims: list[Claim] = [
+            affected("1.0.0", lower=spec("1.0.0")),
+            core(),
+            core("hdr_parse_block"),
+        ]
+        ctx = make_ctx(claims=claims)
+        timeline = ctx.timeline("hdr_parse_block")
+        assert timeline.presence[0].release == "v1.0.0"
+        assert not timeline.presence[0].defined
+        timeline.presence[0] = ReleasePresence(
+            "v1.0.0", defined=False, referenced=True, partial=("src/hdr.c",)
+        )
+        (evidence,) = VersionRangeConsistency().run(ctx, claims)
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.details["uncertain_releases"] == ["v1.0.0"]
+
+    def test_every_core_symbol_predating_the_range_still_refutes(
+        self, make_ctx: MakeContext
+    ) -> None:
+        claims: list[Claim] = [
+            affected("1.0.0", lower=spec("1.0.0")),
+            core(),
+            core("hdr_parse_block"),
+        ]
+        evidence = _only(make_ctx, claims)
+        assert evidence.outcome == "REFUTES"
+        assert evidence.strength == -1.0
+
+
+class TestFixBaseline:
+    """The release before a fix release is a baseline only if it is in that release's history."""
+
+    @staticmethod
+    def _with_releases(ctx: CheckContext, tags: list[TagRef]) -> CheckContext:
+        releases = ReleaseList.from_tags(tags)
+        return dataclasses.replace(
+            ctx, resolution=dataclasses.replace(ctx.resolution, releases=releases)
+        )
+
+    def test_a_later_maintenance_release_is_not_a_baseline(
+        self, make_ctx: MakeContext, commits: dict[str, str]
+    ) -> None:
+        # "v1.1.9" sorts just below v1.2.0 but was cut from a later commit (a maintenance
+        # release carrying a backport). Regression: the locus being identical in the two
+        # refuted a fix release that the backport simply shares.
+        tags = [
+            TagRef("v1.0.0", commits["v1.0.0"], 1),
+            TagRef("v1.1.0", commits["v1.1.0"], 2),
+            TagRef("v1.2.0", commits["v1.2.0"], 3),
+            TagRef("v1.1.9", commits["v1.3.0"], 4),
+        ]
+        claims: list[Claim] = [fixed_in("1.2.0"), core("hdr_parse_block")]
+        ctx = self._with_releases(make_ctx(claims=claims), tags)
+        (evidence,) = VersionRangeConsistency().run(ctx, claims)
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.strength == 0.0
+        assert evidence.details["outcome"] == "previous_release_not_ancestor"
+        assert evidence.details["previous_release"] == "v1.1.9"
+        assert "not part of the history of v1.2.0" in evidence.summary
+
+    def test_a_refutation_records_the_ancestry_command(self, make_ctx: MakeContext) -> None:
+        evidence = _only(make_ctx, [fixed_in("1.2.0"), core("hdr_parse_block")])
+        assert evidence.outcome == "REFUTES"
+        (command,) = evidence.commands
+        assert "rev-list" in command.argv
+        assert command.exit_code == 0
+
+    def test_an_exclusive_lower_bound_does_not_name_the_fix_release(
+        self, make_ctx: MakeContext
+    ) -> None:
+        # "fixed after 1.1.0" does not say 1.1.0 carries the fix.
+        version = claim(
+            VersionClaim, raw="after 1.1.0", relation="fixed_in", lower=spec("1.1.0"),
+            lower_inclusive=False,
+        )  # fmt: skip
+        _ctx, evidence = _run(make_ctx, [version, core("hdr_parse_block")])
+        assert evidence == []

@@ -14,6 +14,7 @@ import shutil
 import stat
 import subprocess
 from pathlib import Path
+from typing import NoReturn
 
 import pytest
 
@@ -106,14 +107,16 @@ def evil_repo(tmp_path: Path) -> tuple[Path, Path]:
     ],
     ids=["textconv", "archive-tar-command"],
 )
-def test_control_plain_git_does_run_the_hooks(evil_repo, argv):
+def test_control_plain_git_does_run_the_hooks(
+    evil_repo: tuple[Path, Path], argv: list[str]
+) -> None:
     git_dir, canary = evil_repo
     args = [a.format(repo=git_dir.parent, git_dir=git_dir) for a in argv]
     subprocess.run(["git", *args], env=_CLEAN_ENV, capture_output=True, check=False)
     assert canary.exists(), "the malicious config must be live, or this test proves nothing"
 
 
-def test_no_nikasha_code_path_runs_repository_commands(evil_repo):
+def test_no_nikasha_code_path_runs_repository_commands(evil_repo: tuple[Path, Path]) -> None:
     git_dir, canary = evil_repo
     with GitRepo(git_dir) as repo:
         tags = repo.tags()
@@ -149,7 +152,7 @@ def test_no_nikasha_code_path_runs_repository_commands(evil_repo):
     "rev",
     ["--upload-pack=touch /tmp/pwned", "-c", "--exec=/bin/sh", "HEAD\nrm -rf", ""],
 )
-def test_injected_revisions_are_refused(evil_repo, rev):
+def test_injected_revisions_are_refused(evil_repo: tuple[Path, Path], rev: str) -> None:
     git_dir, canary = evil_repo
     with GitRepo(git_dir) as repo, pytest.raises(ForbiddenCommandError):
         repo.rev_parse(rev)
@@ -173,7 +176,7 @@ def test_injected_revisions_are_refused(evil_repo, rev):
         ["config", "core.pager", "x"],
     ],
 )
-def test_dangerous_invocations_are_refused(evil_repo, args):
+def test_dangerous_invocations_are_refused(evil_repo: tuple[Path, Path], args: list[str]) -> None:
     git_dir, _ = evil_repo
     with pytest.raises(ForbiddenCommandError):
         run_git(args, git_dir=git_dir)
@@ -187,7 +190,7 @@ def test_dangerous_invocations_are_refused(evil_repo, args):
         ["log", "-1", "--", "--ext-diff"],
     ],
 )
-def test_data_positions_may_quote_options(evil_repo, args):
+def test_data_positions_may_quote_options(evil_repo: tuple[Path, Path], args: list[str]) -> None:
     """A pattern after ``-e`` and paths after ``--`` are data: searched, never refused or run."""
     git_dir, canary = evil_repo
     run_git(args, git_dir=git_dir)
@@ -202,13 +205,15 @@ def test_data_positions_may_quote_options(evil_repo, args):
         ["grep", "-O", "--", "a"],  # before `--` is still checked
     ],
 )
-def test_only_true_data_positions_are_exempt(evil_repo, args):
+def test_only_true_data_positions_are_exempt(evil_repo: tuple[Path, Path], args: list[str]) -> None:
     git_dir, _ = evil_repo
     with pytest.raises(ForbiddenCommandError):
         run_git(args, git_dir=git_dir)
 
 
-def test_nikasha_runs_in_the_evil_worktree_too(evil_repo, monkeypatch):
+def test_nikasha_runs_in_the_evil_worktree_too(
+    evil_repo: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Running from inside the malicious checkout (cwd = its worktree) is still safe."""
     git_dir, canary = evil_repo
     monkeypatch.chdir(git_dir.parent)
@@ -219,7 +224,7 @@ def test_nikasha_runs_in_the_evil_worktree_too(evil_repo, monkeypatch):
     assert not canary.exists()
 
 
-def test_export_skips_symlinks_and_keeps_exec_bits(tmp_path):
+def test_export_skips_symlinks_and_keeps_exec_bits(tmp_path: Path) -> None:
     repo = tmp_path / "r"
     repo.mkdir()
     _git(repo, "init", "-q", "-b", "main")
@@ -235,7 +240,7 @@ def test_export_skips_symlinks_and_keeps_exec_bits(tmp_path):
     assert not (dest / "link").exists()
 
 
-def test_offline_never_lazy_fetches(tmp_path, monkeypatch):
+def test_offline_never_lazy_fetches(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Offline, GIT_NO_LAZY_FETCH is set, so a partial clone cannot reach the network."""
     from nikasha.code.gitio import hardened_env  # noqa: PLC0415
 
@@ -243,11 +248,13 @@ def test_offline_never_lazy_fetches(tmp_path, monkeypatch):
     assert "GIT_NO_LAZY_FETCH" not in hardened_env(online=True)
 
 
-def test_pickaxe_timeout_is_reported(evil_repo, monkeypatch):
+def test_pickaxe_timeout_is_reported(
+    evil_repo: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
     git_dir, _ = evil_repo
     from nikasha.code import gitio  # noqa: PLC0415
 
-    def slow(*_a, **_k):
+    def slow(*_a: object, **_k: object) -> NoReturn:
         raise ExternalToolError("git log timed out after 0s")
 
     monkeypatch.setattr(gitio, "run_git", slow)

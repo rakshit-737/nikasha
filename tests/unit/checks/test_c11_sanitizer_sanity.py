@@ -358,3 +358,151 @@ def test_the_check_needs_no_repository(make_ctx: MakeContext) -> None:
     (evidence,) = _run(make_ctx, [trace])
     assert evidence.locations == ()
     assert evidence.commands == ()
+
+
+# --- genuine output the rules must not call a contradiction (P4) --------------------------
+
+ASAN_01 = "asan/01-vulnlab-heap-overflow-v1.2.0.txt"
+
+
+def _pasted_claim(text: str) -> TraceClaim:
+    """The trace in ``text`` as a claim whose span carries that text, as extraction builds it."""
+    (parsed,) = parse_traces(text)
+    return claim(TraceClaim, text=text[parsed.start : parsed.end], **parsed.data.model_dump())
+
+
+def _fixture_text() -> str:
+    return (TRACES / ASAN_01).read_text(encoding="utf-8")
+
+
+def test_an_access_running_past_the_end_is_described_from_the_end(make_ctx: MakeContext) -> None:
+    """ASan reports the region line from the first byte past the end for such an access.
+
+    ``GetAccessToHeapChunkInformation`` adds a negative offset back to ``bad_addr``: a
+    96-byte write starting 2 bytes before the end is "on address end-2" in the header and
+    "end is located 0 bytes after" in the region line. One address, two views.
+    """
+    real = _trace_claim(ASAN_01)
+    assert real.region is not None
+    start = real.region.end - 2
+    trace = _trace_claim(ASAN_01, address=start, access_address=start)
+    (evidence,) = _run(make_ctx, [trace])
+    assert evidence.outcome == "SUPPORTS"
+    assert "addresses_agree" in evidence.details["rules_checked"]
+
+
+def test_an_access_that_ends_inside_the_region_is_still_a_disagreement(
+    make_ctx: MakeContext,
+) -> None:
+    """The clamp only explains an access that actually reaches past the end."""
+    real = _trace_claim(ASAN_01)
+    assert real.region is not None and real.access is not None
+    start = real.region.end - 2
+    trace = _trace_claim(
+        ASAN_01,
+        address=start,
+        access_address=start,
+        access={**real.access.model_dump(), "size": 1},
+    )
+    (evidence,) = _run(make_ctx, [trace])
+    assert "addresses_agree" in _violated(evidence)
+
+
+def test_a_source_path_with_a_space_is_not_a_summary_mismatch(make_ctx: MakeContext) -> None:
+    """``/work/My Projects/src/util.c`` splits at the wrong space; the text still agrees."""
+    text = _fixture_text().replace("/work/libhdr/", "/work/My Projects/libhdr/")
+    text = text.replace(
+        "heap-buffer-overflow (/work/My Projects/libhdr/build/hdrcat+0x4a44a1)"
+        " (BuildId: 4eac29a79b503833186b91f005f9af73315aab2e) in __asan_memcpy",
+        "heap-buffer-overflow /work/My Projects/libhdr/src/util.c:15:5 in util_copy_value",
+    )
+    (evidence,) = _run(make_ctx, [_pasted_claim(text)])
+    assert evidence.outcome == "SUPPORTS"
+    assert "summary_matches_frames" in evidence.details["rules_checked"]
+
+
+def test_a_summary_naming_another_function_still_fails_with_a_spaced_path(
+    make_ctx: MakeContext,
+) -> None:
+    text = _fixture_text().replace("/work/libhdr/", "/work/My Projects/libhdr/")
+    text = text.replace(
+        "heap-buffer-overflow (/work/My Projects/libhdr/build/hdrcat+0x4a44a1)"
+        " (BuildId: 4eac29a79b503833186b91f005f9af73315aab2e) in __asan_memcpy",
+        "heap-buffer-overflow /work/My Projects/libhdr/src/hdr.c:77:5 in hdr_decode",
+    )
+    (evidence,) = _run(make_ctx, [_pasted_claim(text)])
+    assert "summary_matches_frames" in _violated(evidence)
+
+
+@pytest.mark.parametrize("marker", ["    ...", "    [...]", "    <snip>", "(3 frames omitted)"])
+def test_frames_the_reporter_marked_as_cut_are_not_a_numbering_gap(
+    make_ctx: MakeContext, marker: str
+) -> None:
+    lines = _fixture_text().split("\n")
+    first_frame_2 = next(i for i, line in enumerate(lines) if line.lstrip().startswith("#2 "))
+    lines[first_frame_2 : first_frame_2 + 2] = [marker]  # crash stack #2 and #3 cut
+    (evidence,) = _run(make_ctx, [_pasted_claim("\n".join(lines))])
+    assert evidence.outcome == "SUPPORTS"
+    assert "frame_indices" in evidence.details["rules_checked"]
+
+
+def test_an_unmarked_gap_in_pasted_text_is_still_a_violation(make_ctx: MakeContext) -> None:
+    lines = _fixture_text().split("\n")
+    first_frame_2 = next(i for i, line in enumerate(lines) if line.lstrip().startswith("#2 "))
+    del lines[first_frame_2 : first_frame_2 + 2]
+    (evidence,) = _run(make_ctx, [_pasted_claim("\n".join(lines))])
+    assert _violated(evidence) == ["frame_indices"]
+
+
+def test_a_marked_cut_does_not_excuse_numbers_running_backwards(make_ctx: MakeContext) -> None:
+    lines = _fixture_text().split("\n")
+    first_frame_4 = next(i for i, line in enumerate(lines) if line.lstrip().startswith("#4 "))
+    lines.insert(first_frame_4 + 1, "    ...")
+    lines.insert(first_frame_4 + 2, lines[first_frame_4].replace("#4 ", "#3 "))
+    (evidence,) = _run(make_ctx, [_pasted_claim("\n".join(lines))])
+    assert "frame_indices" in _violated(evidence)
+
+
+def test_an_empty_allocation_stack_is_not_a_missing_one(make_ctx: MakeContext) -> None:
+    """With ``malloc_context_size=0`` ASan prints ``<empty stack>`` under the label."""
+    text = _fixture_text()
+    head, _, rest = text.partition("allocated by thread T0 here:\n")
+    _, _, tail = rest.partition("\n\n")
+    trace = _pasted_claim(f"{head}allocated by thread T0 here:\n    <empty stack>\n\n{tail}")
+    assert trace.alloc_frames == ()
+    (evidence,) = _run(make_ctx, [trace])
+    assert evidence.outcome == "SUPPORTS"
+    assert "stacks_present" not in evidence.details["rules_checked"]
+
+
+def _without_allocation_stack(text: str) -> str:
+    head, _, rest = text.partition("allocated by thread T0 here:\n")
+    _, _, tail = rest.partition("\n\n")
+    return f"{head}{tail}"
+
+
+def test_a_cut_inside_the_crash_stack_does_not_excuse_a_missing_allocation_stack(
+    make_ctx: MakeContext,
+) -> None:
+    """A cut between two crash frames removed crash frames, not a whole later stack."""
+    lines = _without_allocation_stack(_fixture_text()).split("\n")
+    first_frame_2 = next(i for i, line in enumerate(lines) if line.lstrip().startswith("#2 "))
+    lines[first_frame_2 : first_frame_2 + 2] = ["    ..."]
+    trace = _pasted_claim("\n".join(lines))
+    assert trace.alloc_frames == ()
+    (evidence,) = _run(make_ctx, [trace])
+    assert "stacks_present" in _violated(evidence)
+    assert "frame_indices" not in _violated(evidence)
+
+
+def test_a_cut_after_the_crash_stack_excuses_a_missing_allocation_stack(
+    make_ctx: MakeContext,
+) -> None:
+    """A cut that closes a stack may have removed every stack printed after it (P4)."""
+    lines = _without_allocation_stack(_fixture_text()).split("\n")
+    last_crash = max(i for i, line in enumerate(lines) if line.lstrip().startswith("#"))
+    lines.insert(last_crash + 1, "    ...")
+    trace = _pasted_claim("\n".join(lines))
+    assert trace.alloc_frames == ()
+    (evidence,) = _run(make_ctx, [trace])
+    assert "stacks_present" not in evidence.details["rules_checked"]

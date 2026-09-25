@@ -2,7 +2,7 @@
   "$id": "https://github.com/rakshit-737/nikasha/schema/recipe-v1.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Nikasha reproduction recipe, version 1",
-  "description": "How to build a project in a sandbox and run a proof of concept against it (SPEC 13.2). Nikasha validates recipes with equivalent pydantic models; tests/unit/repro/test_recipes.py keeps the two in step.",
+  "description": "How to build a project in a sandbox and run a proof of concept against it (SPEC 13.2). A recipe that builds with -fsanitize=address/undefined/memory must set abort_on_error=1 in ASAN_OPTIONS/UBSAN_OPTIONS (plus halt_on_error=1)/MSAN_OPTIONS in run.env (checked by the loader). Nikasha validates recipes with equivalent pydantic models; tests/unit/repro/test_recipes.py keeps the two in step.",
   "type": "object",
   "additionalProperties": false,
   "required": ["id", "title", "match", "image", "build", "run"],
@@ -22,7 +22,8 @@
       "required": ["cmd"],
       "properties": {
         "compile": {"$ref": "#/$defs/argv"},
-        "cmd": {"$ref": "#/$defs/argv"}
+        "cmd": {"$ref": "#/$defs/argv"},
+        "attested_output": {"type": "boolean", "default": false, "description": "True only when the PoC input can neither script the target nor choose its stderr or exit status; C19 never counts an unattested run as a reproduction."}
       }
     }
   },

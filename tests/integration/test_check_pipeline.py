@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from nikasha.pipeline import check_report
+from nikasha.pipeline import CheckReport, check_report
 from nikasha.render.terminal import exit_code
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -44,10 +44,10 @@ EXPECTED: dict[str, tuple[str, str]] = {
 
 
 @pytest.fixture(scope="module")
-def checked(vulnlab_repo: Path, tmp_path_factory: pytest.TempPathFactory) -> dict[str, object]:
+def checked(vulnlab_repo: Path, tmp_path_factory: pytest.TempPathFactory) -> dict[str, CheckReport]:
     """Run every fixture once; the whole module reads these results."""
     index_dir = tmp_path_factory.mktemp("check-index")
-    out: dict[str, object] = {}
+    out: dict[str, CheckReport] = {}
     for name in EXPECTED:
         out[name] = check_report(
             REPORTS / f"{name}.md",
@@ -58,7 +58,7 @@ def checked(vulnlab_repo: Path, tmp_path_factory: pytest.TempPathFactory) -> dic
 
 
 @pytest.mark.parametrize("name", sorted(EXPECTED))
-def test_fixture_gets_its_expected_verdict(checked, name) -> None:
+def test_fixture_gets_its_expected_verdict(checked: dict[str, CheckReport], name: str) -> None:
     label, why = EXPECTED[name]
     report = checked[name]
     assert report.verdict.label == label, (
@@ -67,13 +67,13 @@ def test_fixture_gets_its_expected_verdict(checked, name) -> None:
     )
 
 
-def test_a_genuine_report_is_never_called_ungrounded(checked) -> None:
+def test_a_genuine_report_is_never_called_ungrounded(checked: dict[str, CheckReport]) -> None:
     """P4, the one mistake this tool must not make."""
     for name in ("genuine_hdr_overflow", "mixed_wrong_version", "already_fixed"):
         assert checked[name].verdict.label != "UNGROUNDED", name
 
 
-def test_the_fabricated_report_is_actually_refuted(checked) -> None:
+def test_the_fabricated_report_is_actually_refuted(checked: dict[str, CheckReport]) -> None:
     report = checked["fabricated_hdr_overflow"]
     refutations = [e for e in report.evidence if e.outcome == "REFUTES"]
     groups = {e.group for e in refutations}
@@ -81,7 +81,7 @@ def test_the_fabricated_report_is_actually_refuted(checked) -> None:
     assert report.verdict.score < 15
 
 
-def test_every_run_is_deterministic(vulnlab_repo, tmp_path) -> None:
+def test_every_run_is_deterministic(vulnlab_repo: Path, tmp_path: Path) -> None:
     """The same report and the same commit must give byte-identical JSON (P2)."""
     first = check_report(
         REPORTS / "fabricated_hdr_overflow.md",
@@ -98,12 +98,12 @@ def test_every_run_is_deterministic(vulnlab_repo, tmp_path) -> None:
     )
 
 
-def test_every_verdict_maps_to_its_documented_exit_code(checked) -> None:
+def test_every_verdict_maps_to_its_documented_exit_code(checked: dict[str, CheckReport]) -> None:
     for name, (label, _) in EXPECTED.items():
         assert exit_code(checked[name].verdict.label) == exit_code(label), name
 
 
-def test_evidence_is_explainable(checked) -> None:
+def test_evidence_is_explainable(checked: dict[str, CheckReport]) -> None:
     """P6: every piece of evidence names its check, its claims and a readable summary."""
     for name in EXPECTED:
         for item in checked[name].evidence:
@@ -112,7 +112,7 @@ def test_evidence_is_explainable(checked) -> None:
             assert item.group, f"{name}/{item.check_id} has no group"
 
 
-def test_questions_are_asked_where_the_report_needs_them(checked) -> None:
+def test_questions_are_asked_where_the_report_needs_them(checked: dict[str, CheckReport]) -> None:
     """A report that is not simply GROUNDED should come with something to ask back."""
     for name in ("fabricated_hdr_overflow", "already_fixed", "vague"):
         questions = checked[name].verdict.questions
@@ -121,7 +121,7 @@ def test_questions_are_asked_where_the_report_needs_them(checked) -> None:
             assert question.text.strip(), name
 
 
-def test_no_output_describes_the_reporter(checked) -> None:
+def test_no_output_describes_the_reporter(checked: dict[str, CheckReport]) -> None:
     """P1: the wording targets claims, never people, anywhere in the result."""
     banned = ("ai-generated", "slop", "fabricated by", "fake report", "hallucinat")
     for name in EXPECTED:

@@ -21,7 +21,7 @@ htmlcov/
 # Nikasha runtime artefacts (may hold embargoed or third-party report text: never commit)
 .nikasha/
 bench/cache/
-bench/results/*/raw/
+bench/results/*/
 *.nikasha-cache
 
 # Editors / OS
@@ -30,3 +30,6 @@ bench/results/*/raw/
 *.swp
 .DS_Store
 Thumbs.db
+
+# Zensical build output (make docs)
+site/

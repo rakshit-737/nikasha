@@ -30,8 +30,14 @@ fmt: ## Auto-format and apply safe fixes
 	$(UV) run ruff format src tests scripts
 	$(UV) run ruff check --fix src tests scripts
 
-type: ## mypy --strict on src/
+# The helper-module test dirs import their helpers top-level (pytest rootdir-relative), and each
+# holds a conftest.py: one mypy run per dir keeps the module names apart.
+TYPED_HELPER_DIRS := checks code extract
+
+type: ## mypy --strict on src/ and tests/
 	$(UV) run mypy
+	$(UV) run mypy --explicit-package-bases --exclude '^tests/(fixtures|unit/(checks|code|extract))/' tests
+	for d in $(TYPED_HELPER_DIRS); do MYPYPATH=tests/unit/$$d $(UV) run mypy tests/unit/$$d || exit 1; done
 
 CORE_PACKAGES := src/nikasha/extract/*,src/nikasha/code/*,src/nikasha/ingest/*,src/nikasha/model/*
 CORE_COVERAGE := 85
@@ -51,8 +57,10 @@ placeholders: ## Fail on placeholder text in README.md and docs/
 bench: ## NikashaBench (arrives in M3.5/M6)
 	@echo "bench: not yet implemented (M3.5/M6)"; exit 1
 
-docs: ## Documentation site (arrives in M8)
-	@echo "docs: not yet implemented (M8)"; exit 1
+ZENSICAL_VERSION ?= 0.0.64
+
+docs: ## Documentation site, strict build (ADR 0008)
+	uvx "zensical==$(ZENSICAL_VERSION)" build --strict
 
 screenshots: ## Regenerate every README/docs image from real runs (SPEC §21.5)
 	$(UV) run python scripts/make_screenshots.py

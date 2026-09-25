@@ -60,7 +60,7 @@ def _hashes(fps: list[Fingerprint]) -> set[int]:
 # --- lexer ---------------------------------------------------------------------------------
 
 
-def test_c_tokens_comments_literals_and_lines():
+def test_c_tokens_comments_literals_and_lines() -> None:
     code = '/* head */\nint x = 0x1F; // trailing\nchar *s = "a \\" b";\nchar c = \'\\n\';\n'
     assert [(t.text, t.line) for t in tokenize(code, "c")] == [
         ("int", 2),
@@ -82,13 +82,13 @@ def test_c_tokens_comments_literals_and_lines():
     ]
 
 
-def test_c_preprocessor_hash_is_kept():
+def test_c_preprocessor_hash_is_kept() -> None:
     assert _texts('#include "util.h"\n#define A(x) x ## 1') == [
         *["#", "include", "STR", "#", "define", "A", "(", "x", ")", "x", "##", "NUM"],
     ]
 
 
-def test_multichar_operators():
+def test_multichar_operators() -> None:
     assert _texts("p->n <<= 2; a::b; x++ != y--; i >>>= 1") == [
         *["p", "->", "n", "<<=", "NUM", ";", "a", "::", "b", ";"],
         *["x", "++", "!=", "y", "--", ";", "i", ">>>=", "NUM"],
@@ -96,11 +96,11 @@ def test_multichar_operators():
 
 
 @pytest.mark.parametrize("number", ["0", "42", "0x1Fu", "1.5e-3", ".5f", "1_000", "10ULL", "0b101"])
-def test_numbers_become_placeholders(number):
+def test_numbers_become_placeholders(number: str) -> None:
     assert _texts(f"x = {number};") == ["x", "=", "NUM", ";"]
 
 
-def test_python_comments_strings_and_floor_division():
+def test_python_comments_strings_and_floor_division() -> None:
     code = 'x = a // 2  # halve\ns = r"raw\\"q" + f\'{x}\'\n"""doc\nstring"""\ny = 1\n'
     assert [(t.text, t.line) for t in tokenize(code, Lang.PYTHON)] == [
         ("x", 1),
@@ -120,7 +120,7 @@ def test_python_comments_strings_and_floor_division():
     ]
 
 
-def test_hash_is_a_comment_only_in_hash_languages():
+def test_hash_is_a_comment_only_in_hash_languages() -> None:
     assert _texts("# note\nx", "py") == ["x"]
     assert _texts("# note\nx", "ruby") == ["x"]
     assert _texts("# note\nx", "bash") == ["x"]
@@ -128,23 +128,23 @@ def test_hash_is_a_comment_only_in_hash_languages():
     assert _texts("# a\n// b\n/* c */ x", "php") == ["x"]
 
 
-def test_slash_comments_are_not_comments_in_python():
+def test_slash_comments_are_not_comments_in_python() -> None:
     assert _texts("a /* b */", "python") == ["a", "/", "*", "b", "*", "/"]
 
 
-def test_rust_lifetime_is_not_a_char_literal():
+def test_rust_lifetime_is_not_a_char_literal() -> None:
     assert _texts("fn f<'a>(x: &'a str) -> char { 'z' }", "rust") == [
         *["fn", "f", "<", "'", "a", ">", "(", "x", ":", "&", "'", "a", "str", ")"],
         *["->", "char", "{", "STR", "}"],
     ]
 
 
-def test_single_quote_is_a_string_outside_c_like_languages():
+def test_single_quote_is_a_string_outside_c_like_languages() -> None:
     assert _texts("x = 'hello world'", "javascript") == ["x", "=", "STR"]
     assert _texts("x = 'hello world'", "c") == ["x", "=", "'", "hello", "world", "'"]
 
 
-def test_backtick_strings_span_lines():
+def test_backtick_strings_span_lines() -> None:
     tokens = tokenize("a = `x\n${y}\n`; b", "js")
     assert [(t.text, t.line) for t in tokens] == [
         ("a", 1),
@@ -156,7 +156,7 @@ def test_backtick_strings_span_lines():
     assert _texts("a `b` c", "c") == ["a", "`", "b", "`", "c"]
 
 
-def test_unterminated_string_stops_at_end_of_line():
+def test_unterminated_string_stops_at_end_of_line() -> None:
     tokens = tokenize('s = "never closed\nnext;', "c")
     assert [(t.text, t.line) for t in tokens] == [
         ("s", 1),
@@ -167,26 +167,26 @@ def test_unterminated_string_stops_at_end_of_line():
     ]
 
 
-def test_unterminated_block_comment_and_triple_quote_run_to_end():
+def test_unterminated_block_comment_and_triple_quote_run_to_end() -> None:
     assert _texts("a /* open\nb c") == ["a"]
     assert _texts('a """ open\nb c', "python") == ["a", "STR"]
 
 
-def test_prefix_like_identifier_without_quote_is_an_identifier():
+def test_prefix_like_identifier_without_quote_is_an_identifier() -> None:
     assert _texts("r = b + u8", "c") == ["r", "=", "b", "+", "u8"]
     assert _texts("L'x' u8\"s\"", "c") == ["STR", "STR"]
 
 
-def test_unicode_identifiers_and_dollar():
+def test_unicode_identifiers_and_dollar() -> None:
     assert _texts("$élan = naïve;", "php") == ["$élan", "=", "naïve", ";"]
 
 
-def test_empty_and_whitespace_only():
+def test_empty_and_whitespace_only() -> None:
     assert tokenize("") == []
     assert tokenize(" \n\t \n") == []
 
 
-def test_line_numbers_after_multiline_comment():
+def test_line_numbers_after_multiline_comment() -> None:
     tokens = tokenize("/*\n\n\n*/ x\n\ny", "c")
     assert [(t.text, t.line) for t in tokens] == [("x", 4), ("y", 6)]
 
@@ -216,7 +216,7 @@ def test_line_numbers_after_multiline_comment():
     ],
 )
 @pytest.mark.no_cover  # the budget measures the lexer, not coverage.py's tracer (~5x)
-def test_lexer_is_linear_on_hostile_input(unit, lang, size):
+def test_lexer_is_linear_on_hostile_input(unit: str, lang: str | None, size: int) -> None:
     code = unit * (size // len(unit))
     started = time.perf_counter()
     tokenize(code, lang)
@@ -225,7 +225,7 @@ def test_lexer_is_linear_on_hostile_input(unit, lang, size):
     assert elapsed < 10, f"{unit!r} x {size} took {elapsed:.2f}s"
 
 
-def test_lexer_scales_linearly():
+def test_lexer_scales_linearly() -> None:
     def cost(n: int) -> float:
         code = "x = '\"' + s[1] /* c */ ; // d\n" * n
         started = time.perf_counter()
@@ -239,7 +239,7 @@ def test_lexer_scales_linearly():
 # --- hashing and winnowing -----------------------------------------------------------------
 
 
-def test_kgram_hashes_are_64_bit_and_deterministic():
+def test_kgram_hashes_are_64_bit_and_deterministic() -> None:
     tokens = _tokens(list("abcdefg"))
     hashes = kgram_hashes(tokens, 5)
     assert len(hashes) == 3
@@ -249,17 +249,17 @@ def test_kgram_hashes_are_64_bit_and_deterministic():
     assert kgram_hashes(tokens[:4], 5) == []
 
 
-def test_kgram_hashes_do_not_depend_on_lines():
+def test_kgram_hashes_do_not_depend_on_lines() -> None:
     a = [Token(t, 1) for t in "abcde"]
     b = [Token(t, 99) for t in "abcde"]
     assert kgram_hashes(a) == kgram_hashes(b)
 
 
-def test_kgram_join_is_unambiguous():
+def test_kgram_join_is_unambiguous() -> None:
     assert kgram_hashes(_tokens(["ab", "c"]), 2) != kgram_hashes(_tokens(["a", "bc"]), 2)
 
 
-def test_invalid_parameters():
+def test_invalid_parameters() -> None:
     with pytest.raises(ValueError, match="k must be"):
         kgram_hashes([], 0)
     with pytest.raises(ValueError, match="w must be"):
@@ -268,7 +268,7 @@ def test_invalid_parameters():
         align([], [], min_block=0)
 
 
-def test_winnow_rightmost_minimum_and_robust_ties():
+def test_winnow_rightmost_minimum_and_robust_ties() -> None:
     # Windows of 3: [5,1,1] picks index 2 (rightmost 1); [1,1,7] and [1,7,1] keep index 2
     # (still minimal, tie with the new 1 at index 4 is not re-selected); [7,1,0] picks 5.
     assert winnow([5, 1, 1, 7, 1, 0], 3) == [Fingerprint(1, 2), Fingerprint(0, 5)]
@@ -303,13 +303,13 @@ _small_hashes = st.lists(st.integers(0, 6), max_size=60)
 
 @given(hashes=_small_hashes, w=st.integers(1, 8))
 @settings(max_examples=500)
-def test_winnow_equals_reference(hashes, w):
+def test_winnow_equals_reference(hashes: list[int], w: int) -> None:
     assert winnow(hashes, w) == _reference_winnow(hashes, w)
 
 
 @given(hashes=_small_hashes, w=st.integers(1, 8))
 @settings(max_examples=300)
-def test_every_window_holds_a_selected_minimum(hashes, w):
+def test_every_window_holds_a_selected_minimum(hashes: list[int], w: int) -> None:
     fps = winnow(hashes, w)
     positions = [fp.position for fp in fps]
     assert positions == sorted(set(positions))
@@ -334,7 +334,13 @@ _filler = st.lists(_token_text, max_size=30)
     data=st.data(),
 )
 @settings(max_examples=500)
-def test_guarantee_shared_run_of_w_plus_k_minus_1_is_detected(fillers, k, w, extra, data):
+def test_guarantee_shared_run_of_w_plus_k_minus_1_is_detected(
+    fillers: tuple[list[str], list[str], list[str], list[str]],
+    k: int,
+    w: int,
+    extra: int,
+    data: st.DataObject,
+) -> None:
     """SPEC §11.4 required test: a shared token run of length >= w + k - 1 is always detected."""
     prefix_a, suffix_a, prefix_b, suffix_b = fillers
     run = data.draw(st.lists(_token_text, min_size=w + k - 1 + extra, max_size=w + k - 1 + extra))
@@ -348,7 +354,7 @@ def test_guarantee_shared_run_of_w_plus_k_minus_1_is_detected(fillers, k, w, ext
 
 
 @given(tokens=st.lists(_token_text, max_size=40), k=st.integers(1, 6), w=st.integers(1, 6))
-def test_fingerprints_exist_iff_enough_tokens(tokens, k, w):
+def test_fingerprints_exist_iff_enough_tokens(tokens: list[str], k: int, w: int) -> None:
     fps = fingerprint_tokens(_tokens(tokens), k, w)
     assert bool(fps) == (len(tokens) >= w + k - 1)
 
@@ -356,13 +362,13 @@ def test_fingerprints_exist_iff_enough_tokens(tokens, k, w):
 # --- containment ---------------------------------------------------------------------------
 
 
-def test_identical_code_has_full_containment():
+def test_identical_code_has_full_containment() -> None:
     fps = fingerprint(UTIL_COPY_VALUE, "c")
     assert fps
     assert containment(fps, fps) == 1.0
 
 
-def test_formatting_comments_and_literals_do_not_matter():
+def test_formatting_comments_and_literals_do_not_matter() -> None:
     variant = """\
 /* copied from upstream */ char*util_copy_value(const char*value){
   size_t len=strlen(value); // length
@@ -377,24 +383,24 @@ def test_formatting_comments_and_literals_do_not_matter():
     assert containment(fingerprint(literal_changed, "c"), original) == 1.0
 
 
-def test_renamed_identifiers_do_matter():
+def test_renamed_identifiers_do_matter() -> None:
     original = fingerprint(UTIL_COPY_VALUE, "c")
     renamed = UTIL_COPY_VALUE.replace("dst", "out").replace("len", "n")
     score = containment(fingerprint(renamed, "c"), original)
     assert 0.0 <= score < 1.0
 
 
-def test_snippet_inside_whole_file():
+def test_snippet_inside_whole_file() -> None:
     whole = fingerprint(UTIL_C.read_text(), "c")
     assert containment(fingerprint(UTIL_COPY_VALUE, "c"), whole) == 1.0
 
 
-def test_containment_of_empty_snippet_is_zero():
+def test_containment_of_empty_snippet_is_zero() -> None:
     assert containment([], fingerprint(UTIL_COPY_VALUE, "c")) == 0.0
     assert containment(fingerprint(UTIL_COPY_VALUE, "c"), []) == 0.0
 
 
-def test_tiny_snippet_has_no_fingerprints_and_needs_align():
+def test_tiny_snippet_has_no_fingerprints_and_needs_align() -> None:
     # memcpy ( dst , v ) ; is 7 tokens, one short of w + k - 1 == 8: no full window.
     tiny = "memcpy(dst, v);"
     assert len(tokenize(tiny, "c")) == 7 < DEFAULT_W + DEFAULT_K - 1
@@ -414,7 +420,7 @@ def test_tiny_snippet_has_no_fingerprints_and_needs_align():
 # --- alignment -----------------------------------------------------------------------------
 
 
-def test_align_util_copy_value_lines_8_to_18():
+def test_align_util_copy_value_lines_8_to_18() -> None:
     result = align(tokenize(UTIL_COPY_VALUE, "c"), tokenize(UTIL_C.read_text(), "c"))
     assert isinstance(result, Alignment)
     assert result.containment == 1.0
@@ -423,7 +429,7 @@ def test_align_util_copy_value_lines_8_to_18():
     assert (result.start_line, result.end_line) == (8, 18)
 
 
-def test_align_reformatted_snippet_still_maps_to_8_to_18():
+def test_align_reformatted_snippet_still_maps_to_8_to_18() -> None:
     reformatted = "char *util_copy_value(const char *value) { size_t len = strlen(value);\n"
     reformatted += "char *dst = malloc(HDR_VALUE_MAX); if (dst == NULL) return NULL;\n"
     reformatted += "memcpy(dst, value, len); dst[len] = 0; return dst; }"
@@ -433,14 +439,14 @@ def test_align_reformatted_snippet_still_maps_to_8_to_18():
     assert result.line_range == (8, 18)
 
 
-def test_align_partial_snippet_line_range():
+def test_align_partial_snippet_line_range() -> None:
     body = "    if (dst == NULL)\n        return NULL;\n    memcpy(dst, value, len);\n"
     result = align(tokenize(body, "c"), tokenize(UTIL_C.read_text(), "c"))
     assert result.containment == 1.0
     assert result.line_range == (13, 15)
 
 
-def test_align_ignores_short_spurious_blocks():
+def test_align_ignores_short_spurious_blocks() -> None:
     snippet = tokenize("return totally_unrelated(thing);", "c")
     file_tokens = tokenize(UTIL_C.read_text(), "c")
     strict = align(snippet, file_tokens)
@@ -452,7 +458,7 @@ def test_align_ignores_short_spurious_blocks():
     assert loose.containment < 1.0
 
 
-def test_align_empty_inputs():
+def test_align_empty_inputs() -> None:
     empty = align([], tokenize(UTIL_COPY_VALUE))
     assert (empty.containment, empty.matched, empty.line_range) == (0.0, 0, None)
     nothing = align(tokenize(UTIL_COPY_VALUE), [])
@@ -465,7 +471,9 @@ def test_align_empty_inputs():
     after=st.lists(_token_text, max_size=30),
 )
 @settings(max_examples=200)
-def test_align_finds_an_embedded_snippet(before, run, after):
+def test_align_finds_an_embedded_snippet(
+    before: list[str], run: list[str], after: list[str]
+) -> None:
     file_tokens = [Token(t, i + 1) for i, t in enumerate(before + run + after)]
     snippet = [Token(t, 1) for t in run]
     result = align(snippet, file_tokens, min_block=1)

@@ -63,14 +63,16 @@ def _time(pattern: re.Pattern[Any], text: str) -> float:
     return time.perf_counter() - started
 
 
-def test_patterns_were_collected():
+def test_patterns_were_collected() -> None:
     assert len(PATTERNS) > 40
 
 
 @pytest.mark.parametrize(("name", "pattern"), PATTERNS, ids=[n for n, _ in PATTERNS])
 @given(seed=st.text(alphabet=ALPHABET, min_size=1, max_size=12))
 @settings(max_examples=25, deadline=None, suppress_health_check=[HealthCheck.too_slow])
-def test_regex_is_linear_on_repetitive_input(name, pattern, seed):
+def test_regex_is_linear_on_repetitive_input(
+    name: str, pattern: re.Pattern[str], seed: str
+) -> None:
     text = seed * (TARGET_LEN // len(seed))
     elapsed = _time(pattern, text)
     assert elapsed < BUDGET_S, f"{name} took {elapsed:.3f}s on {seed!r} x {len(text)}"
@@ -91,6 +93,6 @@ def test_regex_is_linear_on_repetitive_input(name, pattern, seed):
     ],
     ids=["letters", "dotted", "slashes", "tick", "dashes", "cvss", "hunks", "at"],
 )
-def test_regex_on_known_hostile_shapes(name, pattern, text):
+def test_regex_on_known_hostile_shapes(name: str, pattern: re.Pattern[str], text: str) -> None:
     elapsed = _time(pattern, text)
     assert elapsed < BUDGET_S, f"{name} took {elapsed:.3f}s"

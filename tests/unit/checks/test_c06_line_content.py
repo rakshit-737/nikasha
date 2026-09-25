@@ -355,3 +355,31 @@ class TestReviewFindings:
         (evidence,) = LineContent().run(ctx, list(ctx.claims))
         assert evidence.outcome == "SUPPORTS"
         assert evidence.details["found_path"] == "src/util.c"
+
+
+def test_a_failed_grep_is_neutral_for_that_claim_only(
+    make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """P4: a ``git grep`` that exits 128 is not "nowhere", and must not sink other claims."""
+    from nikasha.code.gitio import GitRepo, GitResult  # noqa: PLC0415
+
+    bad = claim(LineClaim, path=None, line=3, quoted_line=INVENTED)
+    good = claim(LineClaim, path="src/util.c", line=15, quoted_line=f"    {MEMCPY}")
+    ctx = make_ctx(claims=[bad, good])
+    repo = ctx.resolution.repo
+    real_run = type(repo).run
+
+    def run(self: GitRepo, argv: list[str], **kw: Any) -> GitResult:
+        if argv[:1] == ["grep"] and INVENTED in argv:
+            return GitResult(tuple(argv), 128, b"", b"fatal: bad object", 0)
+        return real_run(self, argv, **kw)
+
+    monkeypatch.setattr(type(repo), "run", run)
+    evidence = LineContent().run(ctx, [bad, good])
+    by_line = {e.details["line"]: e for e in evidence}
+    failed = by_line[3]
+    assert failed.outcome == "NEUTRAL"
+    assert failed.strength == 0.0
+    assert failed.details["outcome"] == "search_failed"
+    assert "exit code 128" in failed.details["incomplete"]
+    assert by_line[15].outcome == "SUPPORTS"

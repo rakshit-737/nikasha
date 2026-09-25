@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """AddressSanitizer parser: real fixtures, report variants, embedding and robustness."""
 
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -10,8 +11,9 @@ from hypothesis import strategies as st
 
 from nikasha.extract import extract_claims
 from nikasha.extract.traces import PARSERS, asan
+from nikasha.extract.traces.common import ParsedTrace
 from nikasha.ingest import ingest_string
-from nikasha.model.claims import TraceClaim
+from nikasha.model.claims import Frame, TraceClaim
 
 FIXTURES = Path(__file__).parents[2] / "fixtures" / "traces" / "asan"
 PARSER = PARSERS["asan"]
@@ -21,13 +23,13 @@ def _load(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf-8")
 
 
-def _one(text: str):
+def _one(text: str) -> ParsedTrace:
     traces = PARSER.parse(text)
     assert len(traces) == 1, traces
     return traces[0]
 
 
-def _first_app(frames):
+def _first_app(frames: Sequence[Frame]) -> Frame:
     return next(f for f in frames if not f.is_runtime)
 
 
@@ -44,7 +46,9 @@ FIXTURE_CASES = [
 @pytest.mark.parametrize(
     ("name", "address", "write_line", "alloc_line", "caller_line"), FIXTURE_CASES
 )
-def test_fixture(name, address, write_line, alloc_line, caller_line):
+def test_fixture(
+    name: str, address: int, write_line: int, alloc_line: int, caller_line: int
+) -> None:
     text = _load(name)
     trace = _one(text)
     data = trace.data
@@ -57,6 +61,9 @@ def test_fixture(name, address, write_line, alloc_line, caller_line):
 
     assert data.format == "asan"
     assert data.bug_type == "heap-buffer-overflow"
+    assert data.message is not None
+    assert data.access is not None
+    assert data.region is not None
     assert data.message.startswith(f"heap-buffer-overflow on address {address:#x} at pc 0x")
     assert data.access.kind == "WRITE"
     assert data.access.size == 96
@@ -110,13 +117,14 @@ def test_fixture(name, address, write_line, alloc_line, caller_line):
         17,
     )
 
+    assert data.summary is not None
     assert data.summary.startswith("SUMMARY: AddressSanitizer: heap-buffer-overflow (/work/")
     assert data.summary_function == "__asan_memcpy"
     assert data.summary_path is None  # current ASan names the module, not a source line
     assert data.summary_line is None
 
 
-def test_fixture_embedded_in_markdown_is_found_by_the_pipeline():
+def test_fixture_embedded_in_markdown_is_found_by_the_pipeline() -> None:
     trace_text = _load("01-vulnlab-heap-overflow-v1.2.0.txt")
     md = (
         "# Heap overflow in hdr_parse_line\n\n"
@@ -163,9 +171,11 @@ SUMMARY: AddressSanitizer: heap-use-after-free /src/app/worker.c:40:12 in reader
 """
 
 
-def test_use_after_free_with_free_alloc_and_thread_stacks():
+def test_use_after_free_with_free_alloc_and_thread_stacks() -> None:
     data = _one(UAF).data
     assert data.bug_type == "heap-use-after-free"
+    assert data.access is not None
+    assert data.region is not None
     assert data.access.kind == "READ"
     assert data.access.size == 4
     assert data.thread == "T1"
@@ -187,7 +197,7 @@ def test_use_after_free_with_free_alloc_and_thread_stacks():
     assert data.pid == 4242
 
 
-def test_old_style_to_the_right_of_region():
+def test_old_style_to_the_right_of_region() -> None:
     text = (
         "==7==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x60300000eff4 at pc 0x1\n"
         "WRITE of size 1 at 0x60300000eff4 thread T0\n"
@@ -197,6 +207,8 @@ def test_old_style_to_the_right_of_region():
         "SUMMARY: AddressSanitizer: heap-buffer-overflow /tmp/t.c:5:3 in main\n"
     )
     data = _one(text).data
+    assert data.region is not None
+    assert data.region_address is not None
     assert data.region.relation == "right"
     assert data.region.distance == 4
     assert data.region.size == 16
@@ -207,15 +219,17 @@ def test_old_style_to_the_right_of_region():
     ("words", "relation"),
     [("before", "left"), ("to the left of", "left"), ("inside of", "inside"), ("after", "right")],
 )
-def test_region_relations(words, relation):
+def test_region_relations(words: str, relation: str) -> None:
     text = (
         "==7==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x100 at pc 0x1\n"
         f"0x100 is located 8 bytes {words} 32-byte region [0x108,0x128)\n"
     )
-    assert _one(text).data.region.relation == relation
+    region = _one(text).data.region
+    assert region is not None
+    assert region.relation == relation
 
 
-def test_global_variable_region():
+def test_global_variable_region() -> None:
     text = (
         "==9==ERROR: AddressSanitizer: global-buffer-overflow on address 0x5000 at pc 0x1\n"
         "READ of size 4 at 0x5000 thread T0\n"
@@ -224,10 +238,11 @@ def test_global_variable_region():
         "'/src/g.c:1:5' (0x4fd8) of size 40\n"
     )
     region = _one(text).data.region
+    assert region is not None
     assert (region.start, region.end, region.size, region.relation) == (0x4FD8, 0x5000, 40, "right")
 
 
-def test_segv_on_unknown_address_takes_access_from_signal_line():
+def test_segv_on_unknown_address_takes_access_from_signal_line() -> None:
     text = (
         "==31==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 "
         "(pc 0x55d bp 0x7ff sp 0x7fe T0)\n"
@@ -243,13 +258,14 @@ def test_segv_on_unknown_address_takes_access_from_signal_line():
     data = _one(text).data
     assert data.bug_type == "SEGV"
     assert data.address == 0
+    assert data.access is not None
     assert data.access.kind == "READ"
     assert data.access.size is None
     assert data.thread == "T0"
     assert data.frames[0].function == "parse_hdr"
 
 
-def test_attempting_double_free_without_summary_uses_header_type():
+def test_attempting_double_free_without_summary_uses_header_type() -> None:
     text = (
         "==5==ERROR: AddressSanitizer: attempting double-free on 0x6020 in thread T0:\n"
         "    #0 0x1 in free (/a.out+0x1)\n"
@@ -261,7 +277,7 @@ def test_attempting_double_free_without_summary_uses_header_type():
     assert trace.end == len(text) - 1  # the last frame line, not the trailing newline
 
 
-def test_unsymbolized_and_null_location_frames():
+def test_unsymbolized_and_null_location_frames() -> None:
     text = (
         "==5==ERROR: AddressSanitizer: stack-overflow on address 0x7ffe at pc 0x1\n"
         "    #0 0x4a44a1  (/work/hdrcat+0x4a44a1)\n"
@@ -273,12 +289,13 @@ def test_unsymbolized_and_null_location_frames():
     frames = _one(text).data.frames
     assert (frames[0].function, frames[0].module) == (None, "/work/hdrcat")
     assert (frames[1].function, frames[1].path) == ("recurse", None)
+    assert frames[2].function is not None
     assert frames[2].function.startswith("std::vector<int, std::allocator<int> >::at(")
     assert (frames[2].path, frames[2].line) == ("/usr/include/c++/v1/vector", 1234)
     assert (frames[3].function, frames[3].path) == ("weird(int)", None)
 
 
-def test_consecutive_stacks_without_labels_and_multiple_pids():
+def test_consecutive_stacks_without_labels_and_multiple_pids() -> None:
     text = (
         "==5==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x10 at pc 0x1\n"
         "    #0 0x1 in a /src/a.c:1:1\n"
@@ -291,7 +308,7 @@ def test_consecutive_stacks_without_labels_and_multiple_pids():
     assert data.pids_seen == (5, 6)
 
 
-def test_trailing_prose_is_not_swallowed():
+def test_trailing_prose_is_not_swallowed() -> None:
     text = (
         "==5==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x10 at pc 0x1\n"
         "    #0 0x1 in a /src/a.c:1:1\n"
@@ -307,7 +324,7 @@ def test_trailing_prose_is_not_swallowed():
     assert trace.data.summary is None
 
 
-def test_two_reports_and_foreign_sanitizer_header_split():
+def test_two_reports_and_foreign_sanitizer_header_split() -> None:
     first = "==1==ERROR: AddressSanitizer: SEGV on unknown address 0x0 (pc 0x1 T0)\n"
     lsan = "==1==ERROR: LeakSanitizer: detected memory leaks\n"
     text = first + "    #0 0x1 in f /a.c:1:1\n" + lsan + first + "    #0 0x1 in g /a.c:2:1\n"
@@ -323,7 +340,7 @@ ALL_LINES += UAF.splitlines()
 
 
 @pytest.mark.parametrize("name", [c[0] for c in FIXTURE_CASES])
-def test_every_truncation_parses(name):
+def test_every_truncation_parses(name: str) -> None:
     lines = _load(name).splitlines(keepends=True)
     for n in range(len(lines) + 1):
         text = "".join(lines[:n])
@@ -336,7 +353,7 @@ def test_every_truncation_parses(name):
 @pytest.mark.parametrize(
     "text", ["", "\n", "==1==ERROR: AddressSanitizer: ", "#0 0x1 in", "\x00퟿" * 50]
 )
-def test_garbage_does_not_raise(text):
+def test_garbage_does_not_raise(text: str) -> None:
     for trace in PARSER.parse(text):
         assert 0 <= trace.start <= trace.end <= len(text)
 
@@ -348,11 +365,11 @@ def _check(text: str) -> None:
 
 
 @given(st.text())
-def test_hypothesis_random_text(text):
+def test_hypothesis_random_text(text: str) -> None:
     _check(text)
 
 
 @settings(max_examples=200)
 @given(st.lists(st.one_of(st.sampled_from(ALL_LINES), st.text(max_size=30)), max_size=40))
-def test_hypothesis_shuffled_report_lines(lines):
+def test_hypothesis_shuffled_report_lines(lines: list[str]) -> None:
     _check("\n".join(lines))

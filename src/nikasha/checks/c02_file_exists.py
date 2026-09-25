@@ -25,7 +25,7 @@ from typing import Any
 from nikasha.checks.base import BaseCheck, CheckContext, make_evidence, register
 from nikasha.checks.c08_trace_frames import _third_party_reason
 from nikasha.checks.strengths import Strengths, default_strengths
-from nikasha.code.gitio import HistoryTimeoutError
+from nikasha.code.gitio import GitTimeoutError, HistoryTimeoutError, HistoryUnavailableError
 from nikasha.code.pathtrie import normalize_components
 from nikasha.errors import ExternalToolError
 from nikasha.model.claims import Claim, ClaimKind, FileClaim, Frame, LineClaim, TraceClaim
@@ -210,6 +210,15 @@ class _Trees:
         return _search(ctx, name)
 
 
+def _why_unfinished(exc: ExternalToolError, timed_out: str, failed: str) -> str:
+    """Only a real timeout is called one; any other failure keeps git's reason (P6)."""
+    if isinstance(exc, GitTimeoutError) or (
+        isinstance(exc, HistoryTimeoutError) and not isinstance(exc, HistoryUnavailableError)
+    ):
+        return timed_out
+    return f"{failed}: {exc}"
+
+
 def _search(ctx: CheckContext, name: str) -> _History:
     """Every ref's history, by file path and then by diff content, for one file name."""
     timed_out = f"the history search timed out after {ctx.history_timeout:g}s"
@@ -224,8 +233,8 @@ def _search(ctx: CheckContext, name: str) -> _History:
             timeout=ctx.history_timeout,
             record=records,
         )
-    except ExternalToolError:
-        return _History(False, reason=timed_out)
+    except ExternalToolError as exc:
+        return _History(False, reason=_why_unfinished(exc, timed_out, failed))
     if result.returncode != 0:
         return _History(False, reason=failed, commands=tuple(records))
     by_path = result.stdout.decode("ascii", "replace").strip()
@@ -233,8 +242,10 @@ def _search(ctx: CheckContext, name: str) -> _History:
         return _History(True, first_commit=by_path, commands=tuple(records))
     try:
         first = ctx.resolution.repo.pickaxe_first(name, timeout=ctx.history_timeout, record=records)
-    except HistoryTimeoutError:
-        return _History(False, reason=timed_out, commands=tuple(records))
+    except HistoryTimeoutError as exc:
+        return _History(
+            False, reason=_why_unfinished(exc, timed_out, failed), commands=tuple(records)
+        )
     if any(record.exit_code != 0 for record in records):
         # A failed log --all prints nothing, which is not "found nothing" (P4).
         return _History(False, reason=failed, commands=tuple(records))

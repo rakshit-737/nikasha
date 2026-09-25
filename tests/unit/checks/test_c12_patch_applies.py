@@ -29,6 +29,7 @@ from nikasha.extract import extract_claims
 from nikasha.extract.patches import parse_with_unidiff
 from nikasha.ingest import load_report
 from nikasha.model.claims import PatchClaim
+from nikasha.model.evidence import Evidence
 
 # --- fixtures written against the real v1.2.0 tree ------------------------------------------
 
@@ -113,7 +114,7 @@ def report_patch(name: str) -> PatchClaim:
     return claims[0]
 
 
-def _run(make_ctx: MakeContext, claimed: PatchClaim, tag: str = "v1.2.0") -> list:
+def _run(make_ctx: MakeContext, claimed: PatchClaim, tag: str = "v1.2.0") -> list[Evidence]:
     ctx = make_ctx(claims=[claimed], tag=tag)
     return PatchApplies().run(ctx, [claimed])
 

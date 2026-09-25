@@ -9,12 +9,14 @@ import subprocess
 import time
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
+import pytest
 from check_helpers import TAGS, MakeContext, claim
 
 from nikasha.checks.base import CheckContext, run_checks
 from nikasha.checks.c02_file_exists import FileExists
-from nikasha.code.gitio import GitRepo
+from nikasha.code.gitio import GitRepo, HistoryUnavailableError
 from nikasha.model.claims import Claim, FileClaim, Frame, LineClaim, Stack, TraceClaim
 from nikasha.model.evidence import Evidence
 from nikasha.resolve.refs import ReleaseList
@@ -191,6 +193,24 @@ class TestP4AbsenceIsNeverAssumed:
         assert "absence is not established" in evidence.summary
         assert "timed out" in evidence.details["history_note"]
 
+    def test_a_failed_pickaxe_is_not_called_a_timeout(
+        self, make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """P6: HistoryUnavailableError subclasses the timeout error but is not a timeout."""
+        ctx = make_ctx(claims=[claim(FileClaim, path=INVENTED)])
+
+        def pickaxe(name: str, **_: Any) -> str | None:
+            raise HistoryUnavailableError("git was not found on PATH")
+
+        monkeypatch.setattr(ctx.resolution.repo, "pickaxe_first", pickaxe)
+        (evidence,) = FileExists().run(ctx, list(ctx.claims))
+        assert evidence.outcome == "NEUTRAL"
+        assert evidence.details["history_complete"] is False
+        note = evidence.details["history_note"]
+        assert "failed" in note
+        assert "not found" in note
+        assert "timed out" not in note
+
     def test_an_exhausted_budget_downgrades_the_refutation(self, make_ctx: MakeContext) -> None:
         ctx = make_ctx(claims=[claim(FileClaim, path=INVENTED)])
         ctx.deadline = time.monotonic() - 1.0
@@ -260,8 +280,12 @@ def test_registered_and_runnable_through_the_runner(make_ctx: MakeContext) -> No
 
 def _git(repo: Path, *args: str, stdin: bytes | None = None) -> str:
     """Test-only plumbing on a private copy of vulnlab (never on the shared fixture)."""
+    identity = ("-c", "user.name=Nikasha Tests", "-c", "user.email=tests@nikasha.invalid")
     out = subprocess.run(
-        ["git", f"--git-dir={repo}", *args], input=stdin, capture_output=True, check=True
+        ["git", *identity, f"--git-dir={repo}", *args],
+        input=stdin,
+        capture_output=True,
+        check=True,
     )
     return out.stdout.decode().strip()
 

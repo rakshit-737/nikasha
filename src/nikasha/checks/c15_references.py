@@ -88,6 +88,39 @@ _GIT_TIMEOUT_S = 10.0
 #: such as ``github.com/advisories/GHSA-…`` is not a repository at all (P4).
 FOREIGN_REPO_KINDS = frozenset({"commit", "pr", "issue", "blob", "compare"})
 
+#: CWEs that name a *class* of weakness any bug can sit under, never a bug type: CWE-20
+#: (Improper Input Validation) is how NVD and many reporters file memory-safety bugs too, so
+#: it is never called incompatible with a trace (P4).
+UNIVERSAL_CWES = frozenset({20})
+
+#: Bug types that are a crash *signal*, not a bug class: an ASan "SEGV on unknown address"
+#: is as often a heap overflow that ran far past its buffer, or a use after free, as a null
+#: dereference. Such a trace cannot contradict a CWE that fits any memory-safety family
+#: (P4); it still contradicts CWE-79 or CWE-89.
+CRASH_SIGNAL_BUG_TYPES = frozenset(
+    {"segv", "sigsegv", "sigbus", "access-violation", "wild-pointer-dereference"}
+)
+#: The ``cwe_compat.yaml`` families a crash signal can stand for.
+MEMORY_FAMILIES = frozenset(
+    {
+        "heap-buffer-overflow",
+        "stack-buffer-overflow",
+        "global-buffer-overflow",
+        "out-of-bounds-access",
+        "use-after-free",
+        "double-free",
+        "uninitialized-memory",
+        "null-or-wild-dereference",
+        "stack-exhaustion",
+        "integer-overflow",
+        "type-confusion",
+        "format-string",
+    }
+)
+
+#: Longest vendor or product name kept from a CVE record: the record is remote input.
+MAX_PRODUCT_CHARS = 200
+
 _SHA_RE = re.compile(r"\A[0-9a-f]{7,40}\Z")
 _CVE_RE = re.compile(r"\ACVE-(\d{4})-(\d{4,7})\Z", re.IGNORECASE)
 _CWE_RE = re.compile(r"\A(?:CWE[-_ ]?)?(\d{1,5})\Z", re.IGNORECASE)
@@ -245,7 +278,7 @@ def cve_products(data: dict[str, Any]) -> tuple[str, ...]:
             for field in ("vendor", "product", "packageName"):
                 value = entry.get(field)
                 if isinstance(value, str) and value.strip().lower() not in PLACEHOLDER_PRODUCTS:
-                    found.add(value.strip())
+                    found.add(value.strip()[:MAX_PRODUCT_CHARS])
     return tuple(sorted(found))
 
 
@@ -379,6 +412,21 @@ def _touched_paths(
         return ()
     paths = [part for part in result.stdout.decode("utf-8", "replace").split("\0") if part]
     return tuple(sorted(set(paths))[:MAX_TOUCHED_PATHS])
+
+
+def _commit_is_here(ctx: CheckContext, claim: ReferenceClaim) -> bool:
+    """Whether a commit link to another repository names a commit this repository has.
+
+    A fork or a personal mirror under a new name links to the project's own history; that
+    commit being here is the proof the link is not about a different project (P4). A lookup
+    that fails proves nothing either way, so it keeps the link foreign only if git answered.
+    """
+    if claim.ref_kind != "commit" or not _SHA_RE.match(claim.value.lower()):
+        return False
+    try:
+        return ctx.resolution.repo.rev_parse(claim.value.lower()) is not None
+    except NikashaError:
+        return True  # git could not say, so the link is not called foreign (P4)
 
 
 def _matches_product(names: frozenset[str], products: Sequence[str]) -> list[str]:
@@ -535,6 +583,8 @@ class References(BaseCheck):
             and repo not in home
             # A mirror or a rename under the same project name is not a different project.
             and repo.rsplit("/", 1)[-1] not in names
+            # Nor is a fork, whatever it is called, when the linked commit is this project's.
+            and not _commit_is_here(ctx, claim)
         )
         return [
             make_evidence(
@@ -634,7 +684,10 @@ class References(BaseCheck):
                 claims=claims,
                 outcome="REFUTES",
                 strength=self.strengths.get(CHECK_ID, "cve_not_found"),
-                summary=f"{cve} has no record in the CVE list",
+                summary=(
+                    f"{cve} has no published record in the CVE list (an ID that is reserved"
+                    " but not yet published has none either)"
+                ),
                 details={**details, "outcome": "cve_not_found"},
             )
         if lookup.status != HTTP_OK:
@@ -668,8 +721,23 @@ class References(BaseCheck):
                 summary=f"{cve} exists but names no product we can compare",
                 details={**details, "outcome": "no_product", "state": lookup.state},
             )
-        matched = _matches_product(_project_names(ctx), listed)
         details = {**details, "products": listed[:MAX_LISTED], "n_products": len(listed)}
+        if ctx.resolution.project is None:
+            # Without a curated project entry the only names we have are the repository's
+            # own, and "cpython" against a record for "Python" is not a contradiction (P4).
+            return make_evidence(
+                check_id=CHECK_ID,
+                group=GROUP,
+                claims=claims,
+                outcome="NEUTRAL",
+                strength=0.0,
+                summary=(
+                    f"{cve} is recorded against {listed[0]}; this repository is not a known"
+                    " project, so the product was not compared"
+                ),
+                details={**details, "outcome": "unknown_project"},
+            )
+        matched = _matches_product(_project_names(ctx), listed)
         if matched:
             return make_evidence(
                 check_id=CHECK_ID,
@@ -740,11 +808,26 @@ class References(BaseCheck):
             )
         title = table.titles[cwe]
         details["cwe_title"] = title
+        if cwe in UNIVERSAL_CWES:
+            return self._cwe_neutral(
+                claims,
+                f"CWE-{cwe} ({title}) is a weakness class any bug can fall under, so it was"
+                " not compared",
+                {**details, "outcome": "universal_cwe"},
+            )
         if any(table.compatible(family, cwe) for family in families):
             return self._cwe_neutral(
                 claims,
                 f"CWE-{cwe} ({title}) fits the reported {reported[0]}",
                 {**details, "outcome": "compatible"},
+            )
+        signals = [raw for raw in reported if _slug(raw) in CRASH_SIGNAL_BUG_TYPES]
+        if signals and any(table.compatible(family, cwe) for family in MEMORY_FAMILIES):
+            return self._cwe_neutral(
+                claims,
+                f"CWE-{cwe} ({title}) was not judged: a {signals[0]} is a crash signal that"
+                " many kinds of bug produce",
+                {**details, "outcome": "crash_signal"},
             )
         expected = sorted({f"CWE-{i}" for family in families for i in table.expected(family)})
         return make_evidence(

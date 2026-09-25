@@ -7,28 +7,44 @@ attaches its result to the context as ``ctx.repro``; without one, C19 produces n
 ``ctx.repro`` is either a :class:`~nikasha.repro.run.ReproRun` (the PoC ran) or a
 :class:`~nikasha.repro.signature.ReproFailure` (build or infrastructure failure).
 
-A ``ReproRun`` is read as follows: a timeout or exit status 0 is ``no_crash``; exit
-status 125-127 (the engine could not start the command) is an infrastructure ``ERROR``;
-any other status is a crash, compared by the *terminating* sanitizer report on stderr
-only (never stdout, never the best of several reports: a hostile PoC can print decoys).
-A crash whose crashing frame is in the reporter's PoC (``/poc``) or has no source path is
-not attributed to the project and scores nothing (``crash_not_in_project``).
+A ``ReproRun`` is read as follows. A timeout or exit status 0 is ``no_crash``; exit status
+125-127 (the engine could not start the command) is an infrastructure ``ERROR``. Any other
+status is a crash, and it is compared only if it can be attributed to the target:
+
+1. only the *terminating* report on stderr counts: never stdout, never the best of several
+   reports (a hostile PoC can print decoys), and never a report followed by more output
+   (a sanitizer that aborts prints nothing after its report);
+2. the exit status must be the one that report leaves (134, SIGABRT, for the ASan/UBSan
+   builds every recipe makes). Otherwise the crash is ``crash_unattributed``;
+3. the crashing frame must be project code with a source path, not the reporter's staged
+   PoC under ``/poc`` (``crash_not_in_project``);
+4. a ``c_harness`` run, or any run whose recipe kind does not set ``attested_output``
+   (``ReproRun.attested``), is never counted: the harness is the reporter's code running
+   in the target's own process, and a scriptable target (the sqlite shell's
+   ``.shell``/``.output``/``.exit``, curl's ``--config``) lets the input print a report
+   that passes 1-3 and exit 134 itself. Its comparison is recorded as
+   ``harness_unverified`` (NEUTRAL, flagged for review).
 
 Outcomes and strengths (``lr_defaults.yaml``, row C19):
 
 * ``signature_match`` (+6.0): forces REPRODUCED (verdict rule 1);
 * ``different_signature`` (+0.5): it crashed, but not as described. Flagged prominently: a
   real but *different* bug may be present;
-* ``no_crash`` (-0.5): weak and never decisive on its own. It cites only the refutable
-  (project-attributed, non-negated) trace and core-symbol claims, since those are what a
-  non-crash weakens; with none, it is informational (NEUTRAL, strength withheld);
-* build or infrastructure failure: ``ERROR``, no strength.
+* ``no_crash`` (-0.5): weak and never decisive on its own. A clean run says nothing about
+  the reporter's own PoC text (ADR 0003 never lets a ``reporter_artifact`` claim be
+  refuted), so it cites only the refutable (project-attributed, non-negated) trace and
+  core-symbol claims, which are what a non-crash weakens; with none, it is informational
+  (NEUTRAL, strength withheld);
+* build or infrastructure failure: ``ERROR``, no strength;
+* ``crash_unparsed``, ``crash_uncompared``, ``crash_unattributed``,
+  ``crash_not_in_project``, ``harness_unverified``: NEUTRAL, no strength.
 
-Remaining forgery risk: with a ``c_harness`` PoC the reporter writes code that runs in the
-target's process and could print a forged report to stderr as its last act. Requiring the
-terminating report's crashing frame to be project code with a source path narrows this but
-cannot rule it out; a REPRODUCED from a ``c_harness`` run still deserves a human look, and
-``details.run.kind`` records the kind for that reason.
+Remaining forgery risk: attribution rests on a recipe author marking a kind
+``attested_output: true`` only when the input truly cannot script the target. The default
+is ``false``.
+
+A truncated run (stdout/stderr hit the recipe's output cap) is said so in ``details``
+(``truncated_note``) and in the summary: the terminating report may be cut off.
 """
 
 from __future__ import annotations
@@ -46,19 +62,22 @@ from nikasha.model.claims import (
     ImpactClaim,
     SymbolClaim,
     TraceClaim,
+    TraceData,
 )
 from nikasha.model.evidence import CommandRecord, Evidence, Outcome
 from nikasha.repro.run import ReproRun
 from nikasha.repro.signature import (
     MatchResult,
     ReproFailure,
+    Signature,
     bug_class_of_cwe,
     bug_class_of_text,
     crash_in_project,
+    exit_status_fits,
     match_locus,
     match_traces,
     signature,
-    terminating_trace,
+    terminating_report,
 )
 
 CHECK_ID = "C19"
@@ -75,8 +94,14 @@ _MAX_DETAIL = 200
 _MAX_TRACE_CLAIMS = 8
 #: Exit statuses meaning the engine could not start the command (docker/podman).
 _ENGINE_FAILURES: frozenset[int] = frozenset({125, 126, 127})
+#: Run kinds whose output the reporter's own code can write (in the target's process).
+_UNATTESTED_KINDS: frozenset[str] = frozenset({"c_harness"})
 #: Outcomes that carry a strength from lr_defaults.yaml; everything else scores 0.
 _SCORED: frozenset[str] = frozenset({"signature_match", "different_signature", "no_crash"})
+
+_TRUNCATED_NOTE = (
+    "output truncated at the recipe's output limit; the crash report may be incomplete"
+)
 
 _Judgement = tuple[Outcome, str, str, list[ClaimBase]]
 
@@ -144,6 +169,9 @@ class DynamicRepro(BaseCheck):
         details: dict[str, Any] = {}
         outcome, key, summary, cited = self._judge(ctx, repro, claims, cited, details)
         details["outcome"] = key
+        if isinstance(repro, ReproRun) and repro.truncated:
+            details["truncated_note"] = _TRUNCATED_NOTE
+            summary = f"{summary} ({_TRUNCATED_NOTE})"
         strength = self.strengths.get(CHECK_ID, key) if key in _SCORED else 0.0
         return [
             make_evidence(
@@ -200,16 +228,33 @@ class DynamicRepro(BaseCheck):
         details: dict[str, Any],
     ) -> _Judgement:
         """Compare the terminating crash with what the report claims."""
-        observed = terminating_trace(repro.stderr)
-        if observed is None:
+        report = terminating_report(repro.stderr)
+        if report is None:
             return (
                 "NEUTRAL",
                 "crash_unparsed",
-                "the PoC crashed, but stderr carries no trace to compare",
+                f"the PoC exited with status {repro.exit_code}, but stderr carries no trace"
+                " to compare",
                 cited,
             )
+        observed = report.trace
         sig = signature(observed)
         details["observed_signature"] = sig.as_dict()
+        if not report.at_tail or not exit_status_fits(observed, repro.exit_code):
+            details["flag"] = "crash_unattributed"
+            why = (
+                "more output follows it"
+                if not report.at_tail
+                else f"exit status {repro.exit_code} is not what a {observed.format} report"
+                " that ends the process leaves"
+            )
+            return (
+                "NEUTRAL",
+                "crash_unattributed",
+                f"REVIEW: stderr carries a {observed.format} report, but {why}, so it is not"
+                " attributed to the target",
+                cited,
+            )
         if not crash_in_project(observed):
             details["flag"] = "crash_not_in_project"
             return (
@@ -219,7 +264,19 @@ class DynamicRepro(BaseCheck):
                 " no source path, so the crash is not attributed to the project",
                 cited,
             )
+        return self._compare(ctx, repro, observed, claims, cited=cited, details=details)
 
+    def _compare(
+        self,
+        ctx: CheckContext,
+        repro: ReproRun,
+        observed: TraceData,
+        claims: Sequence[Claim],
+        *,
+        cited: list[ClaimBase],
+        details: dict[str, Any],
+    ) -> _Judgement:
+        """Compare an attributed crash with the quoted traces, or with class and locus."""
         traces = [c for c in claims if isinstance(c, TraceClaim) and not c.negated]
         results: list[MatchResult] = []
         if traces:
@@ -232,8 +289,7 @@ class DynamicRepro(BaseCheck):
                     return "ERROR", "timeout", "C19 ran out of time comparing traces", cited
                 results.append(match_traces(trace, observed))
         else:
-            report = getattr(ctx, "report", None)
-            cls = claimed_class(claims, getattr(report, "title", None))
+            cls = claimed_class(claims, ctx.report.title)
             locus, locus_claims = locus_function(claims)
             if cls is None and locus is None:
                 return (
@@ -257,7 +313,34 @@ class DynamicRepro(BaseCheck):
             "alignment": result.alignment,
             "reason": result.reason,
         }
+        return self._conclude(repro, signature(observed), result, cited, details)
+
+    @staticmethod
+    def _conclude(
+        repro: ReproRun,
+        sig: Signature,
+        result: MatchResult,
+        cited: list[ClaimBase],
+        details: dict[str, Any],
+    ) -> _Judgement:
+        """Turn one comparison into the outcome, withholding it for an unattested kind."""
         where = ", ".join(sig.top_functions) or "no application frame"
+        if repro.kind in _UNATTESTED_KINDS or not repro.attested:
+            details["flag"] = "unverified_harness"
+            details["attested"] = False
+            details["unverified_outcome"] = (
+                "signature_match" if result.matched else "different_signature"
+            )
+            verb = "matches" if result.matched else "does not match"
+            return (
+                "NEUTRAL",
+                "harness_unverified",
+                f"REVIEW: the harness run {verb} the reported signature ({sig.bug_class} in"
+                f" {where}), but the output of a {repro.kind} run is not attested: the PoC"
+                " can script the target or is the reporter's code in its own process, so"
+                " it can print any report and it is not counted as a reproduction",
+                cited,
+            )
         if result.matched:
             return (
                 "SUPPORTS",

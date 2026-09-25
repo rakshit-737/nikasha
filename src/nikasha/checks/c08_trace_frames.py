@@ -36,7 +36,7 @@ from typing import Any
 
 from nikasha.checks.base import BaseCheck, CheckContext, make_evidence, register
 from nikasha.checks.strengths import Strengths, default_strengths
-from nikasha.code.gitio import HistoryTimeoutError
+from nikasha.code.gitio import HistoryTimeoutError, HistoryUnavailableError
 from nikasha.code.trace_forensics import FrameCheck, analyze_trace, app_frames, bare_function
 from nikasha.model.claims import Claim, ClaimKind, Frame, TraceClaim
 from nikasha.model.evidence import CodeLocation, CommandRecord, Evidence, Outcome
@@ -146,6 +146,9 @@ def _probe(ctx: CheckContext, name: str, records: list[CommandRecord]) -> str | 
         return _Unknown("the clone is shallow, so history cannot show the file never existed")
     try:
         return repo.pickaxe_first(name, timeout=ctx.history_timeout, record=records)
+    except HistoryUnavailableError as exc:
+        # Checked first: it subclasses HistoryTimeoutError but did not time out (P6).
+        return _Unknown(f"the history search failed: {exc}")
     except HistoryTimeoutError:
         return _Unknown(f"the history search timed out after {ctx.history_timeout:g}s")
 

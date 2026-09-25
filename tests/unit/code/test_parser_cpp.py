@@ -13,12 +13,12 @@ from nikasha.code.parser import parse_file
 FACTS = parse_fixture(Lang.CPP, "cpp/sample.cpp")
 
 
-def test_parses_cleanly():
+def test_parses_cleanly() -> None:
     assert_clean(FACTS)
     assert FACTS.lang == "cpp"
 
 
-def test_symbols():
+def test_symbols() -> None:
     assert symbols(FACTS) == [
         ("macro", "CHECK", "CHECK", 6, 6),
         ("module", "net", "net", 8, 36),
@@ -37,13 +37,13 @@ def test_symbols():
     ]
 
 
-def test_declarations_in_class_body_are_not_definitions():
+def test_declarations_in_class_body_are_not_definitions() -> None:
     # `int peek() const;` and `~Reader();` are declared at lines 19-20, defined out of line.
     assert [s.start_line for s in FACTS.definitions("peek")] == [38]
     assert FACTS.definitions("Reader_helper") == []
 
 
-def test_calls():
+def test_calls() -> None:
     assert calls(FACTS) == [
         ("net::wire::Reader::next", "decode", 18, False),
         ("net::wire::Reader::peek", "CHECK", 40, False),
@@ -58,13 +58,13 @@ def test_calls():
     ]
 
 
-def test_macros_and_address_taken():
+def test_macros_and_address_taken() -> None:
     assert FACTS.macros == (MacroDef(name="CHECK", line=6, calls=("fail_hard",)),)
     assert FACTS.addr_taken == {"on_event"}
     assert flags(FACTS, "on_event") == {"static"}
 
 
-def test_namespace_function_defined_out_of_line_stays_a_function():
+def test_namespace_function_defined_out_of_line_stays_a_function() -> None:
     src = b"namespace util {\nint twice(int);\n}\nint util::twice(int x)\n{\n    return x * 2;\n}\n"
     facts = parse_file(Lang.CPP, src)
     assert symbols(facts) == [
@@ -73,7 +73,7 @@ def test_namespace_function_defined_out_of_line_stays_a_function():
     ]
 
 
-def test_template_class_members_and_operators():
+def test_template_class_members_and_operators() -> None:
     src = b"""template <typename T>
 struct Box {
     T get() const { return value; }
@@ -94,6 +94,6 @@ void Box<T>::set(T v) { value = std::move(v); }
     assert calls(facts) == [("Box::set", "move", 9, False)]
 
 
-def test_member_call_through_qualified_name_is_direct():
+def test_member_call_through_qualified_name_is_direct() -> None:
     facts = parse_file(Lang.CPP, b"void f(D &d) { d.Base::run(); d.go(); }\n")
     assert calls(facts) == [("f", "run", 1, False), ("f", "go", 1, True)]

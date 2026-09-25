@@ -20,6 +20,7 @@ from nikasha.checks.c17_impact_consistency import (
     ImpactConsistency,
     base_score,
     echo,
+    modifying_metrics,
     parse_vector,
     roundup,
     severity_band,
@@ -27,6 +28,7 @@ from nikasha.checks.c17_impact_consistency import (
 from nikasha.extract.pipeline import extract_claims
 from nikasha.ingest import load_report
 from nikasha.model.claims import ImpactClaim
+from nikasha.model.evidence import Evidence
 
 REPORTS = Path(__file__).resolve().parents[3] / "examples" / "reports"
 
@@ -36,7 +38,7 @@ GENUINE = "CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:H"
 FABRICATED = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
 
 
-def _run(make_ctx: MakeContext, claims: list[ImpactClaim]) -> list:
+def _run(make_ctx: MakeContext, claims: list[ImpactClaim]) -> list[Evidence]:
     ctx = make_ctx(claims=claims)
     return ImpactConsistency().run(ctx, claims)
 
@@ -417,3 +419,39 @@ def test_echo_drops_control_characters() -> None:
 def test_a_non_finite_score_is_never_refuted(make_ctx: MakeContext, score: float) -> None:
     c = claim(ImpactClaim, cvss_score=score, severity_word="Low")
     assert all(e.outcome != "REFUTES" for e in _run(make_ctx, [c]))
+
+
+def test_temporal_score_next_to_a_temporal_vector_is_not_refuted(make_ctx: MakeContext) -> None:
+    # Base 9.8; with E:U/RL:O/RC:C the temporal score is lower, and a report may print it.
+    vector = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/E:U/RL:O/RC:C"
+    c = claim(ImpactClaim, cvss_vector=vector, cvss_version="3.1", cvss_score=8.2)
+    [ev] = _run(make_ctx, [c])
+    assert ev.outcome == "NEUTRAL"
+    assert ev.strength == 0.0
+    assert ev.details["modifying_metrics"] == ["E", "RC", "RL"]
+
+
+def test_not_defined_modifiers_still_leave_a_mismatch_refutable(make_ctx: MakeContext) -> None:
+    vector = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/E:X/RL:X"
+    c = claim(ImpactClaim, cvss_vector=vector, cvss_version="3.1", cvss_score=5.0)
+    [ev] = _run(make_ctx, [c])
+    assert ev.outcome == "REFUTES"
+    assert ev.details["finding"] == "score_mismatch"
+
+
+def test_an_unknown_metric_key_is_not_a_modifier() -> None:
+    vector = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/ZZ:Q"
+    assert modifying_metrics(vector, "3.1") == []
+    assert modifying_metrics(vector + "/E:U/MAV:L", "3.1") == ["E", "MAV"]
+
+
+def test_modifier_keys_follow_the_vector_version() -> None:
+    assert modifying_metrics("AV:N/AC:L/Au:N/C:P/I:P/A:P/CDP:H/MAV:L", "2.0") == ["CDP"]
+    assert modifying_metrics("CVSS:3.1/AV:N/CDP:H/MAV:L", "3.1") == ["MAV"]
+
+
+def test_a_garbage_key_does_not_shield_a_score_mismatch(make_ctx: MakeContext) -> None:
+    vector = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H/ZZ:Q"
+    c = claim(ImpactClaim, cvss_vector=vector, cvss_version="3.1", cvss_score=5.0)
+    [ev] = _run(make_ctx, [c])
+    assert ev.outcome == "REFUTES"

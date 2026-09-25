@@ -10,7 +10,7 @@ from typing import Annotated
 
 import typer
 
-from nikasha.bench.calibrate import calibrate, to_yaml
+from nikasha.bench.calibrate import calibrate, write_calibration
 from nikasha.bench.charts import ChartsUnavailableError, render_charts
 from nikasha.bench.manifests import MANIFEST_DIR, for_split, load_manifests
 from nikasha.bench.runner import check_date, collect_cases, run_bench
@@ -35,11 +35,30 @@ def run(
     out: Annotated[Path, typer.Option(help="Results root.")] = Path("bench") / "results",
     commit: Annotated[str, typer.Option(help="Nikasha commit recorded in RESULTS.md.")] = "unknown",
     charts: Annotated[bool, typer.Option(help="Also write SVG charts ([bench] extra).")] = False,
+    repro: Annotated[
+        bool,
+        typer.Option(
+            "--repro",
+            help="Also reproduce, in a container, the cases whose manifest names a PoC and recipe.",
+        ),
+    ] = False,
+    sandbox: Annotated[
+        str, typer.Option(help="Container engine for --repro: auto, podman or docker.")
+    ] = "auto",
 ) -> None:
     """Run the static checks over a split and write results, metrics and RESULTS.md."""
     check_date(date)
     selected = for_split(load_manifests(manifests), split)
     cases, skipped = collect_cases(selected, root)
+    reproducer = None
+    if repro:  # the only path to a container; a static run never probes for an engine
+        from nikasha.bench.repro import Reproducer, select_engine  # noqa: PLC0415
+
+        engine = select_engine(sandbox)
+        if engine is None:
+            typer.echo("repro skipped: no usable container engine; static checks only.", err=True)
+        else:
+            reproducer = Reproducer(engine)
     metrics = run_bench(
         cases,
         repo=repo or default_repo(),
@@ -48,6 +67,7 @@ def run(
         split=split,
         commit=commit,
         skipped=skipped,
+        repro=reproducer,
     )
     target = out / date
     if charts:
@@ -65,6 +85,9 @@ def run(
         f"{len(metrics['mismatches'])} differed from the expected verdict; "
         f"{len(skipped)} remote entries skipped (offline). Wrote {target}."
     )
+    if reproducer is not None:
+        summary = ", ".join(f"{k} {v}" for k, v in metrics.get("repro", {}).items())
+        typer.echo(f"repro: {summary or 'no cases'}.")
 
 
 @bench_app.command("calibrate")
@@ -72,9 +95,10 @@ def calibrate_command(
     results: Annotated[Path, typer.Argument(help="A results.jsonl from `nikasha bench run`.")],
     out: Annotated[
         Path | None,
-        typer.Option(help="Directory to write calibration-v<N>.yaml to, if a fit happens."),
+        typer.Option(
+            help="Directory for calibration-v<N>.yaml (next free N; never overwrites) on a fit."
+        ),
     ] = None,
-    version: Annotated[int, typer.Option(min=1, help="N in calibration-v<N>.yaml.")] = 1,
 ) -> None:
     """Fit strengths if there is enough labelled data, else keep the defaults (SPEC §14.2)."""
     records = [
@@ -82,15 +106,18 @@ def calibrate_command(
     ]
     outcome = calibrate(records)
     typer.echo(outcome.reason)
-    if outcome.fitted:
-        typer.echo(f"Brier {outcome.brier} · ECE {outcome.ece}")
-        if out is not None:
-            out.mkdir(parents=True, exist_ok=True)
-            path = out / f"calibration-v{version}.yaml"
-            path.write_text(to_yaml(outcome, version), encoding="utf-8", newline="\n")
-            typer.echo(f"Wrote {path}.")
-    elif out is not None:
-        typer.echo("No calibration file written: the defaults stay in force.")
+    if not outcome.fitted:
+        typer.echo(
+            "Kept the defaults (lr_defaults.yaml); no calibration file written."
+            if out is not None
+            else "Kept the defaults (lr_defaults.yaml)."
+        )
+        return
+    typer.echo(f"Brier {outcome.brier} · ECE {outcome.ece}")
+    if out is None:
+        typer.echo("Fitted, but no --out given: nothing written.")
+        return
+    typer.echo(f"Wrote {write_calibration(outcome, out)}.")
 
 
 def register(app: typer.Typer) -> None:

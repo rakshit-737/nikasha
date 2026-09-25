@@ -9,15 +9,18 @@ import json
 import os
 import stat
 import subprocess
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Literal
 
 import pytest
 from typer.testing import CliRunner
 
 from nikasha.cli import app
 from nikasha.code.callgraph import edge
-from nikasha.code.gitio import GitRepo
-from nikasha.code.index import SCHEMA_VERSION, CodeIndex
+from nikasha.code.facts import FileFacts
+from nikasha.code.gitio import GitRepo, TreeEntry
+from nikasha.code.index import SCHEMA_VERSION, CodeIndex, FileEntry
 from nikasha.code.timeline import build_timeline
 from nikasha.code.trace_forensics import analyze_trace, bare_function
 from nikasha.extract import extract_claims
@@ -32,14 +35,14 @@ ASAN = ROOT / "tests" / "fixtures" / "traces" / "asan"
 
 
 @pytest.fixture
-def idx(vulnlab_repo, tmp_path):
+def idx(vulnlab_repo: Path, tmp_path: Path) -> Iterator[CodeIndex]:
     repo = GitRepo(vulnlab_repo)
     with repo, CodeIndex(repo, tmp_path / "index.sqlite") as index:
         yield index
 
 
 @pytest.fixture
-def releases(vulnlab_repo):
+def releases(vulnlab_repo: Path) -> ReleaseList:
     with GitRepo(vulnlab_repo) as repo:
         return ReleaseList.from_tags(repo.tags())
 
@@ -50,7 +53,7 @@ def _trace(path: Path) -> TraceClaim:
 
 
 class TestIndex:
-    def test_index_and_reuse(self, idx):
+    def test_index_and_reuse(self, idx: CodeIndex) -> None:
         first = idx.index_commit(EXPECTED["v1.2.0"])
         assert first.source_files >= 5
         assert first.parsed_now == first.source_files
@@ -60,7 +63,7 @@ class TestIndex:
         shifted = idx.index_commit(EXPECTED["v1.2.1"])
         assert 0 < shifted.parsed_now < shifted.source_files
 
-    def test_facts_and_definitions(self, idx):
+    def test_facts_and_definitions(self, idx: CodeIndex) -> None:
         commit = EXPECTED["v1.2.0"]
         facts = idx.facts_at(commit, "src/util.c")
         assert facts is not None
@@ -73,15 +76,32 @@ class TestIndex:
         assert [p for p, _ in full] == ["src/util.c"]
         assert idx.definitions(commit, "hdr_decode_chunked_value") == []
 
-    def test_lookups_do_not_reread_trees_or_facts(self, idx, monkeypatch):
+    def test_lookups_do_not_reread_trees_or_facts(
+        self, idx: CodeIndex, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # Regression (ADR 0004): file_at once re-read the whole tree listing per call, which
         # made the lazy timeline quadratic in tree size.
         commit = EXPECTED["v1.2.0"]
-        listings, full_reads, loads = [], [], []
+        listings: list[str] = []
+        full_reads: list[str] = []
+        loads: list[str] = []
         ls_tree, files, load = idx.repo.ls_tree, idx.files, idx._load_facts
-        monkeypatch.setattr(idx.repo, "ls_tree", lambda t: listings.append(t) or ls_tree(t))
-        monkeypatch.setattr(idx, "files", lambda c: full_reads.append(c) or files(c))
-        monkeypatch.setattr(idx, "_load_facts", lambda b: loads.append(b) or load(b))
+
+        def spy_ls_tree(t: str) -> list[TreeEntry]:
+            listings.append(t)
+            return ls_tree(t)
+
+        def spy_files(c: str) -> list[FileEntry]:
+            full_reads.append(c)
+            return files(c)
+
+        def spy_load(b: str) -> FileFacts | None:
+            loads.append(b)
+            return load(b)
+
+        monkeypatch.setattr(idx.repo, "ls_tree", spy_ls_tree)
+        monkeypatch.setattr(idx, "files", spy_files)
+        monkeypatch.setattr(idx, "_load_facts", spy_load)
         for _ in range(50):
             assert idx.facts_at(commit, "src/util.c") is not None
             assert idx.file_at(commit, "no/such/file.c") is None
@@ -89,7 +109,7 @@ class TestIndex:
         assert full_reads == []  # single-file lookups never load the whole listing
         assert len(loads) == 1  # parse results come from memory after the first load
 
-    def test_database_is_private_and_versioned(self, vulnlab_repo, tmp_path):
+    def test_database_is_private_and_versioned(self, vulnlab_repo: Path, tmp_path: Path) -> None:
         path = tmp_path / "x.sqlite"
         with GitRepo(vulnlab_repo) as repo, CodeIndex(repo, path) as index:
             index.db.execute("UPDATE meta SET value='0' WHERE key='schema'")
@@ -113,17 +133,24 @@ class TestTimeline:
             ("hdr_parse_block", [("v1.1.0", "v1.3.0")]),
         ],
     )
-    def test_runs(self, idx, releases, symbol, runs, strategy):
+    def test_runs(
+        self,
+        idx: CodeIndex,
+        releases: ReleaseList,
+        symbol: str,
+        runs: list[tuple[str, str]],
+        strategy: Literal["lazy", "full"],
+    ) -> None:
         tl = build_timeline(idx, releases, symbol, strategy=strategy)
         assert tl.runs == runs
 
-    def test_fabricated_symbol_never_existed(self, idx, releases):
+    def test_fabricated_symbol_never_existed(self, idx: CodeIndex, releases: ReleaseList) -> None:
         tl = build_timeline(idx, releases, "hdr_decode_chunked_value")
         assert not tl.ever_defined
         assert tl.history_complete
         assert tl.never_in_history is True
 
-    def test_mentioned_but_not_defined(self, idx, releases):
+    def test_mentioned_but_not_defined(self, idx: CodeIndex, releases: ReleaseList) -> None:
         # memcpy appears in util.c from v1.1.0 but is never *defined* in libhdr.
         tl = build_timeline(idx, releases, "memcpy")
         assert not tl.ever_defined
@@ -164,7 +191,7 @@ def _make_repo(work: Path, releases: list[tuple[str, dict[str, bytes]]]) -> Path
     }
     work.mkdir()
 
-    def git(*args):
+    def git(*args: str) -> None:
         subprocess.run(["git", "-C", str(work), *args], env=env, check=True, capture_output=True)
 
     git("init", "-q", "-b", "main")
@@ -179,7 +206,7 @@ def _make_repo(work: Path, releases: list[tuple[str, dict[str, bytes]]]) -> Path
 
 
 @pytest.fixture
-def hidden_repo(tmp_path):
+def hidden_repo(tmp_path: Path) -> Path:
     """v1.0.0 defines hidden_fn behind a body-level #if that tree-sitter cannot parse."""
     return _make_repo(
         tmp_path / "w", [("v1.0.0", {"hidden.c": HIDDEN_V1}), ("v1.1.0", {"hidden.c": HIDDEN_V2})]
@@ -190,7 +217,9 @@ class TestUncertainAbsence:
     """P4: a definition the parser may have missed is never reported as absent."""
 
     @pytest.mark.parametrize("strategy", ["lazy", "full"])
-    def test_partially_parsed_mention_is_uncertain(self, hidden_repo, tmp_path, strategy):
+    def test_partially_parsed_mention_is_uncertain(
+        self, hidden_repo: Path, tmp_path: Path, strategy: Literal["lazy", "full"]
+    ) -> None:
         with GitRepo(hidden_repo) as repo, CodeIndex(repo, tmp_path / "i.sqlite") as index:
             releases = ReleaseList.from_tags(repo.tags())
             tl = build_timeline(index, releases, "hidden_fn", strategy=strategy)
@@ -202,7 +231,7 @@ class TestUncertainAbsence:
         assert tl.uncertain_releases == ["v1.0.0"]
         assert tl.runs == [("v1.1.0", "v1.1.0")]
 
-    def test_clean_absence_is_certain(self, idx, releases):
+    def test_clean_absence_is_certain(self, idx: CodeIndex, releases: ReleaseList) -> None:
         tl = build_timeline(idx, releases, "memcpy")
         assert tl.uncertain_releases == []
 
@@ -268,10 +297,12 @@ class TestEdgeKinds:
     """Every edge kind of SPEC §11.4, with the evidence that justifies it."""
 
     @pytest.fixture
-    def graph(self, tmp_path):
+    def graph(self, tmp_path: Path) -> Iterator[tuple[CodeIndex, str]]:
         git_dir = _make_repo(tmp_path / "g", [("v1.0.0", {"graph.c": GRAPH_C})])
         with GitRepo(git_dir) as repo, CodeIndex(repo, tmp_path / "i.sqlite") as index:
-            yield index, repo.rev_parse("v1.0.0")
+            commit = repo.rev_parse("v1.0.0")
+            assert commit is not None
+            yield index, commit
 
     @pytest.mark.parametrize(
         ("caller", "kind", "note"),
@@ -284,7 +315,9 @@ class TestEdgeKinds:
             ("via_big", "none", None),
         ],
     )
-    def test_kinds(self, graph, caller, kind, note):
+    def test_kinds(
+        self, graph: tuple[CodeIndex, str], caller: str, kind: str, note: str | None
+    ) -> None:
         index, commit = graph
         result = edge(index, commit, caller, "release")
         assert result.kind == kind, result
@@ -295,12 +328,12 @@ class TestEdgeKinds:
             assert [e.note for e in result.evidence] == [note]
             assert result.evidence[0].path == "graph.c"
 
-    def test_indirect_needs_an_address_taken_callee(self, graph):
+    def test_indirect_needs_an_address_taken_callee(self, graph: tuple[CodeIndex, str]) -> None:
         index, commit = graph
         # log_it is never address-taken, so o->run(p) cannot be claimed to reach it.
         assert edge(index, commit, "via_pointer", "log_it").kind == "none"
 
-    def test_macro_edge_to_the_other_call_in_the_macro(self, graph):
+    def test_macro_edge_to_the_other_call_in_the_macro(self, graph: tuple[CodeIndex, str]) -> None:
         index, commit = graph
         assert edge(index, commit, "via_macro", "log_it").kind == "macro"
 
@@ -315,7 +348,7 @@ class TestCallGraph:
             ("hdr_get", "util_copy_value", "none"),
         ],
     )
-    def test_edges_at_v1_2_0(self, idx, caller, callee, kind):
+    def test_edges_at_v1_2_0(self, idx: CodeIndex, caller: str, callee: str, kind: str) -> None:
         result = edge(idx, EXPECTED["v1.2.0"], caller, callee)
         assert result.kind == kind, result
         if kind == "direct":
@@ -323,14 +356,14 @@ class TestCallGraph:
         else:
             assert "hdr_find_line" in result.caller_calls
 
-    def test_unknown_caller(self, idx):
+    def test_unknown_caller(self, idx: CodeIndex) -> None:
         result = edge(idx, EXPECTED["v1.2.0"], "hdr_decode_chunked_value", "memcpy")
         assert not result.caller_found
         assert result.kind == "none"
 
 
 class TestTraceForensics:
-    def test_genuine_trace_fits_its_version(self, idx):
+    def test_genuine_trace_fits_its_version(self, idx: CodeIndex) -> None:
         analysis = analyze_trace(
             idx, EXPECTED["v1.2.0"], _trace(REPORTS / "genuine_hdr_overflow.md")
         )
@@ -342,18 +375,18 @@ class TestTraceForensics:
         assert len(analysis.edges) == 3
 
     @pytest.mark.parametrize("tag", ["v1.1.0", "v1.2.1"])
-    def test_genuine_trace_does_not_fit_other_versions(self, idx, tag):
+    def test_genuine_trace_does_not_fit_other_versions(self, idx: CodeIndex, tag: str) -> None:
         analysis = analyze_trace(idx, EXPECTED[tag], _trace(REPORTS / "genuine_hdr_overflow.md"))
         assert analysis.ratio is not None
         assert analysis.ratio < 1.0
 
-    def test_v1_2_1_trace_fits_v1_2_1(self, idx):
+    def test_v1_2_1_trace_fits_v1_2_1(self, idx: CodeIndex) -> None:
         analysis = analyze_trace(
             idx, EXPECTED["v1.2.1"], _trace(ASAN / "02-vulnlab-heap-overflow-v1.2.1.txt")
         )
         assert analysis.ratio == 1.0
 
-    def test_fabricated_trace(self, idx):
+    def test_fabricated_trace(self, idx: CodeIndex) -> None:
         analysis = analyze_trace(
             idx, EXPECTED["v1.2.0"], _trace(REPORTS / "fabricated_hdr_overflow.md")
         )
@@ -372,7 +405,7 @@ class TestTraceEdgeCases:
     """Ambiguous paths, generated files and pathless frames (SPEC §11.4, §11.5)."""
 
     @pytest.fixture
-    def repo_commit(self, tmp_path):
+    def repo_commit(self, tmp_path: Path) -> Iterator[tuple[CodeIndex, str]]:
         files = {
             "a/util.c": b"int foo(void)\n{\n  return bar();\n}\n",
             "b/util.c": b"int bar(void)\n{\n  return 1;\n}\n",
@@ -380,9 +413,11 @@ class TestTraceEdgeCases:
         }
         git_dir = _make_repo(tmp_path / "t", [("v1.0.0", files)])
         with GitRepo(git_dir) as repo, CodeIndex(repo, tmp_path / "i.sqlite") as index:
-            yield index, repo.rev_parse("v1.0.0")
+            commit = repo.rev_parse("v1.0.0")
+            assert commit is not None
+            yield index, commit
 
-    def test_trace(self, repo_commit):
+    def test_trace(self, repo_commit: tuple[CodeIndex, str]) -> None:
         index, commit = repo_commit
         frames = (
             Frame(index=0, function="bar", path="/build/util.c", line=3, raw="#0 bar"),
@@ -415,20 +450,24 @@ class TestTraceEdgeCases:
         ("util_copy_value", "util_copy_value"),
     ],
 )
-def test_bare_function(name, bare):
+def test_bare_function(name: str, bare: str) -> None:
     assert bare_function(name) == bare
 
 
 class TestCli:
     runner = CliRunner()
 
-    def test_index(self, vulnlab_repo, tmp_path, monkeypatch):
+    def test_index(
+        self, vulnlab_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("NIKASHA_CACHE_DIR", str(tmp_path))
         result = self.runner.invoke(app, ["index", "--repo", str(vulnlab_repo), "--history"])
         assert result.exit_code == 0, result.output
         assert "v1.3.0" in result.output
 
-    def test_timeline_json_and_suggestions(self, vulnlab_repo, tmp_path, monkeypatch):
+    def test_timeline_json_and_suggestions(
+        self, vulnlab_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("NIKASHA_CACHE_DIR", str(tmp_path))
         result = self.runner.invoke(
             app, ["timeline", "util_copy_value", "--repo", str(vulnlab_repo), "--json"]
@@ -439,7 +478,9 @@ class TestCli:
         assert typo.exit_code == 0
         assert "did you mean: hdr_parse_line" in typo.output
 
-    def test_timeline_reports_uncertainty(self, hidden_repo, tmp_path, monkeypatch):
+    def test_timeline_reports_uncertainty(
+        self, hidden_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("NIKASHA_CACHE_DIR", str(tmp_path / "cache"))
         args = ["timeline", "hidden_fn", "--repo", str(hidden_repo)]
         text = self.runner.invoke(app, args, env={"COLUMNS": "160"})
@@ -450,7 +491,9 @@ class TestCli:
         assert data["uncertain_releases"] == ["v1.0.0"]
         assert data["presence"][0]["partial"] == ["hidden.c"]
 
-    def test_trace(self, vulnlab_repo, tmp_path, monkeypatch):
+    def test_trace(
+        self, vulnlab_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("NIKASHA_CACHE_DIR", str(tmp_path))
         args = [
             "trace",
@@ -464,7 +507,9 @@ class TestCli:
         missing = self.runner.invoke(app, args)
         assert missing.exit_code == 1
 
-    def test_offline_uncached_repo_is_a_clean_error(self, tmp_path, monkeypatch):
+    def test_offline_uncached_repo_is_a_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("NIKASHA_CACHE_DIR", str(tmp_path))
         result = self.runner.invoke(app, ["timeline", "x", "--repo", "https://example.org/a/b"])
         assert result.exit_code == 1

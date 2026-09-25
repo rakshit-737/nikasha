@@ -12,11 +12,11 @@ from nikasha.code.parser import parse_file
 FACTS = parse_fixture(Lang.JAVASCRIPT, "javascript/sample.js")
 
 
-def test_parses_cleanly():
+def test_parses_cleanly() -> None:
     assert_clean(FACTS)
 
 
-def test_symbols():
+def test_symbols() -> None:
     assert symbols(FACTS) == [
         ("function", "parseQuery", "parseQuery", 5, 7),
         ("function", "decodePair", "decodePair", 9, 12),
@@ -30,7 +30,7 @@ def test_symbols():
     ]
 
 
-def test_calls():
+def test_calls() -> None:
     assert calls(FACTS) == [
         ("parseQuery", "split", 6, True),
         ("parseQuery", "map", 6, True),
@@ -47,7 +47,7 @@ def test_calls():
     ]
 
 
-def test_nested_functions_and_callbacks():
+def test_nested_functions_and_callbacks() -> None:
     src = b"""function outer() {
   function inner() { return helper(); }
   [1, 2].forEach(function (x) { log(x); });
@@ -70,7 +70,7 @@ exports.make = function () { return outer(); };
     ]
 
 
-def test_jsx_file_parses():
+def test_jsx_file_parses() -> None:
     facts = parse_file(Lang.JAVASCRIPT, b"const App = () => <div>{render(1)}</div>;\n")
     assert_clean(facts)
     assert calls(facts) == [("App", "render", 1, False)]

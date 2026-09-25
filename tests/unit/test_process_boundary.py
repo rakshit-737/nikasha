@@ -53,11 +53,11 @@ def _violations(path: Path) -> list[str]:
     return found
 
 
-def test_source_tree_exists():
+def test_source_tree_exists() -> None:
     assert (SRC / "__init__.py").is_file()
 
 
-def test_only_wrappers_spawn_processes():
+def test_only_wrappers_spawn_processes() -> None:
     offenders = {
         str(p.relative_to(SRC)): v
         for p in sorted(SRC.rglob("*.py"))
@@ -66,7 +66,7 @@ def test_only_wrappers_spawn_processes():
     assert offenders == {}
 
 
-def test_detector_catches_known_patterns(tmp_path):
+def test_detector_catches_known_patterns(tmp_path: Path) -> None:
     sample = tmp_path / "bad.py"
     sample.write_text(
         "import subprocess\nimport os\nfrom os import system\nos.popen('x')\n",

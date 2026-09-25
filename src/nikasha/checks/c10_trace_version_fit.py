@@ -330,6 +330,9 @@ def _details(
         "best_frames_checked": checked,
         "perfect_releases": [n for n, f in scan.fits.items() if f.ratio >= PERFECT_FIT],
         "ratios": {name: _round(fit.ratio) for name, fit in scan.fits.items()},
+        # ``Result.to_json`` sorts object keys, which loses the release order of ``ratios``
+        # (``v1.10.0`` sorts before ``v1.9.0``); this list keeps it through a round trip.
+        "ratios_in_release_order": [[name, _round(fit.ratio)] for name, fit in scan.fits.items()],
         "releases_scored": len(scan.fits),
         "window_radius": scan.radius,
         "scan_complete": scan.complete,

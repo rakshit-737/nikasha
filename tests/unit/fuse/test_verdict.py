@@ -666,6 +666,64 @@ def test_an_llm_refutation_never_counts_as_a_corroborating_group() -> None:
     assert decision.label != "UNGROUNDED"
 
 
+@pytest.mark.parametrize("strength", [-0.5, -1.2, -3.0])
+def test_an_llm_refutation_never_blocks_grounded(strength: float) -> None:
+    """Rule 5's refutation gate reads deterministic evidence only (P2, ADR 0007).
+
+    With the threshold at -0.4 the default capped answer (-0.5) would veto GROUNDED if
+    the gate counted it; an uncapped item must not either.
+    """
+    items = [
+        ev("a", "C07", "contained", "snippets"),
+        ev("b", "C08", "all_consistent", "traces"),
+        ev("c", "C03", "defined_core", "symbols"),
+    ]
+    model = Evidence(
+        id="llm",
+        check_id="C20",
+        claim_ids=("claim-llm",),
+        outcome="REFUTES",
+        strength=strength,
+        group="llm",
+        summary="model review",
+        details={"outcome": "refuted"},
+        produced_by="llm",
+    )
+    limits = Thresholds(grounded_max_refutation=-0.4)
+    decision = verdict([*items, model], thresholds=limits)
+    assert decision.score >= limits.grounded_score
+    assert decision.label == "GROUNDED"
+    assert "llm" not in decision.key_evidence
+
+
+def test_a_deterministic_refutation_still_blocks_grounded_at_the_same_threshold() -> None:
+    items = [
+        ev("a", "C07", "contained", "snippets"),
+        ev("b", "C08", "all_consistent", "traces"),
+        ev("c", "C09", "missing_edge", "calls"),
+    ]
+    limits = Thresholds(grounded_max_refutation=-0.4)
+    assert STRENGTHS.get("C09", "missing_edge") <= limits.grounded_max_refutation
+    assert verdict(items, thresholds=limits).label != "GROUNDED"
+
+
 def test_rule_1_needs_a_supporting_deterministic_signature_match() -> None:
     errored = ev("repro", "C19", "signature_match", "repro", outcome="ERROR")
     assert verdict([errored, *SUPPORT_LIFT]).label != "REPRODUCED"
+
+
+def test_an_errored_c12_is_not_read_as_already_applied() -> None:
+    errored = Evidence(
+        id="c12-error",
+        check_id="C12",
+        claim_ids=("claim-patch",),
+        outcome="ERROR",
+        strength=0.0,
+        group="patch",
+        summary="apply failed to run",
+        details={},
+    )
+    assert outcome_key(errored) is None
+    decision = verdict([errored, *SUPPORT_LIFT])
+    assert not decision.capped
+    assert "c12-error" not in decision.key_evidence

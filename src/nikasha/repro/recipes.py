@@ -32,7 +32,10 @@ FILE_PLACEHOLDER = "{file}"
 
 _ID_CHARS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789-_")
 _PATH_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./+@")
+#: The same grammar as ``$defs.size`` in the schema and ``sandbox._SIZE_RE``.
 _SIZE_RE = re.compile(r"[0-9]{1,15}[kmgKMG]?")
+_DOCKERFILE_DIR = "docker/recipes/"
+_DOCKERFILE_SUFFIX = ".Dockerfile"
 
 Identifier = Annotated[str, Field(min_length=1, max_length=64)]
 
@@ -84,7 +87,13 @@ class RecipeImage(Model):
     @classmethod
     def _dockerfile(cls, value: str) -> str:
         _check_rel_path(value)
-        if not value.startswith("docker/recipes/") or not value.endswith(".Dockerfile"):
+        name = value.removeprefix(_DOCKERFILE_DIR)
+        if (
+            name == value
+            or "/" in name
+            or not name.endswith(_DOCKERFILE_SUFFIX)
+            or len(name) == len(_DOCKERFILE_SUFFIX)
+        ):
             raise ValueError("dockerfile must be docker/recipes/<name>.Dockerfile")
         return value
 
@@ -123,8 +132,19 @@ class RecipeBuild(Model):
 
 
 class RunKind(Model):
+    """One way to run a PoC.
+
+    ``attested_output`` says whether a crash report on stderr, together with the exit
+    status, can be attributed to the target. It is ``true`` only when the PoC input can
+    neither script the target (run commands, write files, pick its exit status) nor choose
+    what the target writes to stderr, e.g. a file parsed by a tool with no scripting
+    surface. It defaults to ``false``, and C19 never counts an unattested run as a
+    reproduction (it is treated like a ``c_harness`` run).
+    """
+
     compile: tuple[str, ...] | None = None
     cmd: tuple[str, ...] = Field(min_length=1)
+    attested_output: bool = False
 
     @model_validator(mode="after")
     def _placeholders(self) -> RunKind:
@@ -180,6 +200,55 @@ class Recipe(Model):
     @classmethod
     def _id_ok(cls, value: str) -> str:
         return _check_id(value)
+
+    @model_validator(mode="after")
+    def _sanitizers_abort(self) -> Recipe:
+        check_sanitizer_options(self)
+        return self
+
+
+#: ``-fsanitize=`` values and the runtime options each needs so that a report ends the
+#: process with SIGABRT (exit status 134), the only status C19 attributes to the target.
+_SANITIZER_OPTIONS: dict[str, tuple[str, dict[str, str]]] = {
+    "address": ("ASAN_OPTIONS", {"abort_on_error": "1"}),
+    "undefined": ("UBSAN_OPTIONS", {"abort_on_error": "1", "halt_on_error": "1"}),
+    "memory": ("MSAN_OPTIONS", {"abort_on_error": "1"}),
+}
+_FSANITIZE_RE = re.compile(r"-fsanitize=([a-z,_-]{1,200})")
+
+
+def _parse_options(value: str) -> dict[str, str]:
+    """``a=1:b=2`` (or space/comma separated, as the sanitizer runtimes accept); last wins."""
+    out: dict[str, str] = {}
+    for item in re.split(r"[:\s,]", value):
+        key, sep, val = item.partition("=")
+        if sep:
+            out[key] = val
+    return out
+
+
+def used_sanitizers(recipe: Recipe) -> set[str]:
+    """Sanitizers named by ``-fsanitize=`` in the build environment, steps or compile argv."""
+    texts = [*recipe.build.env.values(), *recipe.build.steps]
+    for kind in recipe.run.kinds.values():
+        texts.extend(kind.compile or ())
+    found: set[str] = set()
+    for text in texts:
+        for match in _FSANITIZE_RE.finditer(text):
+            found.update(match.group(1).split(","))
+    return found
+
+
+def check_sanitizer_options(recipe: Recipe) -> None:
+    """Refuse a native-sanitizer recipe whose run env lets a report exit other than 134."""
+    for name in sorted(used_sanitizers(recipe)):
+        if name not in _SANITIZER_OPTIONS:
+            continue
+        var, required = _SANITIZER_OPTIONS[name]
+        options = _parse_options(recipe.run.env.get(var, ""))
+        missing = [f"{k}={v}" for k, v in required.items() if options.get(k) != v]
+        if missing:
+            raise ValueError(f"-fsanitize={name} needs run.env.{var} with {' and '.join(missing)}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -279,10 +348,12 @@ __all__ = [
     "Recipe",
     "RecipeError",
     "RunKind",
+    "check_sanitizer_options",
     "default_recipes_dir",
     "find_recipe",
     "list_recipes",
     "load_recipe",
     "parse_recipe",
     "recipe_for_product",
+    "used_sanitizers",
 ]
