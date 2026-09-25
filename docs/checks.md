@@ -21,6 +21,10 @@ Two rules hold for every check:
 - **Absence is never proof** (P4). When history is incomplete, a file did not parse
   cleanly, or a path is generated, a check reports uncertainty rather than a refutation.
 
+Each check lists every outcome key it can record: the scored ones from the strengths table,
+and the ones read statically from its source. Outcomes marked *not scored* are NEUTRAL or
+ERROR results that move no score.
+
 
 ## Summary
 
@@ -58,9 +62,16 @@ Applies to: `version`
 
 | Outcome | Strength |
 |---|---|
+| `commit_not_in_clone` | — (not scored) |
 | `future_release` | -1.50 |
 | `gap_in_releases` | -1.00 |
+| `newer_than_all_releases` | — (not scored) |
+| `no_release_by_report_date` | — (not scored) |
 | `no_tags` | +0.00 |
+| `older_than_all_releases` | — (not scored) |
+| `prerelease_unmatched` | — (not scored) |
+| `range_boundary` | — (not scored) |
+| `ref_not_in_clone` | — (not scored) |
 | `resolves` | +0.20 |
 
 ## C02
@@ -73,11 +84,14 @@ Applies to: `file`, `line`, `trace`
 
 | Outcome | Strength |
 |---|---|
+| `absence_not_established` | — (not scored) |
+| `budget_expired` | — (not scored) |
 | `exists` | +0.50 |
 | `generated` | +0.00 |
 | `missing_here_present_elsewhere` | -0.80 |
 | `never_in_history` | -2.00 |
 | `never_in_history_core_multiplier` | +1.50 |
+| `outside_repository` | — (not scored) |
 
 ## C03
 
@@ -91,11 +105,16 @@ Applies to: `symbol`
 |---|---|
 | `absent_here_present_elsewhere` | -0.80 |
 | `absent_in_sampled_core` | -1.50 |
+| `budget_expired` | — (not scored) |
 | `defined` | +0.60 |
 | `defined_core` | +1.00 |
+| `generated` | — (not scored) |
+| `history_incomplete` | — (not scored) |
+| `in_history_not_released` | — (not scored) |
 | `never_in_history_core` | -3.00 |
 | `never_in_history_supporting` | -1.50 |
 | `referenced_only` | +0.00 |
+| `uncertain` | — (not scored) |
 
 ## C04
 
@@ -107,8 +126,11 @@ Applies to: `line`
 
 | Outcome | Strength |
 |---|---|
+| `generated` | — (not scored) |
 | `in_bounds` | +0.20 |
+| `not_regular_file` | — (not scored) |
 | `past_end` | -1.50 |
+| `permalink_elsewhere` | — (not scored) |
 
 ## C05
 
@@ -120,9 +142,18 @@ Applies to: `line`, `trace`
 
 | Outcome | Strength |
 |---|---|
+| `budget_expired` | — (not scored) |
+| `enclosing_function_named` | — (not scored) |
 | `fits_nearby_release` | -0.30 |
+| `function_name_too_long` | — (not scored) |
+| `function_not_defined` | — (not scored) |
+| `generated` | — (not scored) |
 | `in_function` | +1.00 |
+| `line_past_end` | — (not scored) |
+| `nearby_search_incomplete` | — (not scored) |
 | `outside_function` | -0.80 |
+| `parse_incomplete` | — (not scored) |
+| `range_overlaps_function` | — (not scored) |
 
 ## C06
 
@@ -136,9 +167,11 @@ Applies to: `line`
 |---|---|
 | `elsewhere_in_file` | -0.30 |
 | `exact` | +1.50 |
+| `generated` | — (not scored) |
 | `near_by_offset` | +0.80 |
 | `nowhere_in_history` | -2.00 |
 | `other_release_only` | -0.40 |
+| `search_failed` | — (not scored) |
 
 ## C07
 
@@ -151,10 +184,17 @@ Applies to: `snippet`
 | Outcome | Strength |
 |---|---|
 | `absent_everywhere` | -2.50 |
+| `budget_spent` | — (not scored) |
 | `contained` | +2.00 |
+| `found_in_history` | — (not scored) |
+| `generated` | — (not scored) |
+| `insufficient_containment` | — (not scored) |
 | `other_release_only` | -0.50 |
 | `partial` | +0.50 |
+| `ref_search_capped` | — (not scored) |
+| `search_incomplete` | — (not scored) |
 | `small_snippet_multiplier` | +0.30 |
+| `too_large` | — (not scored) |
 
 ## C08
 
@@ -167,9 +207,11 @@ Applies to: `trace`
 | Outcome | Strength |
 |---|---|
 | `all_consistent` | +2.00 |
+| `budget_expired` | — (not scored) |
 | `inconsistent` | -2.00 |
 | `mixed` | -0.50 |
 | `mostly_consistent` | +0.80 |
+| `no_checkable_frames` | — (not scored) |
 
 ## C09
 
@@ -185,6 +227,7 @@ Applies to: `trace`
 | `indirect_possible` | +0.00 |
 | `missing_edge` | -1.00 |
 | `missing_edge_cap` | -3.00 |
+| `truncated` | — (not scored) |
 
 ## C10
 
@@ -199,6 +242,8 @@ Applies to: `trace`
 | `claimed_release_fits` | +1.00 |
 | `no_release_fits` | -1.50 |
 | `other_release_fits` | -0.30 |
+| `partial_fit` | — (not scored) |
+| `scan_incomplete` | — (not scored) |
 
 ## C11
 
@@ -227,8 +272,12 @@ Applies to: `patch`
 | `already_applied` | +0.00 |
 | `applies_clean` | +1.50 |
 | `applies_with_fuzz` | +0.60 |
+| `context_elsewhere_in_file` | — (not scored) |
 | `context_not_found` | -1.80 |
+| `file_missing` | — (not scored) |
+| `generated` | — (not scored) |
 | `other_release_only` | -0.40 |
+| `search_incomplete` | — (not scored) |
 
 ## C13
 
@@ -252,9 +301,15 @@ Applies to: `option`
 
 | Outcome | Strength |
 |---|---|
+| `case_variant_only` | — (not scored) |
+| `generated` | — (not scored) |
+| `history_only` | — (not scored) |
+| `name_only` | — (not scored) |
 | `never_in_history` | -2.00 |
 | `other_release_only` | -0.50 |
 | `present` | +0.40 |
+| `search_failed` | — (not scored) |
+| `search_incomplete` | — (not scored) |
 
 ## C15
 
@@ -269,12 +324,22 @@ Applies to: `impact`, `reference`
 | `commit_exists` | +0.30 |
 | `commit_missing` | +0.00 |
 | `commit_touches_file` | +0.50 |
+| `compatible` | — (not scored) |
+| `crash_signal` | — (not scored) |
 | `cve_matches_product` | +0.30 |
 | `cve_not_found` | -0.30 |
 | `cve_other_product` | -1.00 |
 | `cve_rejected` | -0.50 |
 | `cwe_incompatible` | -0.40 |
+| `fetch_failed` | — (not scored) |
 | `foreign_repo` | -0.30 |
+| `no_bug_type` | — (not scored) |
+| `no_product` | — (not scored) |
+| `offline` | — (not scored) |
+| `unexpected_status` | — (not scored) |
+| `universal_cwe` | — (not scored) |
+| `unknown_cwe` | — (not scored) |
+| `unknown_project` | — (not scored) |
 
 ## C16
 
@@ -288,7 +353,11 @@ Applies to: `symbol`, `version`
 |---|---|
 | `consistent` | +0.30 |
 | `fixed_in_unchanged` | -0.60 |
+| `no_previous_release` | — (not scored) |
+| `previous_release_not_ancestor` | — (not scored) |
 | `range_predates_symbol` | -1.00 |
+| `symbol_not_defined` | — (not scored) |
+| `timeline_incomplete` | — (not scored) |
 
 ## C17
 
@@ -300,6 +369,7 @@ Applies to: `impact`
 
 | Outcome | Strength |
 |---|---|
+| `non_base_score` | — (not scored) |
 | `score_mismatch` | -0.60 |
 | `severity_mismatch` | -0.30 |
 | `vector_unparseable` | -0.30 |
@@ -328,9 +398,17 @@ Applies to: `behavior`, `impact`, `poc`, `symbol`, `trace`
 
 | Outcome | Strength |
 |---|---|
+| `crash_not_in_project` | — (not scored) |
+| `crash_unattributed` | — (not scored) |
+| `crash_uncompared` | — (not scored) |
+| `crash_unparsed` | — (not scored) |
 | `different_signature` | +0.50 |
+| `error` | — (not scored) |
+| `harness_unverified` | — (not scored) |
+| `infra_error` | — (not scored) |
 | `no_crash` | -0.50 |
 | `signature_match` | +6.00 |
+| `timeout` | — (not scored) |
 
 ## C20
 
@@ -342,7 +420,12 @@ Applies to: `behavior`
 
 | Outcome | Strength |
 |---|---|
+| `error` | — (not scored) |
 | `llm_cap` | +0.50 |
+| `refuted` | — (not scored) |
+| `skipped` | — (not scored) |
+| `supported` | — (not scored) |
+| `unclear` | — (not scored) |
 
 ## C21
 

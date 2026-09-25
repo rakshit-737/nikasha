@@ -239,19 +239,27 @@ def decide(  # noqa: PLR0911 - SPEC §14.3 is an ordered ladder; one return per 
             triggers=tuple(sorted({f"{e.check_id}:{outcome_key(e, table)}" for e in mismatches})),
         )
 
-    # Rule 5: GROUNDED needs a high score and no real refutation anywhere.
-    worst = min((item.strength for item in evidence), default=0.0)
+    # Rule 5: GROUNDED needs a high score and no real refutation anywhere. Only
+    # deterministic findings gate it: the LLM is advisory and never decisive in either
+    # direction (P2, ADR 0007), so a model's refutation cannot block GROUNDED.
+    worst = min(
+        (item.strength for item in evidence if item.produced_by == "deterministic"),
+        default=0.0,
+    )
     if score >= limits.grounded_score and worst > limits.grounded_max_refutation:
         return Decision(
             label="GROUNDED",
             score=score,
             confidence=confidence,
             rule="5: a high grounding score with no substantial refutation",
-            # Only findings that moved the score: an errored or neutral check is not
-            # evidence for GROUNDED (P6).
+            # Only deterministic findings that moved the score: an errored or neutral
+            # check, or a model's advisory answer, is not evidence for GROUNDED (P2, P6).
             key_evidence=tuple(
                 e.id
-                for e in sorted(scoring_evidence(evidence), key=lambda e: (-e.strength, e.id))[:5]
+                for e in sorted(
+                    (e for e in scoring_evidence(evidence) if e.produced_by == "deterministic"),
+                    key=lambda e: (-e.strength, e.id),
+                )[:5]
             ),
         )
 
