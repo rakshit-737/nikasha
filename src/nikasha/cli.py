@@ -621,10 +621,11 @@ def _llm_provider(spec: str | None, settings: _SettingsLike | None) -> object | 
     return provider
 
 
-#: Integration commands (SPEC §16). Each module exposes ``register(app)``. A module whose
-#: optional extra is missing still imports — it fails lazily, inside the command, with an
-#: "install nikasha[...]" message — so a *missing module* here is a packaging fault, which
-#: ``tests/unit/test_cli.py`` turns into a failure rather than a silently shorter CLI.
+#: Integration commands (SPEC §16), plus the repro (§13) and bench (§14) groups. Each module
+#: exposes ``register(app)``. A module whose optional extra is missing still imports — it fails
+#: lazily, inside the command, with an "install nikasha[...]" message — so a *missing module* here
+#: is a packaging fault, which ``tests/unit/test_cli.py`` turns into a failure rather than a
+#: silently shorter CLI.
 INTEGRATIONS = (
     "nikasha.integrations.lint",
     "nikasha.integrations.cve",
@@ -632,6 +633,8 @@ INTEGRATIONS = (
     "nikasha.integrations.gh_advisories",
     "nikasha.integrations.mcp_server",
     "nikasha.integrations.web",
+    "nikasha.repro.cli",
+    "nikasha.bench.cli",
 )
 
 

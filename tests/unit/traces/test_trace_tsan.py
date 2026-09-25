@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 The Nikasha Authors
 # SPDX-License-Identifier: Apache-2.0
-"""TSAN parser: API-contract tests here, real-fixture tests under `sandbox` (ADR 0009).
+"""TSAN parser: API-contract tests here, real-fixture tests skip until captured (ADR 0009).
 
 No hand-written TSAN traces are used (CLAUDE.md: trace fixtures are real output only). The
 fixture tests read `tests/fixtures/traces/tsan/`, which only
@@ -70,7 +70,6 @@ def _fixtures() -> list[Path]:
     return sorted(FIXTURES.glob("*.txt")) if FIXTURES.is_dir() else []
 
 
-@pytest.mark.sandbox
 def test_real_fixtures_parse():
     fixtures = _fixtures()
     if not fixtures:

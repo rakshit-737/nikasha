@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 The Nikasha Authors
 # SPDX-License-Identifier: Apache-2.0
-"""MSAN parser: API-contract tests here, real-fixture tests under `sandbox` (ADR 0009).
+"""MSAN parser: API-contract tests here, real-fixture tests skip until captured (ADR 0009).
 
 No hand-written MSAN traces are used (CLAUDE.md: trace fixtures are real output only). The
 fixture tests read `tests/fixtures/traces/msan/`, which only
@@ -71,7 +71,6 @@ def _fixtures() -> list[Path]:
     return sorted(FIXTURES.glob("*.txt")) if FIXTURES.is_dir() else []
 
 
-@pytest.mark.sandbox
 def test_real_fixtures_parse():
     fixtures = _fixtures()
     if not fixtures:
@@ -88,12 +87,18 @@ def test_real_fixtures_parse():
 
 
 @pytest.mark.sandbox
+@pytest.mark.network
 def test_capture_image_has_msan_runtime():
-    """Whether the capture image can link and run an MSan program (unknown until run)."""
+    """Whether the capture image can link and run an MSan program (unknown until run).
+
+    Marked ``network``: building the Fedora capture image downloads packages, so the
+    ``sandbox and not network`` CI job does not run it (ADR 0009).
+    """
     engine = sandbox.select_engine()
     image = "localhost/nikasha-capture:latest"
     if not sandbox.image_exists(engine, image):
-        pytest.fail(f"{image} is not built; build docker/capture/Containerfile first")
+        containerfile = Path(__file__).parents[3] / "docker" / "capture" / "Containerfile"
+        sandbox.build_image(engine, containerfile, containerfile.parent, image, online=True)
     script = (
         "printf 'int main(){int x;return x?1:0;}' >/work/m.c && "
         "clang -fsanitize=memory -g -o /work/m /work/m.c && /work/m"

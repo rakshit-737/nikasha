@@ -14,6 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- M5 sandbox reproduction: `nikasha repro` builds the project at the named ref in one
+  hardened container and runs the PoC in another (no network, read-only root, all
+  capabilities dropped, uid 65534). `nikasha recipes` lists, shows and validates recipes.
+  C19 compares the crash with the reported trace and never scores a crash in the
+  reporter's own harness, or a trace the PoC merely prints, as REPRODUCED.
+- M6 NikashaBench machinery: `nikasha bench run` and `calibrate`, manifests, mutation
+  operators, metrics and charts, runnable offline on the synthetic and vulnlab splits.
+- M8 release tooling (nothing published): release, docs and screenshots workflows with
+  SHA-pinned actions, `scripts/release_check.py`, a Zensical docs site built with
+  `--strict`, and a threat model.
+- LSan, MSan and TSan trace parsers, not yet registered (ADR 0009).
+
 - M7 integrations:
   - `nikasha lint`, a pre-submit mode for reporters with friendly wording and no verdict label.
   - `nikasha cve` (CVE JSON 5.x), `nikasha h1` and `nikasha gh-advisories` (read-only; they
@@ -59,6 +71,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `docs/checks.md`, generated from the registry by `scripts/gen_checks_doc.py`.
 
 ### Fixed
+
+- **False refutations found by line-level review of every check (P4).** C01 no longer
+  refutes pre-releases, variant lines, unreleased fixes or shallow-clone gaps; C02 checks
+  path history before "never existed"; C04 matches machine-prefixed and `../` paths; C05
+  does not refute without a neighbour search; C11 accepts genuine ASan output for
+  past-the-end accesses, paths with spaces, disclosed stack cuts and `<empty stack>`; C14
+  treats a failed history search as incomplete and does not refute a flag the code declares.
+- "and 1 others" in reporter questions now reads "and 1 other".
 
 - **A ReDoS in report intake.** The Java stack-frame pattern used `\s+` under
   `re.MULTILINE`, so the newline class and the per-line `^` anchor combined into a

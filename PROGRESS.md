@@ -15,10 +15,10 @@ The living build log. Milestones follow SPEC §22, plus **M3.5** from ADR 0003.
 | M3 Checks, fusion, CLI outputs | **done** (numbers below) |
 | M3.5 Early real-world gate (curl corpus vs. slopcheck) | not started |
 | M4 HTML report and media v1 | **done** (PNG captures need Playwright; CI is the source of truth) |
-| M5 Sandbox reproduction | not started |
-| M6 NikashaBench | not started |
+| M5 Sandbox reproduction | **built, not done**: sandbox tests pass locally on Docker against a stand-in image; done when `sandbox.yml` is green in CI with the real recipe image |
+| M6 NikashaBench | **machinery done** (S5/S6 offline); real splits wait on M3.5 corpus access |
 | M7 Integrations | **done** (network paths tested with stubs only; see below) |
-| M8 Launch polish and v0.1.0 | not started |
+| M8 Launch polish and v0.1.0 | **tooling done, not published**: release, docs and screenshots workflows, `release-check` passes; publishing needs the maintainer |
 | M9 Stretch | not started |
 
 ## M0: Bootstrap (2026-09-23)
@@ -317,7 +317,88 @@ The living build log. Milestones follow SPEC §22, plus **M3.5** from ADR 0003.
 - `[questions]` and `[ignore]` in `nikasha.toml` are validated but not yet consumed.
 - A line-level review of M3/M4 hit the session limit mid-run: 124 findings across C01-C09
   were raised but never verified (27 high, 1 critical, mostly P4 conservatism), and the other
-  29 review targets were never examined. The findings are being verified and fixed next.
+  29 review targets were never examined. Both are now closed (see "Reviews closed" below).
+
+## Reviews closed (2026-09-25)
+
+- The 124 C01-C09 findings were each verified and fixed or rejected, then re-reviewed
+  independently; three fixes the re-review rejected (C01, C04, C05) were redone (`03ddd47`).
+- Every module never reviewed before (C11, C13-C18, C20, C21, fusion, renderers, gitio) got a
+  line-level adversarial review, probe-confirmed fixes and an independent re-review; all six
+  groups approved. Most fixes remove false refutations (P4), e.g. C11 no longer calls
+  genuine ASan output self-contradictory for past-the-end accesses, paths with spaces,
+  disclosed stack cuts or `<empty stack>`; C14 treats a failed history search as incomplete.
+
+## M5: Sandbox reproduction (2026-09-25)
+
+### Done
+- `nikasha repro` and `nikasha recipes` (list, show, validate); recipe schema
+  `schema/recipe-v1.json` agreeing field by field with the pydantic model; recipes for
+  vulnlab, curl, libxml2 and sqlite; `docker/recipes/c-toolchain.Dockerfile`.
+- Build in the sandbox, then run the PoC in a second hardened container. Container output is
+  hostile: symlinks, devices and FIFOs in `/out` are refused, files are opened with
+  `O_NOFOLLOW` and lose setuid bits, scratch is removed even when uid 65534 locked it
+  (scrub container), and PoC stderr is shown with every control and bidi character escaped.
+- Signature matching and C19. Frames under `/poc/` never count as application frames;
+  c_harness output is not attested, so it yields at most `harness_unverified` (never
+  REPRODUCED); matching work is capped. `CheckContext.repro` carries a `ReproRun`.
+- `.github/workflows/sandbox.yml` runs `pytest -m "sandbox and not network"` on ubuntu.
+- ADR 0010: tmpfs mounts use `mode=1777` (found on the first real engine run).
+
+### Numbers
+- Sandbox suite on Docker 29.3.1 here: see the commit; unit tests for `repro/` and C19: 211.
+
+### Open
+- The real recipe image (Fedora) could not be built here: the network proxy refuses the
+  Fedora registries. Local sandbox runs used a stand-in image (gcc/clang on Debian/Ubuntu).
+  M5 is done only when `sandbox.yml` is green in CI with the real image.
+- Scriptable targets (sqlite `cli`/`file_input`, curl `cli`) can print a forged sanitizer
+  report and pick exit 134. Before C19 is enabled for recipes other than vulnlab, add a
+  per-kind `attested_output` flag (recipes, schema, `ReproRun`) and treat unattested kinds
+  like c_harness.
+- A native-sanitizer recipe must set `abort_on_error=1`; the loader does not enforce it yet.
+- C19 scores a timeout as `no_crash` (-0.5, per SPEC §12). For a report that claims a hang,
+  a timeout is a reproduction: maintainer decision.
+- No cap on total bytes or file count copied out of `/out`.
+
+## M6: NikashaBench (2026-09-25)
+
+### Done
+- `nikasha bench` (run, calibrate), manifests for S1-S3, S5 and S6, mutation
+  operators, metrics and charts; `bench/README.md` and `DATASET_CARD.md`.
+- Results are reproducible: the same case run twice gives the same record (tested), and C10
+  gives identical evidence for identical input. The root cause
+  of the earlier drift was C10's evidence ID, which depended on how far a timed scan got.
+- Generated results under `bench/results/*/` are gitignored.
+
+### Open
+- S1-S3 (real reports) wait on M3.5 corpus access and the HackerOne terms decision.
+- `bench calibrate` fits but does not write `calibration-vN.yaml`; no reliability diagram;
+  no `--repro` subset (§17.3).
+- C10 still has a wall-clock budget; a machine too slow to finish the scan changes the result.
+
+## M8: Launch tooling (2026-09-25)
+
+### Done
+- `release.yml` (PyPI via trusted publishing, GHCR image, attestations), `docs.yml`
+  (Zensical, `--strict`, deploys only when `vars.PAGES_ENABLED == 'true'`), `screenshots.yml`.
+  Every action is pinned to a peeled commit SHA. The artifacts published are exactly the
+  ones `scripts/release_check.py` inspected. Pre-releases are never tagged `latest`.
+- `scripts/release_check.py` passes on a real build (the sdist now includes `schema/`).
+- Docs site pages, `docs/THREAT_MODEL.md`, ADR 0008 (Zensical). `make docs` builds strictly.
+
+### Needs the maintainer
+- Create the PyPI trusted publisher and the `pypi` and `ghcr` environments with required
+  reviewers; enable Pages and set `PAGES_ENABLED`; allow Actions to open PRs for
+  `screenshots.yml`. Then tag v0.1.0.
+
+## LSan, MSan, TSan parsers (2026-09-25)
+
+- Parsers exist and are tested against realistic lines, but stay unregistered (ADR 0009):
+  no real fixture has been captured. `scripts/capture_sanitizer_fixtures.py` uses the real
+  sandbox API and validates output before writing anything, but its `BUGS` catalogue is
+  empty on purpose: each entry (public repo, vulnerable and fixed tags, fix SHA, trigger)
+  must be verified by a person. SPEC §9.5 asks for three per format.
 
 ## Carry-overs to later milestones
 

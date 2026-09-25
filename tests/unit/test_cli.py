@@ -84,10 +84,12 @@ def test_every_integration_registered_itself() -> None:
     the rest of the CLI keeps working; this test is what makes that tolerance safe.
     """
     assert MISSING_INTEGRATIONS == (), f"not registered: {MISSING_INTEGRATIONS}"
-    assert len(INTEGRATIONS) == 6
+    assert len(INTEGRATIONS) == 8
 
 
-@pytest.mark.parametrize("command", ["lint", "cve", "h1", "gh-advisories", "mcp", "serve"])
+@pytest.mark.parametrize(
+    "command", ["lint", "cve", "h1", "gh-advisories", "mcp", "serve", "repro", "recipes", "bench"]
+)
 def test_integration_commands_have_help(command: str) -> None:
     result = CliRunner().invoke(app, [command, "--help"])
     assert result.exit_code == 0, result.output
