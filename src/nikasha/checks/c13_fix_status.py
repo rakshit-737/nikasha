@@ -63,8 +63,9 @@ class FixStatus(BaseCheck):
             # A repository with a detached HEAD has no "since then" to report.
             return []
         ref_epoch = repo.commit_epoch(ctx.commit) or 0
-        loci = self._loci(ctx, claims)
-        out: list[Evidence] = []
+        failed: list[Evidence] = []
+        loci = self._loci(ctx, claims, failed)
+        out: list[Evidence] = list(failed)
         for path in sorted(loci):
             if ctx.expired():
                 break
@@ -81,11 +82,22 @@ class FixStatus(BaseCheck):
 
     # --- finding the locus --------------------------------------------------------------
 
-    def _loci(self, ctx: CheckContext, claims: Sequence[Claim]) -> dict[str, list[Claim]]:
-        """Real paths in the tree to the claims that point at them."""
+    def _loci(
+        self, ctx: CheckContext, claims: Sequence[Claim], failed: list[Evidence]
+    ) -> dict[str, list[Claim]]:
+        """Real paths in the tree to the claims that point at them.
+
+        A claim whose locus git could not look up gets a NEUTRAL ``search_failed`` finding in
+        ``failed`` and the other claims are still followed (P4).
+        """
         loci: dict[str, list[Claim]] = {}
         for claim in claims:
-            for path in self._paths(ctx, claim):
+            try:
+                paths = self._paths(ctx, claim)
+            except ExternalToolError as exc:
+                failed.append(self._search_failed(claim, exc))
+                continue
+            for path in paths:
                 loci.setdefault(path, []).append(claim)
         return loci
 
@@ -145,6 +157,23 @@ class FixStatus(BaseCheck):
         return commits, len(lines) > MAX_COMMITS
 
     # --- evidence ---------------------------------------------------------------------------
+
+    def _search_failed(self, claim: Claim, exc: ExternalToolError) -> Evidence:
+        name = claim.name if isinstance(claim, SymbolClaim) else getattr(claim, "path", claim.id)
+        return make_evidence(
+            check_id=CHECK_ID,
+            group=GROUP,
+            claims=[claim],
+            outcome="NEUTRAL",
+            strength=0.0,
+            summary=f"where {name} is defined could not be searched for: {exc},"
+            " so its later history is not listed",
+            details={
+                "outcome": "search_failed",
+                "incomplete": str(exc),
+                "history_complete": False,
+            },
+        )
 
     def _evidence(
         self,

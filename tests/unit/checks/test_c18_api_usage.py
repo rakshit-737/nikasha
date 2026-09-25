@@ -19,6 +19,7 @@ from check_helpers import MakeContext, claim
 from nikasha.checks.base import CheckContext, run_checks
 from nikasha.checks.c18_api_usage import ApiUsage, Site, absence_uncertainty, calls_inside
 from nikasha.code.facts import CallSite
+from nikasha.errors import ExternalToolError
 from nikasha.model.claims import BehaviorClaim
 from nikasha.model.evidence import Evidence
 
@@ -265,3 +266,48 @@ def test_only_behavior_claims_are_selected(ctx: CheckContext) -> None:
     check = ApiUsage()
     assert check.applies_to == frozenset({"behavior"})
     assert check.run(ctx, []) == []
+
+
+# --- a git failure is not an absence (P4) ---------------------------------------------------
+
+
+def test_a_failed_call_graph_search_is_neutral_for_that_claim_only(
+    make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from nikasha.checks import c18_api_usage as c18  # noqa: PLC0415
+
+    bad = _calls("hdr_parse_block", "util_copy_value")
+    good = _calls("hdr_parse_line", "util_copy_value")
+    from nikasha.code.callgraph import edge as real  # noqa: PLC0415
+
+    def edge(index: Any, commit: str, caller: str, callee: str) -> Any:
+        if caller == "hdr_parse_block":
+            raise ExternalToolError("git grep failed with exit code 128")
+        return real(index, commit, caller, callee)
+
+    monkeypatch.setattr(c18, "edge", edge)
+    by_claim = {e.claim_ids: e for e in _run(make_ctx, [bad, good])}
+    failed = by_claim[(bad.id,)]
+    assert failed.outcome == "NEUTRAL"
+    assert failed.strength == 0.0
+    assert failed.details["outcome"] == "search_failed"
+    assert "exit code 128" in failed.details["incomplete"]
+    assert failed.details["history_complete"] is False
+    assert by_claim[(good.id,)].outcome == "SUPPORTS"
+
+
+def test_a_failed_definition_search_is_neutral(
+    make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    c = _calls("hdr_parse_line", "util_copy_value")
+    ctx = make_ctx(claims=[c], tag="v1.2.0")
+
+    def definitions(*_: Any) -> Any:
+        raise ExternalToolError("git grep failed with exit code 128")
+
+    monkeypatch.setattr(ctx.index, "definitions", definitions)
+    (evidence,) = ApiUsage().run(ctx, [c])
+    assert evidence.outcome == "NEUTRAL"
+    assert evidence.strength == 0.0
+    assert evidence.details["outcome"] == "search_failed"
+    assert evidence.details["history_complete"] is False

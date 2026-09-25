@@ -293,6 +293,7 @@ Applies to: `file`, `line`, `symbol`
 | Outcome | Strength |
 |---|---|
 | `modified_after` | +0.00 |
+| `search_failed` | — (not scored) |
 
 ## C14
 
@@ -359,6 +360,7 @@ Applies to: `symbol`, `version`
 | `no_previous_release` | — (not scored) |
 | `previous_release_not_ancestor` | — (not scored) |
 | `range_predates_symbol` | -1.00 |
+| `search_failed` | — (not scored) |
 | `symbol_not_defined` | — (not scored) |
 | `timeline_incomplete` | — (not scored) |
 
@@ -390,6 +392,7 @@ Applies to: `behavior`
 | `calls_api` | +0.80 |
 | `does_not_call_api` | -1.20 |
 | `other_predicate` | +0.00 |
+| `search_failed` | — (not scored) |
 
 ## C19
 
@@ -426,6 +429,7 @@ Applies to: `behavior`
 | `error` | — (not scored) |
 | `llm_cap` | +0.50 |
 | `refuted` | — (not scored) |
+| `search_failed` | — (not scored) |
 | `skipped` | — (not scored) |
 | `supported` | — (not scored) |
 | `unclear` | — (not scored) |

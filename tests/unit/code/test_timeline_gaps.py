@@ -89,3 +89,34 @@ def test_history_notes_say_what_happened(
     assert words in note
     if isinstance(error, HistoryUnavailableError):
         assert "timed out" not in note
+
+
+@pytest.mark.parametrize("strategy", STRATEGIES)
+def test_a_failed_definition_search_marks_history_incomplete(
+    idx: CodeIndex, releases: ReleaseList, monkeypatch: pytest.MonkeyPatch, strategy: str
+) -> None:
+    """A git failure while looking for definitions is a gap, never an absence (P4)."""
+
+    def fail(*_: Any, **__: Any) -> Any:
+        raise ExternalToolError("git cat-file failed with exit code 128")
+
+    monkeypatch.setattr(idx, "definitions", fail)
+    monkeypatch.setattr(idx, "facts_at", fail)
+    tl = build_timeline(idx, releases, "util_copy_value", strategy=strategy)  # type: ignore[arg-type]
+    assert tl.history_complete is False
+    assert tl.never_in_history is None
+    assert not tl.ever_defined
+    assert any("exit code 128" in note for note in tl.notes)
+
+
+def test_an_unexpected_history_failure_marks_history_incomplete(
+    idx: CodeIndex, releases: ReleaseList, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def pickaxe(*_: Any, **__: Any) -> str | None:
+        raise ExternalToolError("git log failed with exit code 128")
+
+    monkeypatch.setattr(idx.repo, "pickaxe_first", pickaxe)
+    tl = build_timeline(idx, releases, "hdr_decode_chunked_value")
+    assert tl.history_complete is False
+    assert tl.never_in_history is None
+    assert any("exit code 128" in note for note in tl.notes)

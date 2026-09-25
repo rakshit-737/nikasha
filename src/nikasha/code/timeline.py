@@ -114,7 +114,13 @@ def build_timeline(
     finals = releases_subset if releases_subset is not None else releases.finals()
     gaps: list[str] = []
     build = _full if strategy == "full" else _lazy
-    presence = build(index, finals, name, gaps)
+    try:
+        presence = build(index, finals, name, gaps)
+    except ExternalToolError as exc:
+        # git could not read a release tree: no release's presence or absence is known, so
+        # nothing is recorded as absent and history is not searched either (P4).
+        presence = []
+        gaps.append(f"the search for definitions in releases failed: {exc}")
     timeline = Timeline(name, strategy, presence)
     if gaps:
         # A capped or failed mention search can hide a definition: no release's absence,
@@ -219,6 +225,11 @@ def _history(index: CodeIndex, timeline: Timeline, timeout: float) -> None:
     except HistoryTimeoutError:
         timeline.history_complete = False
         timeline.notes.append(f"history search timed out after {timeout:g}s")
+        return
+    except ExternalToolError as exc:
+        # Any other git failure is a gap too, never "not in history" (P4).
+        timeline.history_complete = False
+        timeline.notes.append(f"history search failed: {exc}")
         return
     timeline.first_commit_with_text = first
     timeline.never_in_history = first is None

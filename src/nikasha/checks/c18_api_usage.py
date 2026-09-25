@@ -31,6 +31,7 @@ from nikasha.checks.strengths import Strengths, default_strengths
 from nikasha.code.callgraph import Evidence as CallEvidence
 from nikasha.code.callgraph import edge
 from nikasha.code.facts import CallSite, FileFacts, SymbolDef
+from nikasha.errors import ExternalToolError
 from nikasha.model.claims import BehaviorClaim, Claim, ClaimKind
 from nikasha.model.evidence import CodeLocation, Evidence
 
@@ -130,8 +131,31 @@ class ApiUsage(BaseCheck):
                 continue
             if ctx.expired():  # `edge` greps for address-taken callees; the budget is real
                 break
-            out.append(self._one(ctx, claim))
+            try:
+                out.append(self._one(ctx, claim))
+            except ExternalToolError as exc:
+                # A definition or call-graph grep git could not finish is not "does not
+                # call": say so for this claim alone and keep judging the others (P4).
+                out.append(self._search_failed(claim, exc))
         return out
+
+    def _search_failed(self, claim: BehaviorClaim, exc: ExternalToolError) -> Evidence:
+        return make_evidence(
+            check_id=CHECK_ID,
+            group=GROUP,
+            claims=[claim],
+            outcome="NEUTRAL",
+            strength=0.0,
+            summary=f"the calls of {claim.subject_symbol} could not be searched for: {exc},"
+            " so nothing is concluded",
+            details={
+                "outcome": "search_failed",
+                "subject": claim.subject_symbol,
+                "predicate": claim.predicate,
+                "incomplete": str(exc),
+                "history_complete": False,
+            },
+        )
 
     def _one(self, ctx: CheckContext, claim: BehaviorClaim) -> Evidence:
         sites = _sites(ctx, claim.subject_symbol)

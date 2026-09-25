@@ -24,6 +24,7 @@ from nikasha.checks.c20_llm_review import (
     _sites,
 )
 from nikasha.checks.strengths import Strengths, default_strengths
+from nikasha.errors import ExternalToolError
 from nikasha.llm.guard import (
     BEGIN_MARKER,
     DEFAULT_TIMEOUT_S,
@@ -405,3 +406,27 @@ def test_a_line_number_shown_in_two_files_cites_both(ctx: CheckContext) -> None:
         ("a.c", 11, "int b;"),
         ("b.c", 11, "int c;"),
     ]
+
+
+def test_a_failed_definition_search_is_neutral_and_sends_nothing(
+    make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    provider = FakeProvider(SUPPORTED)
+    bad, good = _bounds("util_copy_value"), _bounds("hdr_parse_line")
+    ctx = _ctx(make_ctx, [bad, good], provider)
+    real = ctx.index.definitions
+
+    def definitions(commit: str, name: str) -> Any:
+        if name == "util_copy_value":
+            raise ExternalToolError("git grep failed with exit code 128")
+        return real(commit, name)
+
+    monkeypatch.setattr(ctx.index, "definitions", definitions)
+    by_subject = {e.details["subject"]: e for e in LlmReview().run(ctx, [bad, good])}
+    failed = by_subject["util_copy_value"]
+    assert failed.outcome == "NEUTRAL"
+    assert failed.strength == 0.0
+    assert failed.details["outcome"] == "search_failed"
+    assert "exit code 128" in failed.details["incomplete"]
+    assert failed.details["history_complete"] is False
+    assert len(provider.calls) == 1  # only the claim whose code could be read was sent

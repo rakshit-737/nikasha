@@ -12,12 +12,14 @@ from __future__ import annotations
 import dataclasses
 from typing import Any
 
+import pytest
 from check_helpers import MakeContext, claim
 
 from nikasha.checks.base import CheckContext, run_checks
 from nikasha.checks.c16_version_range_consistency import VersionRangeConsistency
 from nikasha.code.gitio import TagRef
 from nikasha.code.timeline import ReleasePresence
+from nikasha.errors import ExternalToolError
 from nikasha.model.claims import Claim, SymbolClaim, VersionClaim, VersionSpec
 from nikasha.model.evidence import Evidence
 from nikasha.resolve.refs import ReleaseList
@@ -420,3 +422,42 @@ class TestFixBaseline:
         )  # fmt: skip
         _ctx, evidence = _run(make_ctx, [version, core("hdr_parse_block")])
         assert evidence == []
+
+
+# --- a git failure is not an absence (P4) ---------------------------------------------------
+
+
+def test_a_failed_definition_search_never_refutes(
+    make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    version = affected("1.0.0", lower=spec("1.0.0"))
+    symbol = core("util_copy_value")
+    ctx = make_ctx(claims=[version, symbol], tag="v1.2.0")
+
+    def definitions(*_: Any) -> Any:
+        raise ExternalToolError("git grep failed with exit code 128")
+
+    monkeypatch.setattr(ctx.index, "definitions", definitions)
+    (evidence,) = VersionRangeConsistency().run(ctx, [version, symbol])
+    assert evidence.outcome == "NEUTRAL"
+    assert evidence.strength == 0.0
+    assert evidence.details["outcome"] == "search_failed"
+    assert "exit code 128" in evidence.details["incomplete"]
+    assert evidence.details["history_complete"] is False
+
+
+def test_a_failed_timeline_is_neutral_for_every_range(
+    make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    version = affected("1.0.0", lower=spec("1.0.0"))
+    symbol = core("util_copy_value")
+    ctx = make_ctx(claims=[version, symbol], tag="v1.2.0")
+
+    def timeline(_name: str) -> Any:
+        raise ExternalToolError("git grep failed with exit code 128")
+
+    monkeypatch.setattr(ctx, "timeline", timeline)
+    (evidence,) = VersionRangeConsistency().run(ctx, [version, symbol])
+    assert evidence.outcome == "NEUTRAL"
+    assert evidence.details["outcome"] == "search_failed"
+    assert evidence.details["history_complete"] is False

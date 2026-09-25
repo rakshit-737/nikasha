@@ -32,7 +32,7 @@ from nikasha.checks.strengths import Strengths, default_strengths
 from nikasha.code.gitio import CommandSink, GitRepo, safe_rev
 from nikasha.code.index import FileEntry
 from nikasha.code.timeline import ReleasePresence, Timeline
-from nikasha.errors import NikashaError
+from nikasha.errors import ExternalToolError, NikashaError
 from nikasha.model.claims import Claim, ClaimKind, SymbolClaim, VersionClaim
 from nikasha.model.evidence import CodeLocation, CommandRecord, Evidence
 from nikasha.resolve.refs import Release, spec_to_key
@@ -83,8 +83,9 @@ class VersionRangeConsistency(BaseCheck):
         ]
         if not ranges or not cores:
             return []  # a range is only checkable against a symbol, and vice versa
-        ranked = self._ranked_cores(ctx, cores)
-        if not ranked:
+        failed: dict[str, str] = {}
+        ranked = self._ranked_cores(ctx, cores, failed)
+        if not ranked and not failed:
             return []
         out: list[Evidence] = []
         for claim in ranges:
@@ -93,25 +94,30 @@ class VersionRangeConsistency(BaseCheck):
             if not _about_target(ctx, claim):
                 continue  # a version of some other product is not this repository's history
             judge = self._fixed_in if claim.relation == "fixed_in" else self._affected_range
-            evidence = self._any_core(ctx, claim, ranked, judge)
+            evidence = self._any_core(ctx, claim, ranked, judge, cores=cores, failed=failed)
             if evidence is not None:
                 out.append(evidence)
         return out
 
     def _ranked_cores(
-        self, ctx: CheckContext, cores: Sequence[SymbolClaim]
+        self, ctx: CheckContext, cores: Sequence[SymbolClaim], failed: dict[str, str]
     ) -> list[tuple[SymbolClaim, Timeline]]:
         """The core symbols with their timelines, earliest introduced first.
 
         Reports normally name one. When they name several, every claim is measured against
         all of them (see :meth:`_any_core`); the order only decides which finding is shown
-        when several say the same thing.
+        when several say the same thing. A core whose timeline git could not build is left
+        out and its reason recorded in ``failed`` (by claim id).
         """
         scored: list[tuple[tuple[int, int, int], SymbolClaim, Timeline]] = []
         for order, symbol in enumerate(cores):
             if ctx.expired():
                 break
-            timeline = ctx.timeline(symbol.name)
+            try:
+                timeline = ctx.timeline(symbol.name)
+            except ExternalToolError as exc:
+                failed[symbol.id] = str(exc)
+                continue
             introduced = _introduced(timeline)
             key = (1 if introduced is None else 0, introduced or 0, order)
             scored.append((key, symbol, timeline))
@@ -124,19 +130,30 @@ class VersionRangeConsistency(BaseCheck):
         claim: VersionClaim,
         ranked: Sequence[tuple[SymbolClaim, Timeline]],
         judge: Callable[[CheckContext, VersionClaim, SymbolClaim, Timeline], Evidence | None],
+        *,
+        cores: Sequence[SymbolClaim] = (),
+        failed: dict[str, str] | None = None,
     ) -> Evidence | None:
         """Judge ``claim`` against every core symbol, refuting only if all of them refute.
 
         The bug may sit in any function the report calls central. A range that starts
         before one of them existed says nothing while another one already existed, or
         while another one's history is incomplete; and a fix may land in any of them (P4).
-        Support wins over a refusal, and a refusal wins over a refutation.
+        Support wins over a refusal, and a refusal wins over a refutation. A core that git
+        could not search is a refusal, so it can never be outvoted into a refutation.
         """
-        found: list[Evidence] = []
+        found = [
+            self._search_failed(claim, core, (failed or {})[core.id])
+            for core in cores
+            if core.id in (failed or {})
+        ]
         for core, timeline in ranked:
             if ctx.expired():
                 return None
-            evidence = judge(ctx, claim, core, timeline)
+            try:
+                evidence = judge(ctx, claim, core, timeline)
+            except ExternalToolError as exc:
+                evidence = self._search_failed(claim, core, str(exc))
             if evidence is not None:
                 found.append(evidence)
         return min(found, key=lambda e: _OUTCOME_RANK.get(e.outcome, 1), default=None)
@@ -368,6 +385,15 @@ class VersionRangeConsistency(BaseCheck):
             f" {label} {claim.raw!r} is not judged"
         )
         return self._neutral(claim, core, summary, details, label="timeline_incomplete")
+
+    def _search_failed(self, claim: VersionClaim, core: SymbolClaim, reason: str) -> Evidence:
+        """A P4 refusal: git could not finish a search this judgement needs."""
+        summary = (
+            f"{core.name} could not be searched for: {reason}, so the claimed"
+            f" {LABELS[claim.relation]} {claim.raw!r} is not judged"
+        )
+        details = {"incomplete": reason, "history_complete": False}
+        return self._neutral(claim, core, summary, details, label="search_failed")
 
     def _neutral(
         self,

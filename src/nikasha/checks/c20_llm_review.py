@@ -32,6 +32,7 @@ from typing import Any
 from nikasha.checks.base import BaseCheck, CheckContext, make_evidence, register
 from nikasha.checks.strengths import Strengths, default_strengths
 from nikasha.code.facts import SymbolDef
+from nikasha.errors import ExternalToolError
 from nikasha.llm.guard import (
     DEFAULT_MAX_TOKENS,
     DEFAULT_TIMEOUT_S,
@@ -124,9 +125,29 @@ class LlmReview(BaseCheck):
     def _one(
         self, ctx: CheckContext, provider: LLMProvider, claim: BehaviorClaim, cap: float
     ) -> Evidence:
-        sites = _sites(ctx, claim.subject_symbol)
-        locations = [ctx.location(path, s.start_line, s.end_line) for path, s in sites]
         subject = claim.subject_symbol
+        try:
+            sites = _sites(ctx, subject)
+        except ExternalToolError as exc:
+            # The definition could not be looked up: nothing is sent and nothing is concluded
+            # (P4). Deterministic, so not marked as produced by the model.
+            return make_evidence(
+                check_id=CHECK_ID,
+                group=GROUP,
+                claims=[claim],
+                outcome="NEUTRAL",
+                strength=0.0,
+                summary=f"{subject} could not be searched for: {exc}, so there is nothing for"
+                " the model to review",
+                details={
+                    "outcome": "search_failed",
+                    "subject": subject,
+                    "predicate": claim.predicate,
+                    "incomplete": str(exc),
+                    "history_complete": False,
+                },
+            )
+        locations = [ctx.location(path, s.start_line, s.end_line) for path, s in sites]
         if not sites:
             return self._skipped(
                 claim,

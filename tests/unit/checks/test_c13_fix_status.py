@@ -9,6 +9,7 @@ vulnlab's ``main`` is linear, so at ``v1.2.0`` exactly two later commits touch
 from __future__ import annotations
 
 import subprocess
+from typing import Any
 
 import pytest
 from check_helpers import MakeContext, claim
@@ -16,6 +17,7 @@ from check_helpers import MakeContext, claim
 from nikasha.checks import c13_fix_status as c13
 from nikasha.checks.base import run_checks
 from nikasha.checks.c13_fix_status import FixStatus
+from nikasha.errors import ExternalToolError
 from nikasha.model.claims import Claim, FileClaim, LineClaim, SymbolClaim
 from nikasha.model.evidence import Evidence
 
@@ -224,3 +226,31 @@ def test_a_capped_log_with_one_later_commit_says_what_more_there_may_be(
     assert evidence.summary.endswith(
         "and possibly more later commits on main, which may already be fixed"
     )
+
+
+# --- a git failure is not an absence (P4) ---------------------------------------------------
+
+
+def test_a_failed_definition_search_is_neutral_for_that_claim_only(
+    make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bad = claim(SymbolClaim, name="hdr_parse_line")
+    good = claim(FileClaim, path="src/util.c")
+    ctx = make_ctx(claims=[bad, good], tag="v1.2.0")
+    real = ctx.index.definitions
+
+    def definitions(commit: str, name: str) -> Any:
+        if name == "hdr_parse_line":
+            raise ExternalToolError("git grep failed with exit code 128")
+        return real(commit, name)
+
+    monkeypatch.setattr(ctx.index, "definitions", definitions)
+    evidence = FixStatus().run(ctx, [bad, good])
+    failed = [e for e in evidence if e.details["outcome"] == "search_failed"]
+    assert len(failed) == 1
+    assert failed[0].claim_ids == (bad.id,)
+    assert failed[0].outcome == "NEUTRAL"
+    assert failed[0].strength == 0.0
+    assert "exit code 128" in failed[0].details["incomplete"]
+    assert failed[0].details["history_complete"] is False
+    assert any(e.details["outcome"] == "modified_after" for e in evidence)
