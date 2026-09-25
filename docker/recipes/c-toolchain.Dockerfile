@@ -8,7 +8,7 @@
 # The base image is the same pinned Fedora digest as docker/capture/Containerfile.
 # UNVERIFIED: this image has not been built on the development machine (no container
 # engine there); the sandbox CI job is the first place it is built.
-FROM registry.fedoraproject.org/fedora:44@sha256:b4488a77fd2b96513fc8c18b502df7fbf19dad9e77d9a430c0163c574654822c
+FROM registry.fedoraproject.org/fedora:44@sha256:94e175d9796d3582d4d3cdcff1004bd67cc51dc45df452d3b16f76f071c7c487
 
 RUN dnf install -y --setopt=install_weak_deps=False \
         clang compiler-rt llvm libasan libubsan binutils make \
