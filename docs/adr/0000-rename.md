@@ -10,7 +10,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## Context
 
-[`SPEC.md`](../../SPEC.md) was written under the working name **Pramaan** (प्रमाण, "proof").
+[`SPEC.md`](https://github.com/rakshit-737/nikasha/blob/main/SPEC.md) was written under the working name **Pramaan** (प्रमाण, "proof").
 Before the first commit, the maintainer renamed the project **Nikasha** (निकष,
 "touchstone": the stone against which gold is rubbed to test its purity). The M0 check
 found that `pramaan` clashes with an existing, government-backed tool

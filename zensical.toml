@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 The Nikasha Authors
 # SPDX-License-Identifier: Apache-2.0
 #
-# Documentation site (ADR 0008). Build: uvx zensical==0.0.64 build  (--strict fails until the ADR 0000 SPEC.md link is fixed)
+# Documentation site (ADR 0008). Build: uvx zensical==0.0.64 build --strict
 
 [project]
 site_name = "Nikasha"
@@ -38,6 +38,7 @@ nav = [
     { "0007 Fusion decisions" = "adr/0007-fusion-decisions.md" },
     { "0008 Docs site" = "adr/0008-docs-site.md" },
     { "0009 LSan, MSan, TSan" = "adr/0009-lsan-msan-tsan.md" },
+    { "0010 Sandbox tmpfs mode" = "adr/0010-sandbox-tmpfs-mode.md" },
   ] },
 ]
 

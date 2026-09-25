@@ -51,8 +51,10 @@ placeholders: ## Fail on placeholder text in README.md and docs/
 bench: ## NikashaBench (arrives in M3.5/M6)
 	@echo "bench: not yet implemented (M3.5/M6)"; exit 1
 
-docs: ## Documentation site (arrives in M8)
-	@echo "docs: not yet implemented (M8)"; exit 1
+ZENSICAL_VERSION ?= 0.0.64
+
+docs: ## Documentation site, strict build (ADR 0008)
+	uvx "zensical==$(ZENSICAL_VERSION)" build --strict
 
 screenshots: ## Regenerate every README/docs image from real runs (SPEC §21.5)
 	$(UV) run python scripts/make_screenshots.py

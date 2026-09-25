@@ -157,7 +157,6 @@ def _complete_wheel() -> list[str]:
         "nikasha/render/html/page.py",
         "nikasha/code/queries/c.scm",
         "nikasha/integrations/web/templates/base.html",
-        "nikasha/schema/result-v1.json",
     ]
 
 
@@ -215,3 +214,57 @@ def test_prereleases_are_never_tagged_latest() -> None:
     for tag in ("v0.1.0.dev0", "v1.0.0rc1", "v1.0.0a1", "v1.0.0b2"):
         assert not pattern.match(tag)
     assert pattern.match("v1.2.3")
+
+
+def test_ci_actions_are_pinned_by_full_sha_too() -> None:
+    text = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    uses = [m for m in map(_USES_LINE.match, text.splitlines()) if m]
+    assert uses
+    for match in uses:
+        assert _SHA_PIN.match(match.group(1)), match.group(0)
+        assert match.group(2), f"missing version comment: {match.group(0)}"
+
+
+def test_docs_build_is_strict() -> None:
+    runs = [str(s.get("run", "")) for _, s in _steps(_load("docs.yml"))]
+    assert any("zensical" in r and r.rstrip().endswith("build --strict") for r in runs)
+
+
+def test_docs_never_link_outside_the_docs_dir() -> None:
+    # A relative Markdown link that climbs out of docs/ aborts `zensical build --strict`.
+    escape = re.compile(r"\]\((?:\.\./){1,20}[^)\s]{0,300}?\.md[)#]")
+    for page in (ROOT / "docs").rglob("*.md"):
+        depth = len(page.relative_to(ROOT / "docs").parts) - 1
+        for m in escape.finditer(page.read_text(encoding="utf-8")):
+            ups = m.group(0).count("../")
+            assert ups <= depth, f"{page}: link leaves docs/"
+
+
+def test_nav_lists_sandbox_and_every_adr_and_concepts_links_sandbox() -> None:
+    nav = (ROOT / "zensical.toml").read_text(encoding="utf-8")
+    assert '"sandbox.md"' in nav
+    for adr in sorted((ROOT / "docs" / "adr").glob("*.md")):
+        assert f'"adr/{adr.name}"' in nav, adr.name
+    concepts = (ROOT / "docs" / "concepts.md").read_text(encoding="utf-8")
+    assert "](sandbox.md)" in concepts
+
+
+def test_threat_model_names_every_online_egress() -> None:
+    text = (ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8")
+    assert "raw.githubusercontent.com" in text
+    assert "CVE IDs a report cites are disclosed" in text
+
+
+def test_release_documents_required_reviewers_and_screenshots_pr_caveats() -> None:
+    release = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert "required reviewers" in release
+    shots = (ROOT / ".github" / "workflows" / "screenshots.yml").read_text(encoding="utf-8")
+    assert "Allow GitHub" in shots and "does not" in shots
+
+
+def test_release_check_requires_the_schema_in_the_sdist_not_the_wheel() -> None:
+    rc = _release_check()
+    assert not any("schema" in p for p in rc.REQUIRED_IN_WHEEL)
+    good = ["nikasha-1.2.3/PKG-INFO", "nikasha-1.2.3/schema/result-v1.json"]
+    assert rc.check_sdist_members(good, "1.2.3") == []
+    assert rc.check_sdist_members(good[:1], "1.2.3") == ["sdist is missing schema/result-v1.json"]

@@ -28,11 +28,13 @@ the same team. Both were checked on 2026-09-24 on this machine (Windows 11, uv 0
 
 ## Verification
 
-On 2026-09-24, `uvx zensical==0.0.64 build` (non-strict) built the site with one warning:
-`docs/adr/0000-rename.md` links `../../SPEC.md`, which is outside `docs/`. `uvx
-zensical==0.0.64 build --strict` aborts on that same issue (`RuntimeError: Aborted because
---strict flag is set`). The docs workflow therefore builds without `--strict` until that
-link is fixed.
+On 2026-09-24, `uvx zensical==0.0.64 build` built the site with one warning:
+`docs/adr/0000-rename.md` linked `../../SPEC.md`, which is outside `docs/`, and
+`uvx zensical==0.0.64 build --strict` aborted on it (`RuntimeError: Aborted because
+--strict flag is set`). On 2026-09-25 that link was changed to point at `SPEC.md` on
+GitHub, and `uvx zensical==0.0.64 build --strict` then finished with exit code 0 and
+"No issues found" (Linux, uv 0.12). The docs workflow builds with `--strict`, so a broken
+link fails CI.
 
 ## Decision
 
@@ -50,12 +52,12 @@ the pinned version is recorded below and bumped deliberately.
 - A new dev dependency, `zensical` (pinned `==0.0.64`), belongs in the `docs` dependency
   group of `pyproject.toml` with a row in ADR 0002. Until then the site builds with
   `uvx zensical==0.0.64 build`.
-- `make docs` should run `uv run zensical build` (add `--strict` once the ADR 0000 link
-  is fixed; the Makefile target is still a
+- `make docs` should run `uv run zensical build --strict` (the Makefile target is still a
   stub; wiring it is a separate change).
-- `.github/workflows/docs.yml` builds the site on every push to `main` and deploys it with
+- `.github/workflows/docs.yml` builds the site strictly on every push and pull request, and deploys it from `main` with
   `actions/upload-pages-artifact` and `actions/deploy-pages`. Deployment stays inert until
   the maintainer enables Pages (`gh api -X POST repos/{owner}/{repo}/pages -f
-  build_type=workflow`), which is a repository-setting change that needs their approval.
+  build_type=workflow`), and sets the repository variable `PAGES_ENABLED=true`; the deploy job is skipped
+  until then. Both are repository-setting changes that need their approval.
 - If Zensical breaks the build in a way a pin cannot fix, the fallback is Material for
   MkDocs with an equivalent `mkdocs.yml`; that switch needs a new ADR.

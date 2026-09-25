@@ -43,7 +43,12 @@ REQUIRED_IN_WHEEL: tuple[str, ...] = (
     "nikasha/render/html/*.py",
     "nikasha/code/queries/*.scm",
     "nikasha/integrations/web/templates/*.html",
-    "nikasha/*schema*/result-v1.json",
+)
+# Globs inside the sdist, relative to its top directory. The JSON Schema is a repository
+# file referenced by URL (SPEC §6, ``model.result.SCHEMA_URL``), not package data.
+REQUIRED_IN_SDIST: tuple[str, ...] = (
+    "PKG-INFO",
+    "schema/result-v1.json",
 )
 # Globs that must match nothing in the wheel.
 FORBIDDEN_IN_WHEEL: tuple[str, ...] = (
@@ -80,6 +85,17 @@ def check_wheel_members(names: list[str]) -> list[str]:
         if bad:
             failures.append(f"wheel contains {pattern}: {', '.join(bad[:5])}")
     return failures
+
+
+def check_sdist_members(names: list[str], version: str) -> list[str]:
+    """Return failures for files the sdist must carry (names include the top directory)."""
+    top = f"nikasha-{version}/"
+    rel = [n[len(top) :] for n in names if n.startswith(top)]
+    return [
+        f"sdist is missing {pattern}"
+        for pattern in REQUIRED_IN_SDIST
+        if not any(fnmatch.fnmatchcase(n, pattern) for n in rel)
+    ]
 
 
 def check_metadata(meta_text: str, version: str) -> list[str]:
@@ -119,6 +135,7 @@ def _inspect(wheel: Path, sdist: Path, version: str) -> list[str]:
             failures.append("wheel declares no 'nikasha' console script")
     print(f"wheel members: {len(names)}")
     with tarfile.open(sdist) as tf:
+        failures += check_sdist_members(tf.getnames(), version)
         member = tf.extractfile(f"nikasha-{version}/PKG-INFO")
         if member is None:
             failures.append("sdist has no PKG-INFO")

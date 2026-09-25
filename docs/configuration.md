@@ -12,7 +12,7 @@ exclude paths from judgement, and switch the optional LLM on. Every key is optio
 default listed for each key below is what the tool uses when the key is absent, and a file
 with no keys at all is a complete, working configuration.
 
-A commented copy to start from is in [`examples/nikasha.toml`](../examples/nikasha.toml).
+A commented copy to start from is in [`examples/nikasha.toml`](https://github.com/rakshit-737/nikasha/blob/main/examples/nikasha.toml).
 
 ## Where the file is looked for
 

@@ -102,6 +102,7 @@ packages = ["src/nikasha"]
 [tool.hatch.build.targets.sdist]
 include = [
   "src/",
+  "schema/",
   "tests/",
   "LICENSE",
   "NOTICE",
@@ -178,7 +179,7 @@ show_missing = true
 skip_covered = true
 
 [tool.codespell]
-skip = "*.lock,*.svg,LICENSES/*,.git,.venv,SPEC.md,*/fixtures/tags/*"
+skip = "*.lock,*.svg,LICENSES/*,.git,.venv,SPEC.md,*/fixtures/tags/*,./site"
 ignore-words-list = "nd,cna"
 
 [dependency-groups]
