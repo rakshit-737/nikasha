@@ -516,7 +516,7 @@ def test_override_environment_matches_the_plain_one_for_honest_templates() -> No
     sandboxed = override_environment().from_string(source).render(context)
     plain = plain_environment().from_string(source).render(context)
     assert sandboxed == plain
-    assert "and 1 others" in sandboxed
+    assert "and 1 other " in sandboxed
     assert "0123456789ab?" in sandboxed
     with pytest.raises(Exception, match="undefined"):
         override_environment().from_string("{{ nope }}").render()
