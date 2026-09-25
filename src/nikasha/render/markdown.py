@@ -515,8 +515,8 @@ def shell_arg(value: str) -> str:
         if char in _ANSI_C_ESCAPES:
             out.append(_ANSI_C_ESCAPES[char])
         elif _invisible(char):
-            code = ord(char)
-            out.append(f"\\x{code:02x}" if char.isascii() else f"\\U{code:08x}")
+            # UTF-8 bytes as \xHH: bash 3.2 (macOS /bin/bash) has no \u or \U escapes.
+            out.extend(f"\\x{byte:02x}" for byte in char.encode("utf-8"))
         else:
             out.append(char)
     return "$'" + "".join(out) + "'"
