@@ -38,7 +38,7 @@ def test_sanitize_name(name, expected):
     assert sanitize_name(name) == expected
 
 
-def test_sanitize_name_length_and_dedup():
+def test_sanitize_name_length_and_dedup() -> None:
     taken: set[str] = set()
     long_name = "x" * 300 + ".txt"
     first = sanitize_name(long_name, taken)

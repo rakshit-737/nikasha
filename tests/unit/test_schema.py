@@ -14,13 +14,13 @@ gen_schema = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(gen_schema)
 
 
-def test_committed_schema_is_current():
+def test_committed_schema_is_current() -> None:
     assert gen_schema.main(["gen_schema.py", "--check"]) == 0, (
         "schema/result-v1.json drifted from the models; run `uv run python scripts/gen_schema.py`"
     )
 
 
-def test_schema_describes_every_claim_kind():
+def test_schema_describes_every_claim_kind() -> None:
     schema = json.loads((ROOT / "schema" / "result-v1.json").read_text(encoding="utf-8"))
     defs = schema["$defs"]
     for name in ("SymbolClaim", "TraceClaim", "PatchClaim", "VersionClaim", "Evidence", "Verdict"):

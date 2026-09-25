@@ -45,7 +45,7 @@ def test_attribute_macros_are_blanked(src, expected):
     assert n == 1
 
 
-def test_two_capitalised_words_keep_one_as_the_type():
+def test_two_capitalised_words_keep_one_as_the_type() -> None:
     out, n = _blanked(b"static UINT32 WINAPI win(void)\n{\n}\n")
     assert n == 1
     assert out == "static        WINAPI win(void)\n{\n}\n"
@@ -74,7 +74,7 @@ def test_other_capitalised_words_are_left_alone(src):
     assert out == src.decode()
 
 
-def test_blanking_is_deterministic_and_idempotent():
+def test_blanking_is_deterministic_and_idempotent() -> None:
     src = b"static void A_ATTR(1) f(void)\n{\n}\nstatic int B_NOINLINE g(int x)\n{\n}\n"
     first, n = blank_attribute_macros(src)
     assert n == 2
@@ -122,7 +122,7 @@ int after(void)
 """
 
 
-def test_parser_recovers_functions_behind_attribute_macros():
+def test_parser_recovers_functions_behind_attribute_macros() -> None:
     facts = parse_file(Lang.C, LIBXML_STYLE)
     assert [(s.name, s.start_line, s.end_line) for s in facts.symbols] == [
         ("xmlErrValid", 1, 6),
@@ -141,14 +141,14 @@ def test_parser_recovers_functions_behind_attribute_macros():
     assert facts.enclosing(4).name == "xmlErrValid"  # type: ignore[union-attr]
 
 
-def test_clean_files_are_never_rewritten():
+def test_clean_files_are_never_rewritten() -> None:
     # `static BOOL flag(void)` parses cleanly, so the blanked text is never used.
     facts = parse_file(Lang.C, b"static BOOL flag(void)\n{\n    return 1;\n}\n")
     assert facts.parsed_ok
     assert facts.notes == ()
 
 
-def test_blanking_is_kept_only_when_it_helps():
+def test_blanking_is_kept_only_when_it_helps() -> None:
     # A body-level `#if` breaks braces whatever we do; no macro is blanked, nothing changes.
     src = b"int f(int *d)\n{\n#if V\n  if(d[0]) {\n#else\n  if(d[1]) {\n#endif\n  }\n}\n"
     facts = parse_file(Lang.C, src)

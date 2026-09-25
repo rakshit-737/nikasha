@@ -40,7 +40,7 @@ def test_unknown(path):
     assert detect_language(path) is None
 
 
-def test_plain_header_is_c():
+def test_plain_header_is_c() -> None:
     head = b"#ifndef X_H\n#define X_H\nstruct s { int a; };\nint f(void);\n#endif\n"
     assert detect_language("include/x.h", head) is Lang.C
 
@@ -59,7 +59,7 @@ def test_header_with_cpp_constructs_is_cpp(head):
     assert detect_language("include/x.h", head) is Lang.CPP
 
 
-def test_header_override_from_config():
+def test_header_override_from_config() -> None:
     assert detect_language("include/x.h", b"int f(void);\n", headers_are_cpp=True) is Lang.CPP
 
 
@@ -78,7 +78,7 @@ def test_shebang(head, lang):
     assert detect_language("bin/tool", head) is lang
 
 
-def test_shebang_does_not_override_extension():
+def test_shebang_does_not_override_extension() -> None:
     assert detect_language("tool.rb", b"#!/usr/bin/env python\n") is Lang.RUBY
 
 
@@ -90,5 +90,5 @@ def test_unknown_or_garbage_script(head):
     assert detect_language("bin/tool", head) is None
 
 
-def test_garbage_header_is_still_c():
+def test_garbage_header_is_still_c() -> None:
     assert detect_language("x.h", b"\xff\xfe\x00\x00" * 1000) is Lang.C

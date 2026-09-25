@@ -13,13 +13,13 @@ FACTS = parse_fixture(Lang.TYPESCRIPT, "typescript/sample.ts")
 TSX = parse_fixture(Lang.TSX, "typescript/sample.tsx")
 
 
-def test_parses_cleanly():
+def test_parses_cleanly() -> None:
     assert_clean(FACTS)
     assert_clean(TSX)
     assert TSX.lang == "tsx"
 
 
-def test_symbols():
+def test_symbols() -> None:
     assert symbols(FACTS) == [
         ("type", "Token", "Token", 3, 6),
         ("type", "Kind", "Kind", 8, 8),
@@ -34,7 +34,7 @@ def test_symbols():
     assert flags(FACTS, "Lexer.create") == {"static"}
 
 
-def test_calls():
+def test_calls() -> None:
     assert calls(FACTS) == [
         ("tokenize", "split", 16, True),
         ("tokenize", "map", 16, True),
@@ -44,7 +44,7 @@ def test_calls():
     ]
 
 
-def test_tsx():
+def test_tsx() -> None:
     assert symbols(TSX) == [
         ("type", "Props", "Props", 5, 5),
         ("function", "Greeting", "Greeting", 7, 9),
@@ -54,7 +54,7 @@ def test_tsx():
     assert calls(TSX) == [("Greeting", "formatName", 8, False), ("Panel", "trim", 12, True)]
 
 
-def test_namespace_and_abstract_class():
+def test_namespace_and_abstract_class() -> None:
     src = b"""namespace Geo {
   export abstract class Shape {
     abstract area(): number;

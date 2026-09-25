@@ -32,30 +32,30 @@ def _dump(data: dict[str, Any]) -> bytes:
     return yaml.safe_dump(data).encode()
 
 
-def test_shipped_recipes_all_validate():
+def test_shipped_recipes_all_validate() -> None:
     ids = [recipes.load_recipe(p).recipe.id for p in recipes.list_recipes()]
     assert ids == ["curl", "libxml2", "sqlite", "vulnlab"]
 
 
-def test_shipped_dockerfiles_exist():
+def test_shipped_dockerfiles_exist() -> None:
     for path in recipes.list_recipes():
         loaded = recipes.load_recipe(path)
         assert loaded.dockerfile.is_file(), loaded.recipe.image.dockerfile
 
 
-def test_real_project_recipes_say_they_are_unverified():
+def test_real_project_recipes_say_they_are_unverified() -> None:
     for name in ("curl", "sqlite", "libxml2"):
         assert "UNVERIFIED" in (ROOT / "recipes" / f"{name}.yaml").read_text(encoding="utf-8")
 
 
-def test_vulnlab_matches_the_spec_example():
+def test_vulnlab_matches_the_spec_example() -> None:
     recipe = recipes.find_recipe("vulnlab").recipe
     assert recipe.build.outputs == ("build/hdrcat", "build/libhdr.a", "include/")
     assert recipe.run.kinds["c_harness"].cmd == ("/work/poc",)
     assert recipe.limits.output_bytes == 1024 * 1024
 
 
-def test_sha256_is_of_the_file_bytes():
+def test_sha256_is_of_the_file_bytes() -> None:
     loaded = recipes.find_recipe("vulnlab")
     assert loaded.sha256 == recipes.hashlib.sha256(VULNLAB).hexdigest()
 
@@ -79,7 +79,7 @@ def _check(model: type[BaseModel], schema: dict[str, Any], where: str) -> None:
             _check(sub, _schema_props(props[name]), f"{where}.{name}")
 
 
-def test_schema_and_models_agree():
+def test_schema_and_models_agree() -> None:
     _check(Recipe, SCHEMA, "recipe")
     _check(recipes.RunKind, SCHEMA["$defs"]["kind"], "kind")
 
@@ -128,7 +128,7 @@ def _walk_constraints(model: type[BaseModel], schema: dict[str, Any], where: str
             _walk_constraints(sub, node, f"{where}.{name}")
 
 
-def test_schema_and_models_agree_on_bounds_and_defaults():
+def test_schema_and_models_agree_on_bounds_and_defaults() -> None:
     _walk_constraints(Recipe, SCHEMA, "recipe")
 
 
@@ -202,7 +202,7 @@ def test_schema_patterns_and_models_accept_the_same_values(ref, good, bad, sette
         assert _model_accepts(lambda d, v=value: setter(d, v)) is expected, (ref, value, "model")
 
 
-def test_kind_names_env_names_dockerfile_and_tag_patterns_agree():
+def test_kind_names_env_names_dockerfile_and_tag_patterns_agree() -> None:
     run_props = SCHEMA["properties"]["run"]["properties"]
     kind_pattern = run_props["kinds"]["propertyNames"]["pattern"]
     for value, expected in _cases(IDS, IDS_BAD[:-1]):
@@ -224,7 +224,7 @@ def test_kind_names_env_names_dockerfile_and_tag_patterns_agree():
         assert _model_accepts(lambda d, v=value: d["image"].update(tag=v)) is expected, value
 
 
-def test_sandbox_and_recipes_share_one_size_grammar():
+def test_sandbox_and_recipes_share_one_size_grammar() -> None:
     from nikasha.repro import sandbox  # noqa: PLC0415
 
     for value, expected in _cases(SIZES, SIZES_BAD):
@@ -268,7 +268,7 @@ def test_invalid_recipes_are_refused(mutate, message):
         parse_recipe(_dump(data))
 
 
-def test_non_mapping_and_bad_yaml_are_refused():
+def test_non_mapping_and_bad_yaml_are_refused() -> None:
     with pytest.raises(RecipeError, match="mapping"):
         parse_recipe(b"- a\n- b\n")
     with pytest.raises(RecipeError, match="YAML"):
@@ -284,14 +284,14 @@ def test_id_must_match_file_name(tmp_path):
         recipes.load_recipe(path)
 
 
-def test_find_recipe_refuses_path_like_ids():
+def test_find_recipe_refuses_path_like_ids() -> None:
     with pytest.raises(RecipeError):
         recipes.find_recipe("../vulnlab")
     with pytest.raises(RecipeError, match="no recipe"):
         recipes.find_recipe("nope")
 
 
-def test_recipe_for_product():
+def test_recipe_for_product() -> None:
     found = recipes.recipe_for_product("libhdr")
     assert found is not None
     assert found.recipe.id == "vulnlab"

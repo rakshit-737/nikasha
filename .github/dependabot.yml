@@ -1,6 +1,5 @@
 # SPDX-FileCopyrightText: 2026 The Nikasha Authors
 # SPDX-License-Identifier: Apache-2.0
-# The docker ecosystem is added in M8 together with the Dockerfile.
 version: 2
 updates:
   - package-ecosystem: uv
@@ -26,3 +25,16 @@ updates:
         patterns: ["*"]
     commit-message:
       prefix: "ci(deps)"
+  - package-ecosystem: docker
+    directories:
+      - /docker/capture
+      - /docker/recipes
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      docker:
+        patterns: ["*"]
+    commit-message:
+      prefix: "build(deps)"

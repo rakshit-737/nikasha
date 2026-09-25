@@ -209,7 +209,7 @@ def test_rejects_malformed_report_ids(bad, monkeypatch, tmp_path):
         fetch_report(bad, online=True, env=CREDS, run_dir=tmp_path)
 
 
-def test_accepts_hash_prefixed_id():
+def test_accepts_hash_prefixed_id() -> None:
     assert validate_report_id("#123456") == "123456"
     assert validate_report_id(" 7 ") == "7"
 
@@ -226,7 +226,7 @@ def test_credentials_must_be_printable_ascii(token, monkeypatch, tmp_path):
         )
 
 
-def test_basic_auth_header():
+def test_basic_auth_header() -> None:
     creds = Credentials(user="u", token="t")  # noqa: S106 - a stand-in for tests
     assert creds.basic_auth() == "Basic " + base64.b64encode(b"u:t").decode()
 
@@ -309,7 +309,7 @@ def test_markdown_round_trips_and_metadata_is_not_a_claim(monkeypatch, tmp_path)
             assert not (comment_start <= span.start < comment_end), claim
 
 
-def test_intake_comment_cannot_be_closed_from_inside():
+def test_intake_comment_cannot_be_closed_from_inside() -> None:
     parsed = parse_report(
         _payload(
             title="t", state="--><script>alert(1)</script><!--", vulnerability_information="b"
@@ -331,7 +331,7 @@ def test_no_attachments_flag_skips_downloads(monkeypatch, tmp_path):
     assert "attachments: 3 (poc.c, ../huge.bin, plain.txt)" in fetched.markdown()
 
 
-def test_parse_report_tolerates_garbage():
+def test_parse_report_tolerates_garbage() -> None:
     for payload in ("nonsense", [], {"data": 5}, {"data": {"attributes": {"title": 5}}}):
         parsed = parse_report(payload, "1")
         assert parsed.title == ""
@@ -345,7 +345,7 @@ def test_parse_report_tolerates_garbage():
     assert report.declared_target is None
 
 
-def test_scope_repo_url_only_for_github_source_code():
+def test_scope_repo_url_only_for_github_source_code() -> None:
     assert (
         h1.repo_url_from_scope("github.com/curl/curl", "SOURCE_CODE")
         == "https://github.com/curl/curl"
@@ -414,7 +414,7 @@ def test_hostile_json_is_refused_cleanly(monkeypatch, body):
         fetch_json(REPORT_URL)
 
 
-def test_hostile_attachment_list_shapes_do_not_crash():
+def test_hostile_attachment_list_shapes_do_not_crash() -> None:
     for data in ("x" * 10_000, {"k": 1}, 7, [None, "s", {"attributes": []}]):
         payload = {"data": {"relationships": {"attachments": {"data": data}}}}
         parsed = parse_report(payload, "1")

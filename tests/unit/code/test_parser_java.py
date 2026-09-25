@@ -11,11 +11,11 @@ from nikasha.code.languages import Lang
 FACTS = parse_fixture(Lang.JAVA, "java/Sample.java")
 
 
-def test_parses_cleanly():
+def test_parses_cleanly() -> None:
     assert_clean(FACTS)
 
 
-def test_symbols():
+def test_symbols() -> None:
     assert symbols(FACTS) == [
         ("class", "Sample", "Sample", 8, 42),
         ("method", "Sample", "Sample.Sample", 11, 13),
@@ -32,7 +32,7 @@ def test_symbols():
     assert flags(FACTS, "Sample.normalize") == {"static"}
 
 
-def test_calls():
+def test_calls() -> None:
     assert calls(FACTS) == [
         ("Sample.Sample", "ArrayList", 12, False),  # `new ArrayList<>()`
         ("Sample.add", "add", 16, True),

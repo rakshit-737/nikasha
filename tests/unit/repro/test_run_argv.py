@@ -56,19 +56,19 @@ def test_every_hardened_flag_is_present(engine):
     assert argv[-3:] == ["nikasha/recipe-c:1", "/build/hdrcat", "/poc/x"]
 
 
-def test_podman_specifics():
+def test_podman_specifics() -> None:
     argv = sandbox.run_argv("podman", _spec(), name="n1")
     assert "--read-only-tmpfs=false" in argv
     assert ("--security-opt", "no-new-privileges") in _pairs(argv)
 
 
-def test_docker_specifics():
+def test_docker_specifics() -> None:
     argv = sandbox.run_argv("docker", _spec(), name="n1")
     assert "--read-only-tmpfs=false" not in argv
     assert ("--security-opt", "no-new-privileges=true") in _pairs(argv)
 
 
-def test_runtime_is_global_for_podman_and_a_run_flag_for_docker():
+def test_runtime_is_global_for_podman_and_a_run_flag_for_docker() -> None:
     podman = sandbox.run_argv("podman", _spec(), name="n1", runtime="runsc")
     assert podman[1:4] == ["--runtime", "runsc", "run"]
     docker = sandbox.run_argv("docker", _spec(), name="n1", runtime="runsc")
@@ -77,14 +77,14 @@ def test_runtime_is_global_for_podman_and_a_run_flag_for_docker():
     assert docker.index("--runtime") > docker.index("run")
 
 
-def test_mounts_are_read_only_unless_asked():
+def test_mounts_are_read_only_unless_asked() -> None:
     argv = sandbox.run_argv("docker", _spec(), name="n1")
     assert ("-v", f"{POC}:/poc:ro") in _pairs(argv)
     rw = sandbox.run_argv("docker", _spec(mounts=(Mount(POC, "/out", read_only=False),)), name="n")
     assert ("-v", f"{POC}:/out:rw") in _pairs(rw)
 
 
-def test_limits_come_from_the_spec():
+def test_limits_come_from_the_spec() -> None:
     argv = sandbox.run_argv(
         "docker", _spec(limits=Limits(cpus=1.5, memory="512m", pids=64)), name="n1"
     )
@@ -126,7 +126,7 @@ def test_bad_names_and_runtimes_are_refused(name):
         sandbox.run_argv("docker", _spec(), name="ok", runtime=name or "--x")
 
 
-def test_recorded_argv_has_no_host_paths_or_random_name():
+def test_recorded_argv_has_no_host_paths_or_random_name() -> None:
     exe = str(HOST / "bin" / "podman")
     argv = sandbox.run_argv("podman", _spec(), name="nikasha-0123abcd", exe=exe)
     recorded = sandbox.redact_container_argv(argv, [POC, BUILD])
@@ -139,14 +139,14 @@ def test_recorded_argv_has_no_host_paths_or_random_name():
     assert "/build/hdrcat" in recorded  # container paths are kept
 
 
-def test_recorded_argv_is_identical_across_machines_and_names():
+def test_recorded_argv_is_identical_across_machines_and_names() -> None:
     a = sandbox.run_argv("docker", _spec(), name="nikasha-1", exe="/usr/bin/docker")
     other = _spec(mounts=(Mount(HOST / "e" / "p", "/poc"), Mount(HOST / "x" / "b", "/build")))
     b = sandbox.run_argv("docker", other, name="nikasha-2", exe="/opt/docker")
     assert sandbox.redact_container_argv(a) == sandbox.redact_container_argv(b)
 
 
-def test_windows_executable_and_build_paths_are_redacted():
+def test_windows_executable_and_build_paths_are_redacted() -> None:
     argv = ["C:\\Program Files\\Docker\\docker.exe", "build", "-f", "C:\\r\\x.Dockerfile"]
     assert sandbox.redact_container_argv(argv, [Path("C:\\r\\x.Dockerfile")]) == (
         "docker",
@@ -156,7 +156,7 @@ def test_windows_executable_and_build_paths_are_redacted():
     )
 
 
-def test_container_result_record_hashes_and_marks_truncation():
+def test_container_result_record_hashes_and_marks_truncation() -> None:
     result = sandbox.ContainerResult(
         argv=("docker", "run"),
         recorded_argv=("docker", "run"),
@@ -173,7 +173,7 @@ def test_container_result_record_hashes_and_marks_truncation():
     assert record.stdout_sha256 == sandbox.hashlib.sha256(b"").hexdigest()
 
 
-def test_capped_reader_keeps_the_first_bytes_and_drains_the_rest():
+def test_capped_reader_keeps_the_first_bytes_and_drains_the_rest() -> None:
     stream = io.BytesIO(b"a" * 200_000)
     reader = sandbox.CappedReader(stream, 1024)
     reader.run()
@@ -182,20 +182,20 @@ def test_capped_reader_keeps_the_first_bytes_and_drains_the_rest():
     assert stream.read() == b""  # the pipe was fully drained, so the child never blocks
 
 
-def test_capped_reader_exact_fit_is_not_truncated():
+def test_capped_reader_exact_fit_is_not_truncated() -> None:
     reader = sandbox.CappedReader(io.BytesIO(b"x" * 10), 10)
     reader.run()
     assert reader.truncated is False
 
 
-def test_image_tags_are_checked():
+def test_image_tags_are_checked() -> None:
     with pytest.raises(SandboxError):
         sandbox.build_image_argv("docker", POC, HOST, "--rm")
     argv = sandbox.build_image_argv("podman", POC, HOST, "nikasha/recipe-c:1")
     assert argv[:2] == ["podman", "build"]
 
 
-def test_image_build_needs_online():
+def test_image_build_needs_online() -> None:
     with pytest.raises(sandbox.NikashaError, match="--online"):
         sandbox.build_image(
             sandbox.EngineInfo("docker", True), POC, HOST, "nikasha/recipe-c:1", online=False

@@ -25,7 +25,7 @@ PARSER = MsanParser()
 HEADER = "==1==WARNING: MemorySanitizer: use-of-uninitialized-value"
 
 
-def test_not_registered_by_default():
+def test_not_registered_by_default() -> None:
     assert "msan" not in PARSERS  # ADR 0009: registered only once real fixtures pass
     assert PARSER.format == "msan"
 
@@ -35,7 +35,7 @@ def test_no_trace_without_header(text):
     assert PARSER.parse(text) == []
 
 
-def test_header_alone_is_one_trace_without_frames():
+def test_header_alone_is_one_trace_without_frames() -> None:
     traces = PARSER.parse("noise\n" + HEADER + "\n")
     assert len(traces) == 1
     trace = traces[0]
@@ -44,7 +44,7 @@ def test_header_alone_is_one_trace_without_frames():
     assert ("noise\n" + HEADER + "\n")[: trace.end] == "noise\n" + HEADER
 
 
-def test_output_is_deterministic():
+def test_output_is_deterministic() -> None:
     text = ("x\n" + HEADER + "\n#0 0x1 in f /a.c:1:2\n") * 3
     assert PARSER.parse(text) == PARSER.parse(text)
 
@@ -71,7 +71,7 @@ def _fixtures() -> list[Path]:
     return sorted(FIXTURES.glob("*.txt")) if FIXTURES.is_dir() else []
 
 
-def test_real_fixtures_parse():
+def test_real_fixtures_parse() -> None:
     fixtures = _fixtures()
     if not fixtures:
         pytest.skip("no real msan fixtures yet: run scripts/capture_sanitizer_fixtures.py")
@@ -88,7 +88,7 @@ def test_real_fixtures_parse():
 
 @pytest.mark.sandbox
 @pytest.mark.network
-def test_capture_image_has_msan_runtime():
+def test_capture_image_has_msan_runtime() -> None:
     """Whether the capture image can link and run an MSan program (unknown until run).
 
     Marked ``network``: building the Fedora capture image downloads packages, so the

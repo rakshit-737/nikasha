@@ -24,7 +24,7 @@ PARSER = TsanParser()
 HEADER = "WARNING: ThreadSanitizer: data race (pid=1)"
 
 
-def test_not_registered_by_default():
+def test_not_registered_by_default() -> None:
     assert "tsan" not in PARSERS  # ADR 0009: registered only once real fixtures pass
     assert PARSER.format == "tsan"
 
@@ -34,7 +34,7 @@ def test_no_trace_without_header(text):
     assert PARSER.parse(text) == []
 
 
-def test_header_alone_is_one_trace_without_frames():
+def test_header_alone_is_one_trace_without_frames() -> None:
     traces = PARSER.parse("noise\n" + HEADER + "\n")
     assert len(traces) == 1
     trace = traces[0]
@@ -43,7 +43,7 @@ def test_header_alone_is_one_trace_without_frames():
     assert ("noise\n" + HEADER + "\n")[: trace.end] == "noise\n" + HEADER
 
 
-def test_output_is_deterministic():
+def test_output_is_deterministic() -> None:
     text = ("x\n" + HEADER + "\n#0 0x1 in f /a.c:1:2\n") * 3
     assert PARSER.parse(text) == PARSER.parse(text)
 
@@ -70,7 +70,7 @@ def _fixtures() -> list[Path]:
     return sorted(FIXTURES.glob("*.txt")) if FIXTURES.is_dir() else []
 
 
-def test_real_fixtures_parse():
+def test_real_fixtures_parse() -> None:
     fixtures = _fixtures()
     if not fixtures:
         pytest.skip("no real tsan fixtures yet: run scripts/capture_sanitizer_fixtures.py")

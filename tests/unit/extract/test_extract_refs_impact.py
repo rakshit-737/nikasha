@@ -37,7 +37,7 @@ def test_classify_url(url, kind, value, repo):
         assert got_value == value
 
 
-def test_ids_and_urls():
+def test_ids_and_urls() -> None:
     text = (
         "Related: CVE-2023-38545, CWE-0122, GHSA-9pq7-rjm4-p6gf and "
         "https://github.com/curl/curl/commit/fb4415d8aee6c1 (commit fb4415d)."
@@ -50,7 +50,7 @@ def test_ids_and_urls():
     assert ("commit", "fb4415d") in found
 
 
-def test_cve_inside_url_is_not_double_counted():
+def test_cve_inside_url_is_not_double_counted() -> None:
     found = claims("See https://nvd.nist.gov/vuln/detail/CVE-2024-0001 now.", "reference")
     assert [c.ref_kind for c in found] == ["advisory"]
 

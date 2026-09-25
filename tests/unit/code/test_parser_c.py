@@ -14,13 +14,13 @@ from nikasha.code.parser import parse_file
 FACTS = parse_fixture(Lang.C, "c/sample.c")
 
 
-def test_parses_cleanly():
+def test_parses_cleanly() -> None:
     assert_clean(FACTS)
     assert FACTS.lang == "c"
     assert FACTS.n_lines == 73
 
 
-def test_symbols():
+def test_symbols() -> None:
     assert symbols(FACTS) == [
         ("macro", "BUF_MAX", "BUF_MAX", 6, 6),
         ("macro", "CLAMP", "CLAMP", 7, 7),
@@ -39,12 +39,12 @@ def test_symbols():
     ]
 
 
-def test_prototypes_and_bodyless_structs_are_not_definitions():
+def test_prototypes_and_bodyless_structs_are_not_definitions() -> None:
     assert [s.start_line for s in FACTS.definitions("clamp_hi")] == [34]
     assert FACTS.definitions("session") == []
 
 
-def test_flags():
+def test_flags() -> None:
     assert flags(FACTS, "clamp_hi") == {"static", "inline"}
     assert flags(FACTS, "handle_packet") == {"static"}
     assert flags(FACTS, "dispatch") == frozenset()
@@ -52,7 +52,7 @@ def test_flags():
     assert flags(FACTS, "BUF_MAX") == frozenset()
 
 
-def test_calls():
+def test_calls() -> None:
     assert calls(FACTS) == [
         ("handle_packet", "malloc", 41, False),
         ("handle_packet", "memcpy", 42, False),
@@ -66,7 +66,7 @@ def test_calls():
     ]
 
 
-def test_macros_record_calls_in_replacement_text():
+def test_macros_record_calls_in_replacement_text() -> None:
     assert FACTS.macros == (
         MacroDef(name="BUF_MAX", line=6, calls=()),
         # `v` and `hi` are parameters, not calls.
@@ -76,13 +76,13 @@ def test_macros_record_calls_in_replacement_text():
     )
 
 
-def test_address_taken():
+def test_address_taken() -> None:
     # `.on_packet = handle_packet`, `register_handler(handle_packet)`, `.on_close = ...`;
     # `fallback` is a parameter used as a value, not a function of this file.
     assert FACTS.addr_taken == {"handle_packet", "handle_close"}
 
 
-def test_address_taken_through_prototype_and_address_of():
+def test_address_taken_through_prototype_and_address_of() -> None:
     src = b"""
 static void on_tick(int);
 extern int later(void);
@@ -93,26 +93,26 @@ static void on_tick(int x) { (void)x; }
     assert facts.addr_taken == {"on_tick", "later"}
 
 
-def test_enclosing_uses_full_span():
+def test_enclosing_uses_full_span() -> None:
     enclosing = FACTS.enclosing(57)
     assert enclosing is not None
     assert enclosing.qname == "split_words"
     assert FACTS.enclosing(52) is None
 
 
-def test_function_returning_function_pointer():
+def test_function_returning_function_pointer() -> None:
     src = b"void (*lookup(const char *name))(int)\n{\n    return find(name);\n}\n"
     facts = parse_file(Lang.C, src)
     assert symbols(facts) == [("function", "lookup", "lookup", 1, 4)]
     assert calls(facts) == [("lookup", "find", 3, False)]
 
 
-def test_calls_at_file_scope_have_no_caller():
+def test_calls_at_file_scope_have_no_caller() -> None:
     facts = parse_file(Lang.C, b"int table[] = { [0] = sizeof(int) };\nint x = init();\n")
     assert calls(facts) == [(None, "init", 2, False)]
 
 
-def test_signature_hash_ignores_body_and_whitespace():
+def test_signature_hash_ignores_body_and_whitespace() -> None:
     base = parse_file(Lang.C, b"int f(int a, char *b)\n{\n    return a;\n}\n").symbols[0]
     body = parse_file(Lang.C, b"int f(int a, char *b)\n{\n    return a + 1;\n}\n").symbols[0]
     spaced = parse_file(Lang.C, b"int  f( int a,\n       char *b )\n{ return a; }\n").symbols[0]
@@ -124,14 +124,14 @@ def test_signature_hash_ignores_body_and_whitespace():
     assert spaced.signature_hash != changed.signature_hash
 
 
-def test_n_lines():
+def test_n_lines() -> None:
     assert parse_file(Lang.C, b"").n_lines == 0
     assert parse_file(Lang.C, b"int x;").n_lines == 1
     assert parse_file(Lang.C, b"int x;\n").n_lines == 1
     assert parse_file(Lang.C, b"int x;\n\nint y;").n_lines == 3
 
 
-def test_deterministic():
+def test_deterministic() -> None:
     again = parse_fixture(Lang.C, "c/sample.c")
     assert again == FACTS
 
@@ -148,7 +148,7 @@ def _vulnlab(relpath: str):
     return parse_file(lang, path.read_bytes())
 
 
-def test_vulnlab_util_copy_value():
+def test_vulnlab_util_copy_value() -> None:
     facts = _vulnlab("src/util.c")
     assert_clean(facts)
     (sym,) = facts.definitions("util_copy_value")
@@ -156,27 +156,27 @@ def test_vulnlab_util_copy_value():
     assert callees(facts, "util_copy_value") == ["strlen", "malloc", "memcpy"]
 
 
-def test_vulnlab_hdr_get_does_not_call_util_copy_value():
+def test_vulnlab_hdr_get_does_not_call_util_copy_value() -> None:
     facts = _vulnlab("src/hdr.c")
     assert_clean(facts)
     assert callees(facts, "hdr_get") == ["strncpy", "hdr_find_line", "util_strip"]
     assert "util_copy_value" not in callees(facts, "hdr_get")
 
 
-def test_vulnlab_hdr_parse_line_calls_util_copy_value():
+def test_vulnlab_hdr_parse_line_calls_util_copy_value() -> None:
     facts = _vulnlab("src/hdr.c")
     assert "util_copy_value" in callees(facts, "hdr_parse_line")
     assert ("hdr_parse_line", "util_copy_value", 104, False) in calls(facts)
 
 
-def test_vulnlab_static_helper_exists():
+def test_vulnlab_static_helper_exists() -> None:
     facts = _vulnlab("src/hdr.c")
     (sym,) = facts.definitions("hdr_find_line")
     assert (sym.kind, sym.start_line, sym.end_line) == ("function", 39, 48)
     assert sym.flags == {"static"}
 
 
-def test_vulnlab_headers():
+def test_vulnlab_headers() -> None:
     facts = _vulnlab("include/hdr.h")
     assert_clean(facts)
     assert [(s.kind, s.name, s.start_line, s.end_line) for s in facts.symbols] == [

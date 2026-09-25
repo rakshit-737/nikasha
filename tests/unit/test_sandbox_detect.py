@@ -24,14 +24,14 @@ DOCKER_INFO = {
 }
 
 
-def test_parse_podman():
+def test_parse_podman() -> None:
     info = sandbox._parse_podman(PODMAN_INFO)
     assert info == sandbox.EngineInfo(
         name="podman", available=True, version="5.8.4", rootless=True, cgroup_version="v2"
     )
 
 
-def test_parse_docker_rootful_and_cgroup_normalized():
+def test_parse_docker_rootful_and_cgroup_normalized() -> None:
     info = sandbox._parse_docker(DOCKER_INFO)
     assert info.available
     assert info.version == "29.7.2"
@@ -39,12 +39,12 @@ def test_parse_docker_rootful_and_cgroup_normalized():
     assert info.cgroup_version == "v2"
 
 
-def test_parse_docker_rootless():
+def test_parse_docker_rootless() -> None:
     data = {**DOCKER_INFO, "SecurityOptions": ["name=seccomp,profile=builtin", "name=rootless"]}
     assert sandbox._parse_docker(data).rootless is True
 
 
-def test_parse_docker_daemon_unreachable():
+def test_parse_docker_daemon_unreachable() -> None:
     data = {"ServerErrors": ["Cannot connect to the Docker daemon"]}
     info = sandbox._parse_docker(data)
     assert not info.available

@@ -13,11 +13,11 @@ from nikasha.code.parser import parse_file
 FACTS = parse_fixture(Lang.RUST, "rust/sample.rs")
 
 
-def test_parses_cleanly():
+def test_parses_cleanly() -> None:
     assert_clean(FACTS)
 
 
-def test_symbols():
+def test_symbols() -> None:
     assert symbols(FACTS) == [
         ("macro", "bail", "bail", 5, 9),
         ("type", "Cache", "Cache", 11, 13),
@@ -34,7 +34,7 @@ def test_symbols():
     ]
 
 
-def test_calls():
+def test_calls() -> None:
     assert calls(FACTS) == [
         ("Store::has", "get", 23, True),
         ("Store::has", "is_some", 23, True),
@@ -52,11 +52,11 @@ def test_calls():
     ]
 
 
-def test_macro_rules_body_calls():
+def test_macro_rules_body_calls() -> None:
     assert FACTS.macros == (MacroDef(name="bail", line=5, calls=("Err", "make_error")),)
 
 
-def test_trait_impl_for_generic_type():
+def test_trait_impl_for_generic_type() -> None:
     src = (
         b"impl<T: Clone> fmt::Display for Wrapper<T> {\n"
         b"    fn fmt(&self) -> u8 {\n        self.0.render()\n    }\n}\n"
@@ -66,7 +66,7 @@ def test_trait_impl_for_generic_type():
     assert calls(facts) == [("Wrapper::fmt", "render", 3, True)]
 
 
-def test_method_call_inside_macro_arguments_is_indirect():
+def test_method_call_inside_macro_arguments_is_indirect() -> None:
     src = b'fn f(v: &V) {\n    assert!(v.check(1), "bad");\n    vec![build(2)];\n}\n'
     facts = parse_file(Lang.RUST, src)
     assert calls(facts) == [("f", "check", 2, True), ("f", "build", 3, False)]

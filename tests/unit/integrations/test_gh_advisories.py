@@ -191,7 +191,7 @@ def test_rejects_malformed_owner_repo(bad, monkeypatch):
         fetch_advisories(bad, online=True, env=TOKEN)
 
 
-def test_owner_repo_accepts_github_names():
+def test_owner_repo_accepts_github_names() -> None:
     assert validate_owner_repo("curl/curl") == ("curl", "curl")
     assert validate_owner_repo(" python/cpython.git ") == ("python", "cpython.git")
 
@@ -275,7 +275,7 @@ def test_empty_listing_is_a_comment(monkeypatch):
     assert report_json(fetched.reports) == "[]\n"
 
 
-def test_next_link_only_stays_on_the_api_host():
+def test_next_link_only_stays_on_the_api_host() -> None:
     assert next_link(f'<{PAGE2}>; rel="next"') == PAGE2
     assert next_link(f'<{PAGE1}>; rel="prev", <{PAGE2}>; rel="next"') == PAGE2
     assert next_link('<https://evil.example/steal>; rel="next"') is None
@@ -341,7 +341,7 @@ def test_token_is_never_forwarded_on_redirect_nor_printed(monkeypatch):
     assert request.unredirected_hdrs["Authorization"] == "Bearer ghp_testtokenvalue"
 
 
-def test_parse_advisory_tolerates_garbage():
+def test_parse_advisory_tolerates_garbage() -> None:
     for item in ("nonsense", [], {"ghsa_id": 5, "cvss": "x", "vulnerabilities": "y", "cwes": 3}):
         parsed = parse_advisory(item)
         assert parsed.ghsa_id == ""

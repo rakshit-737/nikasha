@@ -58,7 +58,7 @@ def test_single_goroutine_fixture(name, message, path, frames):
     assert data.other_stacks == ()
 
 
-def test_multi_goroutine_fixture():
+def test_multi_goroutine_fixture() -> None:
     text = _load("03-goroutine-panic-traceback-all.txt")
     trace = _one(text)
     data = trace.data
@@ -94,7 +94,7 @@ def test_multi_goroutine_fixture():
     ]
 
 
-def test_fixture_embedded_in_markdown_is_found_by_the_pipeline():
+def test_fixture_embedded_in_markdown_is_found_by_the_pipeline() -> None:
     trace_text = _load("03-goroutine-panic-traceback-all.txt")
     md = f"With GOTRACEBACK=all:\n\n```\n{trace_text}```\n\nThe worker has no owner check.\n"
     report = ingest_string(md, input_format="markdown")
@@ -110,7 +110,7 @@ def test_fixture_embedded_in_markdown_is_found_by_the_pipeline():
 # --- variants ---------------------------------------------------------------------------
 
 
-def test_fatal_error_signal_preamble_and_no_running_goroutine():
+def test_fatal_error_signal_preamble_and_no_running_goroutine() -> None:
     text = (
         "fatal error: all goroutines are asleep - deadlock!\n"
         "[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x1]\n"
@@ -132,7 +132,7 @@ def test_fatal_error_signal_preamble_and_no_running_goroutine():
     assert text[trace.start : trace.end].endswith("main.go:9 +0x2d")
 
 
-def test_function_line_without_arguments():
+def test_function_line_without_arguments() -> None:
     text = "panic: x\n\ngoroutine 1 [running]:\nmain.f\n\t/a.go:3\n"
     assert _one(text).data.frames[0].function == "main.f"
 

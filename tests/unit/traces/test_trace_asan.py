@@ -116,7 +116,7 @@ def test_fixture(name, address, write_line, alloc_line, caller_line):
     assert data.summary_line is None
 
 
-def test_fixture_embedded_in_markdown_is_found_by_the_pipeline():
+def test_fixture_embedded_in_markdown_is_found_by_the_pipeline() -> None:
     trace_text = _load("01-vulnlab-heap-overflow-v1.2.0.txt")
     md = (
         "# Heap overflow in hdr_parse_line\n\n"
@@ -163,7 +163,7 @@ SUMMARY: AddressSanitizer: heap-use-after-free /src/app/worker.c:40:12 in reader
 """
 
 
-def test_use_after_free_with_free_alloc_and_thread_stacks():
+def test_use_after_free_with_free_alloc_and_thread_stacks() -> None:
     data = _one(UAF).data
     assert data.bug_type == "heap-use-after-free"
     assert data.access.kind == "READ"
@@ -187,7 +187,7 @@ def test_use_after_free_with_free_alloc_and_thread_stacks():
     assert data.pid == 4242
 
 
-def test_old_style_to_the_right_of_region():
+def test_old_style_to_the_right_of_region() -> None:
     text = (
         "==7==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x60300000eff4 at pc 0x1\n"
         "WRITE of size 1 at 0x60300000eff4 thread T0\n"
@@ -215,7 +215,7 @@ def test_region_relations(words, relation):
     assert _one(text).data.region.relation == relation
 
 
-def test_global_variable_region():
+def test_global_variable_region() -> None:
     text = (
         "==9==ERROR: AddressSanitizer: global-buffer-overflow on address 0x5000 at pc 0x1\n"
         "READ of size 4 at 0x5000 thread T0\n"
@@ -227,7 +227,7 @@ def test_global_variable_region():
     assert (region.start, region.end, region.size, region.relation) == (0x4FD8, 0x5000, 40, "right")
 
 
-def test_segv_on_unknown_address_takes_access_from_signal_line():
+def test_segv_on_unknown_address_takes_access_from_signal_line() -> None:
     text = (
         "==31==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 "
         "(pc 0x55d bp 0x7ff sp 0x7fe T0)\n"
@@ -249,7 +249,7 @@ def test_segv_on_unknown_address_takes_access_from_signal_line():
     assert data.frames[0].function == "parse_hdr"
 
 
-def test_attempting_double_free_without_summary_uses_header_type():
+def test_attempting_double_free_without_summary_uses_header_type() -> None:
     text = (
         "==5==ERROR: AddressSanitizer: attempting double-free on 0x6020 in thread T0:\n"
         "    #0 0x1 in free (/a.out+0x1)\n"
@@ -261,7 +261,7 @@ def test_attempting_double_free_without_summary_uses_header_type():
     assert trace.end == len(text) - 1  # the last frame line, not the trailing newline
 
 
-def test_unsymbolized_and_null_location_frames():
+def test_unsymbolized_and_null_location_frames() -> None:
     text = (
         "==5==ERROR: AddressSanitizer: stack-overflow on address 0x7ffe at pc 0x1\n"
         "    #0 0x4a44a1  (/work/hdrcat+0x4a44a1)\n"
@@ -278,7 +278,7 @@ def test_unsymbolized_and_null_location_frames():
     assert (frames[3].function, frames[3].path) == ("weird(int)", None)
 
 
-def test_consecutive_stacks_without_labels_and_multiple_pids():
+def test_consecutive_stacks_without_labels_and_multiple_pids() -> None:
     text = (
         "==5==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x10 at pc 0x1\n"
         "    #0 0x1 in a /src/a.c:1:1\n"
@@ -291,7 +291,7 @@ def test_consecutive_stacks_without_labels_and_multiple_pids():
     assert data.pids_seen == (5, 6)
 
 
-def test_trailing_prose_is_not_swallowed():
+def test_trailing_prose_is_not_swallowed() -> None:
     text = (
         "==5==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x10 at pc 0x1\n"
         "    #0 0x1 in a /src/a.c:1:1\n"
@@ -307,7 +307,7 @@ def test_trailing_prose_is_not_swallowed():
     assert trace.data.summary is None
 
 
-def test_two_reports_and_foreign_sanitizer_header_split():
+def test_two_reports_and_foreign_sanitizer_header_split() -> None:
     first = "==1==ERROR: AddressSanitizer: SEGV on unknown address 0x0 (pc 0x1 T0)\n"
     lsan = "==1==ERROR: LeakSanitizer: detected memory leaks\n"
     text = first + "    #0 0x1 in f /a.c:1:1\n" + lsan + first + "    #0 0x1 in g /a.c:2:1\n"

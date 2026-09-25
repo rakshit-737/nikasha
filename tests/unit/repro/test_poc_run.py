@@ -17,7 +17,7 @@ VULNLAB = recipes.find_recipe("vulnlab").recipe
 KINDS = VULNLAB.run.kinds
 
 
-def test_choose_kind():
+def test_choose_kind() -> None:
     assert run.choose_kind(VULNLAB, Path("poc.c"), None) == "c_harness"
     assert run.choose_kind(VULNLAB, Path("crash.bin"), None) == "file_input"
     assert run.choose_kind(VULNLAB, Path("x"), "cli") == "cli"
@@ -25,12 +25,12 @@ def test_choose_kind():
         run.choose_kind(VULNLAB, Path("x"), "python")
 
 
-def test_cli_args_are_separate_argv_entries_without_a_shell():
+def test_cli_args_are_separate_argv_entries_without_a_shell() -> None:
     cmd = run.poc_command(KINDS["cli"], args=("--in", "$(reboot)", "a b"))
     assert cmd == ("/build/hdrcat", "--in", "$(reboot)", "a b")
 
 
-def test_file_placeholder():
+def test_file_placeholder() -> None:
     assert run.poc_command(KINDS["file_input"], file="crash.bin") == (
         "/build/hdrcat",
         "/poc/crash.bin",
@@ -39,7 +39,7 @@ def test_file_placeholder():
         run.poc_command(KINDS["file_input"], file=None)
 
 
-def test_c_harness_compiles_then_execs_with_quoting():
+def test_c_harness_compiles_then_execs_with_quoting() -> None:
     cmd = run.poc_command(KINDS["c_harness"], file="poc.c")
     assert cmd[:2] == ("/bin/sh", "-c")
     compile_part, _, exec_part = cmd[2].partition(" && exec ")
@@ -48,7 +48,7 @@ def test_c_harness_compiles_then_execs_with_quoting():
     assert shlex.split(exec_part) == ["/work/poc"]
 
 
-def test_argument_limits():
+def test_argument_limits() -> None:
     with pytest.raises(PocError):
         run.poc_command(KINDS["cli"], args=("a\0b",))
     with pytest.raises(PocError):

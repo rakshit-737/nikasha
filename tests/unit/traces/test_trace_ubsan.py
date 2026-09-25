@@ -79,7 +79,7 @@ def test_fixture(name, bug_type, message, path, app):
     assert data.pid is None
 
 
-def test_fixture_embedded_in_markdown_is_found_by_the_pipeline():
+def test_fixture_embedded_in_markdown_is_found_by_the_pipeline() -> None:
     trace_text = _load("02-shift-exponent.txt")
     md = (
         "## Summary\n\nencode_flags shifts by an attacker-controlled amount.\n\n"
@@ -96,7 +96,7 @@ def test_fixture_embedded_in_markdown_is_found_by_the_pipeline():
     assert claims[0].frames[0].function == "shift_left"
 
 
-def test_header_without_stack_synthesizes_frame_zero():
+def test_header_without_stack_synthesizes_frame_zero() -> None:
     text = "src/lib/parse.c:42:7: runtime error: load of null pointer of type 'char'\nnext line\n"
     trace = _one(text)
     frame = trace.data.frames[0]
@@ -111,14 +111,14 @@ def test_header_without_stack_synthesizes_frame_zero():
     assert text[trace.start : trace.end] == text.splitlines()[0]
 
 
-def test_unknown_location_and_missing_column():
+def test_unknown_location_and_missing_column() -> None:
     trace = _one("<unknown>:0: runtime error: something new\n")
     assert trace.data.bug_type == "unknown"
     assert trace.data.frames[0].path is None
     assert trace.data.frames[0].col is None
 
 
-def test_notes_are_kept_and_several_reports_split():
+def test_notes_are_kept_and_several_reports_split() -> None:
     text = (
         "a.c:5:3: runtime error: load of misaligned address 0x01 for type 'int'\n"
         "0x000000000001: note: pointer points here\n"
@@ -139,13 +139,13 @@ def test_notes_are_kept_and_several_reports_split():
     assert second.data.summary is None
 
 
-def test_prose_after_report_ends_it():
+def test_prose_after_report_ends_it() -> None:
     text = "x.c:1:1: runtime error: division by zero\n    #0 0x1 in f /x.c:1:1\nThis is prose.\n"
     trace = _one(text)
     assert text[trace.start : trace.end].endswith("/x.c:1:1")
 
 
-def test_summary_with_function():
+def test_summary_with_function() -> None:
     text = (
         "x.c:1:1: runtime error: division by zero\n"
         "SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior /x.c:1:1 in f\n"

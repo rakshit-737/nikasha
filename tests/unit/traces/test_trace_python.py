@@ -31,7 +31,7 @@ def _where(frames):
     return [(f.function, f.line) for f in frames]
 
 
-def test_zero_division():
+def test_zero_division() -> None:
     text = _load("01-zero-division.txt")
     trace = _one(text)
     data = trace.data
@@ -51,7 +51,7 @@ def test_zero_division():
     assert data.other_stacks == ()
 
 
-def test_chained_context():
+def test_chained_context() -> None:
     text = _load("02-chained-exception.txt")
     trace = _one(text)
     data = trace.data
@@ -65,7 +65,7 @@ def test_chained_context():
     assert _where(context.frames) == [("lookup", 9), ("read_timeout", 14)]
 
 
-def test_chained_cause_through_stdlib():
+def test_chained_cause_through_stdlib() -> None:
     text = _load("03-stdlib-json-cause.txt")
     trace = _one(text)
     data = trace.data
@@ -90,7 +90,7 @@ def test_chained_cause_through_stdlib():
     assert cause.frames[0].path == "/usr/lib64/python3.14/json/decoder.py"
 
 
-def test_fixture_embedded_in_markdown_is_found_by_the_pipeline():
+def test_fixture_embedded_in_markdown_is_found_by_the_pipeline() -> None:
     trace_text = _load("02-chained-exception.txt")
     md = f"Steps: run it.\n\n```python\n{trace_text}```\n\nExpected: a default timeout.\n"
     report = ingest_string(md, input_format="markdown")
@@ -106,7 +106,7 @@ def test_fixture_embedded_in_markdown_is_found_by_the_pipeline():
 # --- variants ---------------------------------------------------------------------------
 
 
-def test_indented_traceback_three_link_chain_and_trailing_prose():
+def test_indented_traceback_three_link_chain_and_trailing_prose() -> None:
     text = (
         "Some log line\n"
         "    Traceback (most recent call last):\n"
@@ -140,7 +140,7 @@ def test_indented_traceback_three_link_chain_and_trailing_prose():
     assert frozen.is_runtime
 
 
-def test_truncated_without_exception_line_and_header_only():
+def test_truncated_without_exception_line_and_header_only() -> None:
     text = 'Traceback (most recent call last):\n  File "a.py", line 1, in f\n    f()\n'
     trace = _one(text)
     assert trace.data.bug_type is None
@@ -148,7 +148,7 @@ def test_truncated_without_exception_line_and_header_only():
     assert PARSER.parse("Traceback (most recent call last):\nnothing\n") == []
 
 
-def test_marker_without_following_traceback_ends_chain():
+def test_marker_without_following_traceback_ends_chain() -> None:
     text = (
         "Traceback (most recent call last):\n"
         '  File "a.py", line 1, in f\n'

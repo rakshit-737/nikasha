@@ -59,7 +59,7 @@ def test_normalize_path(raw, normalized):
     assert normalize_path(raw) == normalized
 
 
-def test_make_frame_keeps_the_original_path_only_when_it_changed():
+def test_make_frame_keeps_the_original_path_only_when_it_changed() -> None:
     changed = make_frame(index=0, raw="x\r\n", function="f", path="./src/a.c")
     assert (changed.path, changed.original_path, changed.raw) == ("src/a.c", "./src/a.c", "x")
     same = make_frame(index=0, raw="x", function="f", path="src/a.c")
@@ -95,7 +95,7 @@ def test_is_runtime_frame(function, path, module, runtime):
     assert is_runtime_frame(function, path, module) is runtime
 
 
-def test_is_runtime_frame_extra_prefixes():
+def test_is_runtime_frame_extra_prefixes() -> None:
     assert not is_runtime_frame("myrt_init", None, None)
     assert is_runtime_frame("myrt_init", None, None, extra_prefixes=("myrt_",))
 
@@ -150,7 +150,7 @@ def test_split_location(text, parsed):
     assert split_location(text) == parsed
 
 
-def test_split_lines_keeps_exact_offsets():
+def test_split_lines_keeps_exact_offsets() -> None:
     text = "a\r\nbb\n\nccc"
     lines = split_lines(text)
     assert [line.text for line in lines] == ["a", "bb", "", "ccc"]
@@ -158,13 +158,13 @@ def test_split_lines_keeps_exact_offsets():
         assert text[line.start : line.end] == line.text
 
 
-def test_line_offsets():
+def test_line_offsets() -> None:
     assert line_offsets("ab\ncd") == [0, 3, 5]
     assert line_offsets("ab\n") == [0, 3]
     assert line_offsets("") == [0]
 
 
-def test_run_guarded_caps_input_and_swallows_parser_errors():
+def test_run_guarded_caps_input_and_swallows_parser_errors() -> None:
     seen: list[int] = []
 
     def boom(text: str) -> list[ParsedTrace]:
@@ -175,7 +175,7 @@ def test_run_guarded_caps_input_and_swallows_parser_errors():
     assert seen == [MAX_TRACE_TEXT]
 
 
-def test_register_rejects_duplicates():
+def test_register_rejects_duplicates() -> None:
     class Duplicate:
         format = "asan"
 
@@ -186,7 +186,7 @@ def test_register_rejects_duplicates():
         register(Duplicate)
 
 
-def test_registered_formats():
+def test_registered_formats() -> None:
     # LSan, MSan and TSan are in the TraceFormat enum but have no parser: no real fixtures
     # were captured for them, and SPEC §9.5 requires three per parser.
     assert set(PARSERS) == set(FORMATS)
@@ -227,7 +227,7 @@ def test_adjacent_and_disjoint_traces_are_all_kept_in_order(monkeypatch):
     assert kept == [("go", 0, 10), ("rust", 10, 20), ("go", 20, 30)]
 
 
-def test_real_mixed_text_keeps_every_format():
+def test_real_mixed_text_keeps_every_format() -> None:
     parts = [
         (TRACES / "asan" / "01-vulnlab-heap-overflow-v1.2.0.txt").read_text(),
         "Some prose between traces.\n",
@@ -253,7 +253,7 @@ def test_real_mixed_text_keeps_every_format():
         assert earlier.end <= later.start
 
 
-def test_unindented_sanitizer_frames_prefer_the_full_asan_report():
+def test_unindented_sanitizer_frames_prefer_the_full_asan_report() -> None:
     text = (
         "==1==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x10 at pc 0x1\n"
         "#0 0x1 in f /src/a.c:1:1\n"
@@ -266,7 +266,7 @@ def test_unindented_sanitizer_frames_prefer_the_full_asan_report():
     assert found[0].data.frames[0].path == "/src/a.c"
 
 
-def test_trace_in_plain_text_prose_is_found():
+def test_trace_in_plain_text_prose_is_found() -> None:
     trace = (TRACES / "go" / "02-nil-map.txt").read_text()
     body = f"The service crashed with:\n{trace}\nPlease advise.\n"
     report = ingest_string(body, input_format="text")
@@ -302,14 +302,14 @@ def test_parse_traces_on_mixed_fixture_lines(lines):
     _check("\n".join(lines))
 
 
-def test_large_repetitive_input_is_fast():
+def test_large_repetitive_input_is_fast() -> None:
     text = "\n".join(ALL_LINES) * 40
     started = time.perf_counter()
     _check(text[:MAX_TRACE_TEXT])
     assert time.perf_counter() - started < 10
 
 
-def test_libc_named_project_function_stays_an_app_frame():
+def test_libc_named_project_function_stays_an_app_frame() -> None:
     assert common.is_native_runtime_frame("strdup", None, "/lib64/libc.so.6")
     assert common.is_native_runtime_frame("malloc_printerr", "malloc.c", None)
     assert not common.is_native_runtime_frame("strdup", "src/str.c", None)

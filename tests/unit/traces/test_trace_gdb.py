@@ -83,7 +83,7 @@ def test_fixture(case):
     assert data.other_stacks == ()
 
 
-def test_heap_corruption_frames_are_glibc_runtime():
+def test_heap_corruption_frames_are_glibc_runtime() -> None:
     data = _one(_load("01-vulnlab-heap-corruption-abort-v1.2.0.txt")).data
     assert all(f.is_runtime for f in data.frames[:20])
     # inlined frame without an address; argument strings with parentheses are skipped
@@ -96,7 +96,7 @@ def test_heap_corruption_frames_are_glibc_runtime():
     assert data.frames[11].path == "/usr/src/debug/glibc-2.43-8.fc44.x86_64/libio/libioP.h"
 
 
-def test_bt_full_locals_are_skipped():
+def test_bt_full_locals_are_skipped() -> None:
     data = _one(_load("03-failed-assert-abort.txt")).data
     assert [f.function for f in data.frames[5:]] == [
         "__libc_message_wrapper",
@@ -108,7 +108,7 @@ def test_bt_full_locals_are_skipped():
     assert [f.line for f in data.frames[7:]] == [9, 14, 21]
 
 
-def test_fixture_embedded_in_markdown_is_found_by_the_pipeline():
+def test_fixture_embedded_in_markdown_is_found_by_the_pipeline() -> None:
     trace_text = _load("02-sigfpe-divide.txt")
     md = f"# Crash\n\nUnder gdb:\n\n```\n{trace_text}```\n\nratio() divides by zero.\n"
     report = ingest_string(md, input_format="markdown")
@@ -125,7 +125,7 @@ def test_fixture_embedded_in_markdown_is_found_by_the_pipeline():
 # --- variants ---------------------------------------------------------------------------
 
 
-def test_from_library_unknown_and_signal_handler_frames():
+def test_from_library_unknown_and_signal_handler_frames() -> None:
     text = (
         "#0  0x00007ffff7a42e97 in raise () from /lib64/libc.so.6\n"
         "#1  0x0000555555555189 in ?? ()\n"
@@ -149,7 +149,7 @@ def test_from_library_unknown_and_signal_handler_frames():
     assert text[trace.start : trace.end].endswith("(More stack frames follow...)")
 
 
-def test_wrapped_location_is_attached():
+def test_wrapped_location_is_attached() -> None:
     text = (
         "#0  0x0000555555555189 in parse_header (buf=0x5555, len=4096)\n"
         "    at lib/hdr.c:412\n"
@@ -164,14 +164,14 @@ def test_wrapped_location_is_attached():
     assert frames[0].raw.endswith("at lib/hdr.c:412")
 
 
-def test_unparsable_continuation_is_kept_but_not_attached():
+def test_unparsable_continuation_is_kept_but_not_attached() -> None:
     text = "#0  0x1 in f (a=1)\n    at nowhere\n"
     trace = _one(text)
     assert trace.data.frames[0].path is None
     assert text[trace.start : trace.end].endswith("at nowhere")
 
 
-def test_thread_apply_all_bt():
+def test_thread_apply_all_bt() -> None:
     text = (
         'Thread 2 "worker" received signal SIGSEGV, Segmentation fault.\n'
         "[Switching to Thread 0x7ffff7d8a640 (LWP 12)]\n"
@@ -200,7 +200,7 @@ def test_thread_apply_all_bt():
     assert text[trace.start : trace.end].endswith("in main () at m.c:9")
 
 
-def test_core_file_and_unlabelled_second_stack():
+def test_core_file_and_unlabelled_second_stack() -> None:
     text = (
         "Program terminated with signal SIGSEGV, Segmentation fault.\n"
         "#0  f () at a.c:1\n"
@@ -213,7 +213,7 @@ def test_core_file_and_unlabelled_second_stack():
     assert [s.label for s in data.other_stacks] == ["stack at #0"]
 
 
-def test_frames_not_starting_at_zero_are_ignored():
+def test_frames_not_starting_at_zero_are_ignored() -> None:
     assert PARSER.parse("#3  f () at a.c:1\n#4  g () at a.c:2\n") == []
 
 

@@ -37,25 +37,25 @@ def _brute_force(paths: list[str], query: str) -> tuple[int, list[str]]:
 # --- examples ------------------------------------------------------------------------------
 
 
-def test_spec_example_build_root_prefix():
+def test_spec_example_build_root_prefix() -> None:
     trie = PathTrie(["lib/http.c", "lib/url.c", "src/tool_main.c"])
     assert trie.resolve("/src/curl/lib/http.c") == ["lib/http.c"]
     assert trie.match_depth("/src/curl/lib/http.c") == 2
 
 
-def test_vulnlab_reporter_path():
+def test_vulnlab_reporter_path() -> None:
     trie = PathTrie(VULNLAB)
     assert trie.resolve("/work/libhdr/src/util.c") == ["src/util.c"]
     assert trie.match_depth("/work/libhdr/src/util.c") == 2
 
 
-def test_basename_only_match():
+def test_basename_only_match() -> None:
     trie = PathTrie(VULNLAB)
     assert trie.resolve("/home/me/elsewhere/hdr.c") == ["src/hdr.c"]
     assert trie.match_depth("/home/me/elsewhere/hdr.c") == 1
 
 
-def test_no_match_returns_empty():
+def test_no_match_returns_empty() -> None:
     trie = PathTrie(VULNLAB)
     assert trie.resolve("/src/curl/lib/http.c") == []
     assert trie.match_depth("lib/http.c") == 0
@@ -63,24 +63,24 @@ def test_no_match_returns_empty():
     assert trie.resolve("/") == []
 
 
-def test_ambiguous_basename_returns_all_sorted():
+def test_ambiguous_basename_returns_all_sorted() -> None:
     trie = PathTrie(VULNLAB)
     assert trie.resolve("util.c") == ["src/util.c", "tests/util.c"]
     assert trie.resolve("/x/y/util.h") == ["include/util.h", "src/util.h"]
 
 
-def test_deeper_match_wins_over_basename():
+def test_deeper_match_wins_over_basename() -> None:
     trie = PathTrie(VULNLAB)
     assert trie.resolve("tests/util.c") == ["tests/util.c"]
 
 
-def test_whole_components_only():
+def test_whole_components_only() -> None:
     trie = PathTrie(["src/util.c"])
     assert trie.resolve("myutil.c") == []
     assert trie.resolve("/x/mysrc/util.c") == ["src/util.c"]
 
 
-def test_longer_repo_paths_share_the_suffix():
+def test_longer_repo_paths_share_the_suffix() -> None:
     trie = PathTrie(["a/b.c", "x/a/b.c"])
     assert trie.resolve("/build/a/b.c") == ["a/b.c", "x/a/b.c"]
     assert trie.resolve("/x/a/b.c") == ["x/a/b.c"]
@@ -108,20 +108,20 @@ def test_query_normalization(query):
     assert trie.match_depth(query) == 2
 
 
-def test_dotdot_is_lexical():
+def test_dotdot_is_lexical() -> None:
     trie = PathTrie(["lib/http.c", "src/http.c"])
     # lib/../src/http.c is src/http.c, not lib/http.c
     assert trie.resolve("/curl/lib/../src/http.c") == ["src/http.c"]
 
 
-def test_normalize_components():
+def test_normalize_components() -> None:
     assert normalize_components("C:\\a\\.\\b\\..\\c.c") == ("a", "c.c")
     assert normalize_components("../../x") == ("x",)
     assert normalize_components("/") == ()
     assert normalize_components("a:b/c") == ("b", "c")  # a drive-like prefix is dropped
 
 
-def test_repo_paths_are_normalized_and_deduplicated():
+def test_repo_paths_are_normalized_and_deduplicated() -> None:
     trie = PathTrie(["./lib/http.c", "lib/http.c", "lib\\http.c", "", "/"])
     assert len(trie) == 1
     assert "lib/http.c" in trie
@@ -131,7 +131,7 @@ def test_repo_paths_are_normalized_and_deduplicated():
     assert trie.resolve("http.c") == ["lib/http.c"]
 
 
-def test_add_after_resolve_resorts():
+def test_add_after_resolve_resorts() -> None:
     trie = PathTrie(["b/x.c"])
     assert trie.resolve("x.c") == ["b/x.c"]
     trie.add("a/x.c")
@@ -141,7 +141,7 @@ def test_add_after_resolve_resorts():
     assert trie.resolve("x.c") == ["a/x.c", "b/x.c"]
 
 
-def test_empty_trie():
+def test_empty_trie() -> None:
     trie = PathTrie()
     assert len(trie) == 0
     assert trie.resolve("a.c") == []
@@ -151,18 +151,18 @@ def test_empty_trie():
 # --- disambiguation ------------------------------------------------------------------------
 
 
-def test_disambiguate_keeps_the_defining_file():
+def test_disambiguate_keeps_the_defining_file() -> None:
     trie = PathTrie(VULNLAB)
     defines = {"src/util.c": True, "tests/util.c": False}
     assert trie.disambiguate("util.c", None, defines.__getitem__) == ["src/util.c"]
 
 
-def test_disambiguate_keeps_all_when_none_define():
+def test_disambiguate_keeps_all_when_none_define() -> None:
     trie = PathTrie(VULNLAB)
     assert trie.disambiguate("util.c", None, lambda _: False) == ["src/util.c", "tests/util.c"]
 
 
-def test_disambiguate_with_explicit_candidates():
+def test_disambiguate_with_explicit_candidates() -> None:
     trie = PathTrie(VULNLAB)
     candidates = ["tests/util.c", "src/util.c", "src/util.c"]
     assert trie.disambiguate("util.c", candidates, lambda p: p.startswith("tests/")) == [
@@ -171,7 +171,7 @@ def test_disambiguate_with_explicit_candidates():
     assert trie.disambiguate("util.c", [], lambda _: True) == []
 
 
-def test_disambiguate_several_defining_files():
+def test_disambiguate_several_defining_files() -> None:
     trie = PathTrie(["a/u.c", "b/u.c", "c/u.c"])
     assert trie.disambiguate("u.c", None, lambda p: p != "b/u.c") == ["a/u.c", "c/u.c"]
 

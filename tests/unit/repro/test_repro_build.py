@@ -43,7 +43,7 @@ def vulnlab(tmp_path_factory) -> tuple[Path, dict[str, str]]:
     return dest, tags
 
 
-def test_build_key_is_recipe_id_sha_and_commit():
+def test_build_key_is_recipe_id_sha_and_commit() -> None:
     key = build.build_key("vulnlab", LOADED.sha256, COMMIT)
     assert key.parts == ("repro", "builds", "vulnlab", LOADED.sha256[:16], COMMIT)
 
@@ -60,7 +60,7 @@ def test_build_dir_changes_when_the_recipe_changes(tmp_path):
     assert build.build_dir(LOADED, COMMIT, tmp_path).is_relative_to(tmp_path)
 
 
-def test_build_script_copies_source_then_outputs():
+def test_build_script_copies_source_then_outputs() -> None:
     script = build.build_script(LOADED.recipe)
     lines = script.splitlines()
     assert lines[1:4] == ["set -eu", "cp -R /src/. /work/", "cd /work"]
@@ -120,7 +120,7 @@ def test_uncached_build_refuses_without_an_engine(vulnlab, tmp_path):
     assert not build.build_dir(LOADED, commit, tmp_path).exists()
 
 
-def test_build_script_opens_out_on_every_exit():
+def test_build_script_opens_out_on_every_exit() -> None:
     lines = build.build_script(LOADED.recipe).splitlines()
     assert lines[0] == "trap 'chmod -R a+rwX /out 2>/dev/null || true' EXIT"
     assert lines[1] == "set -eu"

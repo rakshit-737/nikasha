@@ -23,14 +23,14 @@ def _extract(text: str, fmt: str = "markdown"):
     return report, extract_claims(report)
 
 
-def test_every_extractor_is_registered():
+def test_every_extractor_is_registered() -> None:
     assert set(EXTRACTORS) == {
         "behavior", "impact", "options", "paths", "patches", "pocs", "references", "snippets",
         "symbols", "traces", "versions",
     }  # fmt: skip
 
 
-def test_spans_match_body_exactly():
+def test_spans_match_body_exactly() -> None:
     report, extraction = _extract(APPENDIX_B.read_text(encoding="utf-8"))
     assert extraction.claims
     for claim in extraction.claims:
@@ -38,7 +38,7 @@ def test_spans_match_body_exactly():
             assert report.body[span.start : span.end] == span.text
 
 
-def test_byte_identical_json_across_runs():
+def test_byte_identical_json_across_runs() -> None:
     text = APPENDIX_B.read_text(encoding="utf-8")
     outputs = []
     for _ in range(2):
@@ -51,7 +51,7 @@ def test_byte_identical_json_across_runs():
     assert outputs[0] == outputs[1]
 
 
-def test_ids_are_stable_and_unique():
+def test_ids_are_stable_and_unique() -> None:
     _, a = _extract(APPENDIX_B.read_text(encoding="utf-8"))
     _, b = _extract("Preamble line.\n\n" + APPENDIX_B.read_text(encoding="utf-8"))
     ids_a = [c.id for c in a.claims]
@@ -60,20 +60,20 @@ def test_ids_are_stable_and_unique():
     assert {c.id for c in a.claims if c.kind != "snippet"} <= {c.id for c in b.claims}
 
 
-def test_claims_are_sorted_by_position():
+def test_claims_are_sorted_by_position() -> None:
     _, extraction = _extract(APPENDIX_B.read_text(encoding="utf-8"))
     starts = [c.spans[0].start for c in extraction.claims]
     assert starts == sorted(starts)
 
 
-def test_same_symbol_mentions_merge():
+def test_same_symbol_mentions_merge() -> None:
     _, extraction = _extract("`foo_bar()` fails. Also foo_bar(x) and the function foo_bar.")
     symbols = [c for c in extraction.claims if c.kind == "symbol"]
     assert len(symbols) == 1
     assert len(symbols[0].spans) == 3
 
 
-def test_paths_inside_patch_are_dropped():
+def test_paths_inside_patch_are_dropped() -> None:
     text = "Patch:\n--- a/src/x.c\n+++ b/src/x.c\n@@ -1 +1 @@\n-old\n+new\n"
     _, extraction = _extract(text, "text")
     kinds = [c.kind for c in extraction.claims]
@@ -111,7 +111,7 @@ def test_pipeline_never_crashes_on_arbitrary_text(text):
 
 
 @pytest.mark.slow
-def test_one_megabyte_report_extracts_in_budget():
+def test_one_megabyte_report_extracts_in_budget() -> None:
     """SPEC §20.1: extraction on a 1 MB report must take under 1 s on the documented machine
     (measured 0.94 s including ingest, M1). This guard uses a loose budget because CI runner
     speed varies; the real benchmark arrives with pytest-benchmark in M3."""

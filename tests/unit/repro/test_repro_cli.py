@@ -61,14 +61,14 @@ def test_repro_refuses_a_named_engine_that_is_missing(tmp_path, monkeypatch):
     assert "--sandbox docker" in result.output
 
 
-def test_recipes_list():
+def test_recipes_list() -> None:
     result = runner.invoke(APP, ["recipes", "list"])
     assert result.exit_code == 0
     ids = [line.split("\t")[0] for line in result.output.splitlines()]
     assert ids == ["curl", "libxml2", "sqlite", "vulnlab"]
 
 
-def test_recipes_show_is_json_with_sha():
+def test_recipes_show_is_json_with_sha() -> None:
     result = runner.invoke(APP, ["recipes", "show", "vulnlab"])
     assert result.exit_code == 0
     payload = json.loads(result.output)
@@ -76,13 +76,13 @@ def test_recipes_show_is_json_with_sha():
     assert len(payload["sha256"]) == 64
 
 
-def test_recipes_show_unknown_fails():
+def test_recipes_show_unknown_fails() -> None:
     result = runner.invoke(APP, ["recipes", "show", "nope"])
     assert result.exit_code == 1
     assert "no recipe named" in result.output
 
 
-def test_recipes_validate_all_shipped():
+def test_recipes_validate_all_shipped() -> None:
     result = runner.invoke(APP, ["recipes", "validate"])
     assert result.exit_code == 0, result.output
     assert result.output.count("ok\t") == 4
@@ -109,7 +109,7 @@ def test_repro_rejects_out_of_range_timeouts(tmp_path, value):
     assert "--timeout must be" in result.output
 
 
-def test_terminal_safe_neutralizes_escape_sequences():
+def test_terminal_safe_neutralizes_escape_sequences() -> None:
     hostile = "a\x1b[2Jb\x1b]0;title\x07c\x1b]52;c;ZXZpbA==\x07\x9b31m\x7fd\te\nf"
     safe = terminal_safe(hostile)
     assert not any(ord(ch) < 0x20 and ch not in "\t\n" for ch in safe)
@@ -118,7 +118,7 @@ def test_terminal_safe_neutralizes_escape_sequences():
     assert safe.endswith("d\te\nf")
 
 
-def test_terminal_safe_escapes_bidi_overrides():
+def test_terminal_safe_escapes_bidi_overrides() -> None:
     assert terminal_safe("a\u202eb\u2066c") == "a\\u202eb\\u2066c"
 
 

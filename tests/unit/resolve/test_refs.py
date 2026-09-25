@@ -76,7 +76,7 @@ def test_non_release_tags_are_ignored(tag):
     assert parse_tag(tag) is None
 
 
-def test_ordering_appendix_c():
+def test_ordering_appendix_c() -> None:
     order = ["1.2.3-rc1", "1.2.3", "1.2.3a"]
     parsed = [parse_tag(t) for t in order]
     assert all(parsed)
@@ -92,7 +92,7 @@ def test_ordering_appendix_c():
     assert pre.sort_key[1] == beta.sort_key[1]
 
 
-def test_trailing_zeros_are_equal():
+def test_trailing_zeros_are_equal() -> None:
     assert parse_tag("8.5").trimmed == parse_tag("curl-8_5_0").trimmed  # type: ignore[union-attr]
 
 
@@ -153,7 +153,7 @@ def test_real_tag_lists_parse_mostly(project):
     assert keys == sorted(keys)
 
 
-def test_prereleases_only_match_when_named():
+def test_prereleases_only_match_when_named() -> None:
     releases = _releases("node")
     assert all(not r.tag.is_prerelease for r in releases.match(parse_version("4.0.0")))  # type: ignore[arg-type]
     rc = releases.match(parse_version("4.0.0-rc2"))  # type: ignore[arg-type]
@@ -161,7 +161,7 @@ def test_prereleases_only_match_when_named():
     assert rc[0].name == "v4.0.0-rc.2"
 
 
-def test_neighbours_window_and_latest_before():
+def test_neighbours_window_and_latest_before() -> None:
     releases = _releases("curl")
     below, above = releases.neighbours(parse_version("8.4.7"))  # type: ignore[arg-type]
     assert below is not None
@@ -175,7 +175,7 @@ def test_neighbours_window_and_latest_before():
     assert releases.latest_before(-1) is None
 
 
-def test_family_filter():
+def test_family_filter() -> None:
     releases = ReleaseList.from_tags(
         [TagRef("OpenSSL-fips-2_0_9", "a", 1), TagRef("OpenSSL_1_1_1w", "b", 2)],
         families=["openssl"],

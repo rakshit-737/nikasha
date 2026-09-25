@@ -90,7 +90,7 @@ def test_fixture(name, bug_type, message, app, runtime):
     )
 
 
-def test_fixture_embedded_in_markdown_is_found_by_the_pipeline():
+def test_fixture_embedded_in_markdown_is_found_by_the_pipeline() -> None:
     trace_text = _load("03-unhandled-rejection.txt")
     md = f"Unhandled rejection:\n\n```\n{trace_text}```\n\nNo catch around fetchRecord.\n"
     report = ingest_string(md, input_format="markdown")
@@ -119,7 +119,7 @@ trailing prose
 """
 
 
-def test_error_code_property_block_and_frame_shapes():
+def test_error_code_property_block_and_frame_shapes() -> None:
     trace = _one(PROPS)
     data = trace.data
     assert PROPS[trace.start : trace.end].endswith("Node.js v18.19.0")
@@ -141,7 +141,7 @@ def test_error_code_property_block_and_frame_shapes():
     )
 
 
-def test_no_header_no_footer_and_prose_around():
+def test_no_header_no_footer_and_prose_around() -> None:
     text = (
         "We saw this:\n"
         "Uncaught RangeError: Maximum call stack size exceeded\n"
@@ -159,7 +159,7 @@ def test_no_header_no_footer_and_prose_around():
     assert trace.data.frames[1].function is None
 
 
-def test_header_needs_caret_and_location():
+def test_header_needs_caret_and_location() -> None:
     text = "just a line\nno caret here\n\nTypeError: x\n    at f (/a.js:1:1)\n"
     assert _one(text).start == text.index("TypeError")
     text = "not a location\n  src\n  ^\n\nTypeError: x\n    at f (/a.js:1:1)\n"

@@ -70,7 +70,7 @@ def test_fixture(name, bug_type, message, frames, path):
     assert [f.index for f in data.frames] == list(range(len(frames)))
 
 
-def test_caused_by_stack():
+def test_caused_by_stack() -> None:
     data = _one(_load("03-caused-by.txt")).data
     assert len(data.other_stacks) == 1
     cause = data.other_stacks[0]
@@ -99,7 +99,7 @@ def test_caused_by_stack():
     )
 
 
-def test_fixture_embedded_in_markdown_is_found_by_the_pipeline():
+def test_fixture_embedded_in_markdown_is_found_by_the_pipeline() -> None:
     trace_text = _load("01-null-pointer.txt")
     md = f"When the user is missing:\n\n```java\n{trace_text}```\n\nThe NPE leaks the parameter.\n"
     report = ingest_string(md, input_format="markdown")
@@ -131,7 +131,7 @@ Next log line
 """
 
 
-def test_bare_header_suppressed_and_frame_shapes():
+def test_bare_header_suppressed_and_frame_shapes() -> None:
     trace = _one(BARE)
     data = trace.data
     assert BARE[trace.start : trace.end].startswith("java.lang.IllegalStateException: boom")
@@ -177,7 +177,7 @@ def test_non_java_headers(text):
     assert PARSER.parse(text) == []
 
 
-def test_split_header_and_bare_type():
+def test_split_header_and_bare_type() -> None:
     assert java.split_header("java.lang.Error") == ("java.lang.Error", None)
     assert java.split_header("MyError:") == ("MyError", None)
     trace = _one("MyError: x\n\tat Foo.bar(Foo.java:3)\n")

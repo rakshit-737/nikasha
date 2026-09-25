@@ -53,11 +53,11 @@ def _violations(path: Path) -> list[str]:
     return found
 
 
-def test_source_tree_exists():
+def test_source_tree_exists() -> None:
     assert (SRC / "__init__.py").is_file()
 
 
-def test_only_wrappers_spawn_processes():
+def test_only_wrappers_spawn_processes() -> None:
     offenders = {
         str(p.relative_to(SRC)): v
         for p in sorted(SRC.rglob("*.py"))

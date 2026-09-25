@@ -54,7 +54,7 @@ RESULT_ID = re.compile(r"[0-9a-f]{12}")
 # -- argument hardening (no repository needed) --------------------------------------------
 
 
-def test_validate_repo_canonicalizes_https_urls():
+def test_validate_repo_canonicalizes_https_urls() -> None:
     assert validate_repo(" https://github.com/curl/curl.git/tree/master ") == (
         "https://github.com/curl/curl"
     )
@@ -99,7 +99,7 @@ def test_validate_rev_reuses_the_gitio_rules(value):
         validate_rev(value, "version")
 
 
-def test_validate_symbol_wants_one_identifier():
+def test_validate_symbol_wants_one_identifier() -> None:
     assert validate_symbol(" util_copy_value ") == "util_copy_value"
     with pytest.raises(NikashaError, match="whitespace"):
         validate_symbol("util copy_value")
@@ -107,7 +107,7 @@ def test_validate_symbol_wants_one_identifier():
         validate_symbol("--all")
 
 
-def test_validate_text_applies_the_cli_input_cap():
+def test_validate_text_applies_the_cli_input_cap() -> None:
     assert validate_text("a report", "report_text") == "a report"
     with pytest.raises(NikashaError, match="empty"):
         validate_text(" \n\t", "report_text")
@@ -463,7 +463,7 @@ def _app() -> typer.Typer:
     return app
 
 
-def test_register_adds_the_mcp_command():
+def test_register_adds_the_mcp_command() -> None:
     result = CliRunner().invoke(_app(), ["mcp", "--help"])
     assert result.exit_code == 0
     assert "--online" in result.output

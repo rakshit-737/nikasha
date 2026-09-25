@@ -12,11 +12,11 @@ from nikasha.code.parser import parse_file
 FACTS = parse_fixture(Lang.PHP, "php/sample.php")
 
 
-def test_parses_cleanly():
+def test_parses_cleanly() -> None:
     assert_clean(FACTS)
 
 
-def test_symbols():
+def test_symbols() -> None:
     assert symbols(FACTS) == [
         ("function", "slugify", "slugify", 7, 10),
         # `render` in the interface has no body: not a definition.
@@ -30,7 +30,7 @@ def test_symbols():
     assert flags(FACTS, "Page::footer") == {"static"}
 
 
-def test_calls():
+def test_calls() -> None:
     assert calls(FACTS) == [
         ("slugify", "strtolower", 9, False),
         ("slugify", "trim", 9, False),
@@ -43,7 +43,7 @@ def test_calls():
     ]
 
 
-def test_php_embedded_in_html():
+def test_php_embedded_in_html() -> None:
     src = b"<html><?php function greet($n) { return ucfirst($n); } ?><p><?= greet('a') ?></p>\n"
     facts = parse_file(Lang.PHP, src)
     assert symbols(facts) == [("function", "greet", "greet", 1, 1)]

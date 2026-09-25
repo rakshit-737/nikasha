@@ -96,7 +96,7 @@ def test_multiple_versions_are_recorded(vulnlab_repo):
     assert res.target.confidence == "medium"
 
 
-def test_no_repository_is_an_actionable_error():
+def test_no_repository_is_an_actionable_error() -> None:
     report = ingest_string("A crash in some library.", input_format="markdown")
     with pytest.raises(TargetNotFoundError, match="--repo"):
         resolve_target(report, extract_claims(report).claims)

@@ -12,13 +12,13 @@ from nikasha.code import gitio
 runner = CliRunner()
 
 
-def test_version_prints_single_sourced_version():
+def test_version_prints_single_sourced_version() -> None:
     result = runner.invoke(app, ["version"])
     assert result.exit_code == 0
     assert result.stdout.strip() == __version__
 
 
-def test_no_args_shows_help():
+def test_no_args_shows_help() -> None:
     result = runner.invoke(app, [])
     assert "doctor" in result.output
     assert "version" in result.output
@@ -63,7 +63,7 @@ def test_utf8_uses_check_marks(encoding):
     assert status_symbols(encoding)["ok"] == "✓"
 
 
-def test_ascii_flag_forces_ascii():
+def test_ascii_flag_forces_ascii() -> None:
     assert status_symbols("utf-8", force_ascii=True)["ok"] == "+"
 
 

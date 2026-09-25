@@ -63,7 +63,7 @@ def _time(pattern: re.Pattern[Any], text: str) -> float:
     return time.perf_counter() - started
 
 
-def test_patterns_were_collected():
+def test_patterns_were_collected() -> None:
     assert len(PATTERNS) > 40
 
 

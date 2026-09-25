@@ -27,7 +27,7 @@ PARSER = LsanParser()
 HEADER = "==1==ERROR: LeakSanitizer: detected memory leaks"
 
 
-def test_not_registered_by_default():
+def test_not_registered_by_default() -> None:
     assert "lsan" not in PARSERS  # ADR 0009: registered only once real fixtures pass
     assert PARSER.format == "lsan"
 
@@ -37,7 +37,7 @@ def test_no_trace_without_header(text):
     assert PARSER.parse(text) == []
 
 
-def test_header_alone_is_one_trace_without_frames():
+def test_header_alone_is_one_trace_without_frames() -> None:
     traces = PARSER.parse("noise\n" + HEADER + "\n")
     assert len(traces) == 1
     trace = traces[0]
@@ -46,7 +46,7 @@ def test_header_alone_is_one_trace_without_frames():
     assert ("noise\n" + HEADER + "\n")[: trace.end] == "noise\n" + HEADER
 
 
-def test_output_is_deterministic():
+def test_output_is_deterministic() -> None:
     text = ("x\n" + HEADER + "\n#0 0x1 in f /a.c:1:2\n") * 3
     assert PARSER.parse(text) == PARSER.parse(text)
 
@@ -73,7 +73,7 @@ def _fixtures() -> list[Path]:
     return sorted(FIXTURES.glob("*.txt")) if FIXTURES.is_dir() else []
 
 
-def test_real_fixtures_parse():
+def test_real_fixtures_parse() -> None:
     fixtures = _fixtures()
     if not fixtures:
         pytest.skip("no real lsan fixtures yet: run scripts/capture_sanitizer_fixtures.py")
@@ -121,7 +121,7 @@ def _bug(cap, **kw):
     return cap.Bug(**fields)
 
 
-def test_capture_accepts_only_complete_sanitizer_output():
+def test_capture_accepts_only_complete_sanitizer_output() -> None:
     cap = _capture_module()
     good = b"==7==ERROR: LeakSanitizer: detected memory leaks\n"
     assert cap.acceptable("lsan", _result(good)) is None
@@ -135,7 +135,7 @@ def test_capture_accepts_only_complete_sanitizer_output():
     assert cap.acceptable("msan", _result(tsan, exit_code=77)) is not None
 
 
-def test_capture_requires_the_fixed_tag_to_be_clean():
+def test_capture_requires_the_fixed_tag_to_be_clean() -> None:
     cap = _capture_module()
     good = b"==7==ERROR: LeakSanitizer: detected memory leaks\n"
     assert cap.fixed_is_clean("lsan", _result(b"", exit_code=0)) is None
@@ -144,7 +144,7 @@ def test_capture_requires_the_fixed_tag_to_be_clean():
     assert cap.fixed_is_clean("lsan", _result(b"", timed_out=True)) is not None
 
 
-def test_capture_catalogue_is_checked():
+def test_capture_catalogue_is_checked() -> None:
     cap = _capture_module()
     assert cap.check_catalogue(cap.BUGS) == []
     assert cap.check_catalogue((_bug(cap),)) == []
@@ -155,7 +155,7 @@ def test_capture_catalogue_is_checked():
     assert cap.check_catalogue((_bug(cap, fmt="asan"),))
 
 
-def test_capture_script_pins_exit_code_sanitizer_and_retries():
+def test_capture_script_pins_exit_code_sanitizer_and_retries() -> None:
     cap = _capture_module()
     for fmt, flag in (("lsan", "leak"), ("msan", "memory"), ("tsan", "thread")):
         bug = _bug(cap, fmt=fmt, options="report_objects=1")
@@ -168,7 +168,7 @@ def test_capture_script_pins_exit_code_sanitizer_and_retries():
         assert f"seq 1 {attempts})" in script
 
 
-def test_capture_container_argv_is_hardened():
+def test_capture_container_argv_is_hardened() -> None:
     cap = _capture_module()
     bug = _bug(cap)
     spec = sandbox.ContainerSpec(
@@ -183,7 +183,7 @@ def test_capture_container_argv_is_hardened():
         assert any(a in ("--network=none", "none") for a in argv)
 
 
-def test_capture_refuses_while_no_fixed_bug_is_catalogued():
+def test_capture_refuses_while_no_fixed_bug_is_catalogued() -> None:
     cap = _capture_module()
     assert cap.BUGS == ()  # entries need hand verification against upstream (ADR 0009)
     with pytest.raises(SystemExit) as exc:

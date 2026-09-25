@@ -82,7 +82,7 @@ def test_fixture(case):
     assert data.other_stacks == ()
 
 
-def test_full_backtrace_hashes_stripped_and_runtime_frames():
+def test_full_backtrace_hashes_stripped_and_runtime_frames() -> None:
     data = _one(_load("02-unwrap-none-backtrace-full.txt")).data
     frames = data.frames
     assert frames[19].raw.startswith(
@@ -109,14 +109,14 @@ def test_full_backtrace_hashes_stripped_and_runtime_frames():
     ]
 
 
-def test_compiler_warnings_before_the_panic_are_not_part_of_it():
+def test_compiler_warnings_before_the_panic_are_not_part_of_it() -> None:
     text = _load("03-thread-panic.txt")
     trace = _one(text)
     assert "warning:" not in text[trace.start : trace.end]
     assert trace.data.frames[3].function == "thread_panic::main::{closure#0}"
 
 
-def test_fixture_embedded_in_markdown_is_found_by_the_pipeline():
+def test_fixture_embedded_in_markdown_is_found_by_the_pipeline() -> None:
     trace_text = _load("01-index-oob-backtrace.txt")
     md = f"Output:\n\n```console-output\n{trace_text}```\n\npick() trusts the index.\n"
     report = ingest_string(md, input_format="markdown")
@@ -131,7 +131,7 @@ def test_fixture_embedded_in_markdown_is_found_by_the_pipeline():
 # --- variants ---------------------------------------------------------------------------
 
 
-def test_no_backtrace_synthesizes_the_panic_location():
+def test_no_backtrace_synthesizes_the_panic_location() -> None:
     text = (
         "thread 'main' panicked at src/main.rs:2:5:\n"
         "explicit panic\n"
@@ -154,7 +154,7 @@ def test_no_backtrace_synthesizes_the_panic_location():
     assert text[trace.start : trace.end].endswith("to display a backtrace")
 
 
-def test_pre_1_73_header_with_quoted_message_and_legacy_hash():
+def test_pre_1_73_header_with_quoted_message_and_legacy_hash() -> None:
     text = (
         "thread 'worker' panicked at 'bad input', src/lib.rs:10:9\n"
         "stack backtrace:\n"
@@ -168,7 +168,7 @@ def test_pre_1_73_header_with_quoted_message_and_legacy_hash():
     assert data.frames[1].is_runtime
 
 
-def test_two_panics_and_unparseable_location():
+def test_two_panics_and_unparseable_location() -> None:
     text = "thread 'a' panicked at nowhere:\nfirst\nthread 'b' (3) panicked at x.rs:1:1:\nsecond\n"
     first, second = PARSER.parse(text)
     assert (first.data.message, first.data.frames) == ("first", ())

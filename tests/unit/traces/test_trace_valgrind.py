@@ -86,7 +86,7 @@ def test_fixture_with_internal_assertion(name, write_line, alloc_line, caller_li
     assert data.other_stacks == ()
 
 
-def test_fixture_with_five_errors():
+def test_fixture_with_five_errors() -> None:
     text = _load("03-vulnlab-small-overflow-v1.2.0.txt")
     traces = PARSER.parse(text)
     expected = [
@@ -117,7 +117,7 @@ def test_fixture_with_five_errors():
     assert "HEAP SUMMARY" not in text[traces[-1].start : traces[-1].end]
 
 
-def test_fixture_embedded_in_markdown_is_found_by_the_pipeline():
+def test_fixture_embedded_in_markdown_is_found_by_the_pipeline() -> None:
     trace_text = _load("01-vulnlab-invalid-write-v1.2.0.txt")
     md = f"Valgrind says:\n\n```\n{trace_text}```\n\nThat is all.\n"
     report = ingest_string(md, input_format="markdown")
@@ -148,7 +148,7 @@ USE_AFTER_FREE = """\
 """
 
 
-def test_use_after_free_block_stacks():
+def test_use_after_free_block_stacks() -> None:
     trace = PARSER.parse(USE_AFTER_FREE)[0]
     data = trace.data
     assert data.region.relation == "inside"
@@ -159,7 +159,7 @@ def test_use_after_free_block_stacks():
     assert USE_AFTER_FREE[trace.start : trace.end].endswith("main (uaf.c:18)")
 
 
-def test_before_block_region_and_library_frames():
+def test_before_block_region_and_library_frames() -> None:
     text = (
         "==3== Invalid write of size 1\n"
         "==3==    at 0x4C2: ??? (in /usr/lib64/libfoo.so.1)\n"
@@ -179,7 +179,7 @@ def test_before_block_region_and_library_frames():
     assert (frames[2].function, frames[2].module) == (None, None)
 
 
-def test_segv_uninitialised_and_leak_errors():
+def test_segv_uninitialised_and_leak_errors() -> None:
     text = (
         "==9== Process terminating with default action of signal 11 (SIGSEGV)\n"
         "==9==  Access not within mapped region at address 0x0\n"
@@ -232,7 +232,7 @@ def test_classify(line, bug_type):
     assert (kind[0] if kind else None) == bug_type
 
 
-def test_other_pids_and_labels_end_or_extend_an_error():
+def test_other_pids_and_labels_end_or_extend_an_error() -> None:
     text = (
         "==1== Invalid read of size 8\n"
         "==1==    at 0x1: f (a.c:1)\n"

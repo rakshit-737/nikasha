@@ -12,11 +12,11 @@ from nikasha.code.parser import parse_file
 FACTS = parse_fixture(Lang.GO, "go/sample.go")
 
 
-def test_parses_cleanly():
+def test_parses_cleanly() -> None:
     assert_clean(FACTS)
 
 
-def test_symbols():
+def test_symbols() -> None:
     assert symbols(FACTS) == [
         ("type", "Buffer", "Buffer", 7, 10),
         ("type", "Sizer", "Sizer", 12, 14),
@@ -28,7 +28,7 @@ def test_symbols():
     ]
 
 
-def test_calls():
+def test_calls() -> None:
     assert calls(FACTS) == [
         ("New", "make", 17, False),
         ("(*Buffer).Push", "wrap", 22, False),
@@ -42,7 +42,7 @@ def test_calls():
     ]
 
 
-def test_generic_receiver():
+def test_generic_receiver() -> None:
     src = b"package s\n\nfunc (s *Stack[T]) Push(v T) {\n\ts.items = append(s.items, v)\n}\n"
     facts = parse_file(Lang.GO, src)
     assert symbols(facts) == [("method", "Push", "(*Stack).Push", 3, 5)]
