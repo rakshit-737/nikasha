@@ -197,6 +197,16 @@ class TestAbsenceSafeguards:
         assert reason is not None
         assert "address of malloc is taken" in reason
 
+    def test_a_qualified_api_name_still_meets_the_address_taken_guard(
+        self, ctx: CheckContext
+    ) -> None:
+        """The call graph matches ``Alloc::malloc`` as ``malloc``; so must this guard (P4)."""
+        site = _site(ctx, "src/util.c", "util_strip", addr_taken=frozenset({"malloc"}))
+        for api in ("Alloc::malloc", "alloc.malloc"):
+            reason = absence_uncertainty([site], api)
+            assert reason is not None
+            assert "address of malloc is taken" in reason
+
     def test_calls_are_attributed_to_the_enclosing_definition(self, ctx: CheckContext) -> None:
         inside = calls_inside(_site(ctx, "src/util.c", "util_copy_value"))
         assert sorted({call.callee for call in inside}) == ["malloc", "memcpy", "strlen"]

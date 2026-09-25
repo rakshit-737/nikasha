@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# S5: seeded synthetic mutations M1-M7 (SPEC 17.2) of the S6 genuine and mixed fixtures.
+# The mutated text is generated in memory by nikasha.bench.mutations and never committed.
+source: S5
+title: seeded synthetic mutations of vulnlab fixtures
+terms_checked: true
+generator:
+  bases: [vulnlab-genuine, vulnlab-mixed-wrong-version]
+  mutations: [M1, M2, M3, M4, M5, M6, M7]
+  seeds: [0, 1, 2]

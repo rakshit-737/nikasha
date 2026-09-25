@@ -641,3 +641,31 @@ def test_reproduced_is_high_confidence_by_definition() -> None:
     assert len(ledger.groups) == 1
     assert confidence_of(ledger) == "medium"
     assert decide(ledger, items, [POC_CLAIM]).confidence == "high"
+
+
+# --- the LLM is never decisive (P2) --------------------------------------------------------
+
+
+def test_an_llm_refutation_never_counts_as_a_corroborating_group() -> None:
+    """A capped model answer must not be the second group that opens rule 3a."""
+    core = ev("core", "C03", "never_in_history_core", "symbols")
+    model = Evidence(
+        id="llm",
+        check_id="C20",
+        claim_ids=("claim-llm",),
+        outcome="REFUTES",
+        strength=-STRENGTHS.get("C20", "llm_cap"),
+        group="llm",
+        summary="model review",
+        details={"outcome": "refuted"},
+        produced_by="llm",
+    )
+    assert verdict([core]).label != "UNGROUNDED"
+    decision = verdict([core, model])
+    assert decision.score < LIMITS.ungrounded_score
+    assert decision.label != "UNGROUNDED"
+
+
+def test_rule_1_needs_a_supporting_deterministic_signature_match() -> None:
+    errored = ev("repro", "C19", "signature_match", "repro", outcome="ERROR")
+    assert verdict([errored, *SUPPORT_LIFT]).label != "REPRODUCED"

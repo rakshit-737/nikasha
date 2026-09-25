@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Runs the container-engine tests (SPEC §13.6) on a real engine. Actions are pinned by full
+# commit SHA, resolved with `gh api` on 2026-09-24 (both tags are lightweight, pointing at commits).
+name: Sandbox
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sandbox-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  UV_VERSION: "0.12.18"
+  FORCE_COLOR: "1"
+
+jobs:
+  sandbox:
+    name: Sandbox tests (docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - run: uv sync --locked --all-groups
+      - run: docker version
+      - run: uv run pytest -m "sandbox and not network" tests/sandbox tests/unit -q

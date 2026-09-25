@@ -33,10 +33,13 @@ def lines_around(
 ) -> Sequence[tuple[int, str]]:
     """Numbered lines covering ``start``..``end`` with ``context`` lines either side."""
     lines = source.splitlines()
-    if not lines:
+    low, high = min(start, end), max(start, end)
+    if not lines or low > len(lines):
+        # A range past the end of the file is a stale or wrong location. Showing the file's
+        # tail instead would put unrelated code under a "lines X to Y" caption (P6).
         return []
-    first = max(1, min(start, len(lines)) - context)
-    last = min(len(lines), max(end, start) + context)
+    first = max(1, low - context)
+    last = min(len(lines), high + context)
     if last - first + 1 > MAX_LINES:
         last = first + MAX_LINES - 1
     return [(n, lines[n - 1]) for n in range(first, last + 1)]

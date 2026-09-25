@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# sqlite: the sqlite3 shell from the GitHub mirror at version-X.Y.Z tags (SPEC §13.2, MUST).
+# UNVERIFIED: these build steps have NOT been run. The development machine has no container
+# engine; they follow sqlite's documented `./configure && make sqlite3` (tclsh generates
+# the amalgamation, so tcl is in the image) and must be verified per era by the sandbox CI
+# job. Releases from 3.48 use autosetup, whose configure accepts --disable-tcl as well.
+id: sqlite
+title: sqlite3 shell (sanitizer build)
+match: {products: [sqlite, sqlite3], tag_pattern: "version-{major}.{minor}.{patch}"}
+image: {dockerfile: docker/recipes/c-toolchain.Dockerfile, tag: "nikasha/recipe-c:1"}
+build:
+  env:
+    CC: clang
+    CFLAGS: "-O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined"
+    LDFLAGS: "-fsanitize=address,undefined"
+  steps:
+    - "./configure --disable-tcl --disable-shared"
+    - "make -j4 sqlite3"
+  outputs: ["sqlite3"]
+  timeout_s: 1800
+  work_size: 2g
+run:
+  kinds:
+    cli: {cmd: ["/build/sqlite3", "{args}"]}
+    file_input: {cmd: ["/build/sqlite3", ":memory:", ".read /poc/{file}"]}
+  env:
+    ASAN_OPTIONS: "abort_on_error=1:detect_leaks=0:symbolize=1"
+    UBSAN_OPTIONS: "print_stacktrace=1:halt_on_error=1"
+  timeout_s: 30
+limits: {cpus: 2, memory: "2g", pids: 256, output_bytes: 1048576}

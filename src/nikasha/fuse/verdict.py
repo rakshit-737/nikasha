@@ -109,7 +109,16 @@ def outcome_key(evidence: Evidence, strengths: Strengths | None = None) -> str |
 
 
 def _refutations(evidence: Sequence[Evidence]) -> list[Evidence]:
-    return [e for e in evidence if e.outcome == "REFUTES" and e.strength < 0.0]
+    """Deterministic refutations only.
+
+    A model's answer may nudge the score (capped at 0.5), but it must never count as an
+    independent group toward UNGROUNDED: that would make the LLM decisive (P2, P4).
+    """
+    return [
+        e
+        for e in evidence
+        if e.outcome == "REFUTES" and e.strength < 0.0 and e.produced_by == "deterministic"
+    ]
 
 
 def _groups(items: Sequence[Evidence]) -> set[str]:
@@ -118,7 +127,12 @@ def _groups(items: Sequence[Evidence]) -> set[str]:
 
 def _reproduced(evidence: Sequence[Evidence]) -> Evidence | None:
     for item in evidence:
-        if item.check_id == "C19" and outcome_key(item) == "signature_match":
+        if (
+            item.check_id == "C19"
+            and item.outcome == "SUPPORTS"
+            and item.produced_by == "deterministic"
+            and outcome_key(item) == "signature_match"
+        ):
             return item
     return None
 

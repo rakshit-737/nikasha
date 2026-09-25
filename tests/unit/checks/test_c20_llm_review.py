@@ -19,6 +19,7 @@ from nikasha.checks.c20_llm_review import (
     CONTEXT_LINES,
     MAX_EXCERPT_LINES,
     LlmReview,
+    _cited_locations,
     _excerpt,
     _sites,
 )
@@ -29,6 +30,7 @@ from nikasha.llm.guard import (
     END_MARKER,
     MAX_LLM_STRENGTH,
     REVIEW_SCHEMA,
+    Excerpt,
 )
 from nikasha.llm.provider import LLMError
 from nikasha.model.claims import BehaviorClaim
@@ -386,3 +388,14 @@ def test_summaries_describe_code_never_people(make_ctx: MakeContext) -> None:
         text = evidence.summary.lower()
         for word in ("slop", "fake", "fabricat", "liar", "ai-generated", "hallucinat"):
             assert word not in text, evidence.summary
+
+
+def test_a_line_number_shown_in_two_files_cites_both(ctx: CheckContext) -> None:
+    """A bare cited number is ambiguous across files; neither file is guessed (P6)."""
+    first = Excerpt(path="a.c", start_line=10, lines=("int a;", "int b;"), truncated=False)
+    second = Excerpt(path="b.c", start_line=11, lines=("int c;",), truncated=False)
+    cited = _cited_locations(ctx, [11], [first, second])
+    assert [(loc.path, loc.start_line, loc.excerpt) for loc in cited] == [
+        ("a.c", 11, "int b;"),
+        ("b.c", 11, "int c;"),
+    ]

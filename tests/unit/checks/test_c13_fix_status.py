@@ -8,14 +8,19 @@ vulnlab's ``main`` is linear, so at ``v1.2.0`` exactly two later commits touch
 
 from __future__ import annotations
 
+import subprocess
+
+import pytest
 from check_helpers import MakeContext, claim
 
+from nikasha.checks import c13_fix_status as c13
 from nikasha.checks.base import run_checks
 from nikasha.checks.c13_fix_status import FixStatus
 from nikasha.model.claims import Claim, FileClaim, LineClaim, SymbolClaim
+from nikasha.model.evidence import Evidence
 
 
-def _run(make_ctx: MakeContext, claims: list[Claim], tag: str = "v1.2.0") -> list:
+def _run(make_ctx: MakeContext, claims: list[Claim], tag: str = "v1.2.0") -> list[Evidence]:
     ctx = make_ctx(claims=claims, tag=tag)
     return FixStatus().run(ctx, claims)
 
@@ -170,3 +175,27 @@ def test_registered_and_runnable_through_the_runner(make_ctx: MakeContext) -> No
     assert run.check_id == "C13"
     assert run.error is None
     assert [e.outcome for e in run.evidence] == ["NEUTRAL"]
+
+
+def test_a_capped_log_is_reported_as_truncated_even_after_date_filtering(
+    make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """git stopped at the cap, so more commits may exist even if older ones were dropped."""
+    c = claim(FileClaim, path="src/util.c")
+    ctx = make_ctx(claims=[c], tag="v1.2.0")
+    repo = ctx.resolution.repo
+    lines = [f"{i:040x} {2_000_000_000 - i}" for i in range(c13.MAX_COMMITS - 1)]
+    lines += [f"{i:040x} 1" for i in range(100, 102)]  # older than the ref: dropped
+    fake = subprocess.CompletedProcess([], 0, ("\n".join(lines) + "\n").encode(), b"")
+    real_run = type(repo).run
+
+    def run(self: object, argv: list[str], **kw: object) -> object:
+        if any(a.startswith("--max-count=") for a in argv):
+            return fake
+        return real_run(self, argv, **kw)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(type(repo), "run", run)
+    (evidence,) = FixStatus().run(ctx, [c])
+    assert evidence.details["n_commits"] == c13.MAX_COMMITS - 1
+    assert evidence.details["truncated"] is True
+    assert "or more later commits" in evidence.summary

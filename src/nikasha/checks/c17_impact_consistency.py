@@ -162,6 +162,8 @@ def parse_vector(vector: str) -> tuple[dict[str, str] | None, str]:
         return None, f"it has more than {_MAX_METRICS} metrics"
     if parts and parts[0][:5].upper() == "CVSS:":
         parts = parts[1:]
+    # A stray leading or trailing slash is a formatting slip, not a malformed metric (P4).
+    parts = [part for part in parts if part]
     metrics: dict[str, str] = {}
     for part in parts:
         if not _METRIC_RE.match(part):
@@ -191,7 +193,9 @@ def word_matches(word: str, band: str) -> bool:
 
 def echo(text: str) -> str:
     """A flattened, length-capped echo of reporter text, safe to put in a one-line summary."""
-    flat = " ".join(text.split())
+    # Control characters (ANSI escapes, NUL, bidi overrides) never reach a summary (P7).
+    printable = "".join(ch if ch.isprintable() else " " for ch in text)
+    flat = " ".join(printable.split())
     return flat if len(flat) <= _MAX_ECHO else flat[: _MAX_ECHO - 3] + "..."
 
 
@@ -216,6 +220,10 @@ def assess(claim: ImpactClaim) -> Assessment:
     vector = claim.cvss_vector
     stated = vector_version(vector) if vector is not None else None
     version = stated or claim.cvss_version
+    # A NaN or infinite score is not a number the report printed; it has no band (P4).
+    claimed = claim.cvss_score
+    if claimed is not None and not math.isfinite(claimed):
+        claimed = None
     computed: float | None = None
     parse_error: str | None = None
     unscored: str | None = None
@@ -232,13 +240,13 @@ def assess(claim: ImpactClaim) -> Assessment:
             unscored = f"CVSS v{version} vectors are not scored by this check"
     return Assessment(
         version=version,
-        claimed=claim.cvss_score,
+        claimed=claimed,
         word=claim.severity_word,
         computed=computed,
         parse_error=parse_error,
         unscored=unscored,
         # The severity word describes the number the report itself prints, when it prints one.
-        reference=claim.cvss_score if claim.cvss_score is not None else computed,
+        reference=claimed if claimed is not None else computed,
     )
 
 

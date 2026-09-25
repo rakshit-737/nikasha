@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# libhdr, the hermetic demo lab built by scripts/build_vulnlab.py (SPEC §13.2, MUST).
+# The Makefile uses `CC ?=` / `CFLAGS ?=`, so the environment below takes effect.
+# Build steps verified against examples/vulnlab/src/*/Makefile; the container build itself
+# is exercised only by the sandbox test suite (no container engine on the dev machine).
+id: vulnlab
+title: libhdr (Nikasha demo lab)
+match: {products: [libhdr, vulnlab], tag_pattern: "v{major}.{minor}.{patch}"}
+image: {dockerfile: docker/recipes/c-toolchain.Dockerfile, tag: "nikasha/recipe-c:1"}
+build:
+  env:
+    CC: clang
+    CFLAGS: "-std=c99 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined"
+    LDFLAGS: "-fsanitize=address,undefined"
+  steps: ["make -j4"]
+  outputs: ["build/hdrcat", "build/libhdr.a", "include/"]
+  timeout_s: 600
+  work_size: 512m
+run:
+  kinds:
+    cli: {cmd: ["/build/hdrcat", "{args}"]}
+    file_input: {cmd: ["/build/hdrcat", "/poc/{file}"]}
+    c_harness:
+      compile: ["clang", "-fsanitize=address,undefined", "-g", "-I/build/include", "/poc/poc.c", "/build/libhdr.a", "-o", "/work/poc"]
+      cmd: ["/work/poc"]
+  env:
+    ASAN_OPTIONS: "abort_on_error=1:detect_leaks=0:symbolize=1"
+    UBSAN_OPTIONS: "print_stacktrace=1:halt_on_error=1"
+  timeout_s: 30
+limits: {cpus: 2, memory: "2g", pids: 256, output_bytes: 1048576}

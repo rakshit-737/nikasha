@@ -77,10 +77,10 @@ class VersionRangeConsistency(BaseCheck):
         ]
         if not ranges or not cores:
             return []  # a range is only checkable against a symbol, and vice versa
-        chosen = self._core(ctx, cores)
-        if chosen is None:
+        ranked = self._ranked_cores(ctx, cores)
+        if not ranked:
             return []
-        core, timeline = chosen
+        core, timeline = ranked[0]
         out: list[Evidence] = []
         for claim in ranges:
             if ctx.expired():
@@ -88,21 +88,22 @@ class VersionRangeConsistency(BaseCheck):
             if not _about_target(ctx, claim):
                 continue  # a version of some other product is not this repository's history
             if claim.relation == "fixed_in":
-                evidence = self._fixed_in(ctx, claim, core, timeline)
+                evidence = self._fixed_in_any(ctx, claim, ranked)
             else:
                 evidence = self._affected_range(ctx, claim, core, timeline)
             if evidence is not None:
                 out.append(evidence)
         return out
 
-    def _core(
+    def _ranked_cores(
         self, ctx: CheckContext, cores: Sequence[SymbolClaim]
-    ) -> tuple[SymbolClaim, Timeline] | None:
-        """The core symbol the ranges are measured against, with its timeline.
+    ) -> list[tuple[SymbolClaim, Timeline]]:
+        """The core symbols with their timelines, earliest introduced first.
 
         Reports normally name one. When they name several, the earliest introduced one is
-        the conservative choice: a range that starts before *that* symbol existed starts
-        before every symbol the report calls central (P4).
+        the conservative yardstick for an affected range: a range that starts before *that*
+        symbol existed starts before every symbol the report calls central (P4). A fix
+        release is measured against all of them (see :meth:`_fixed_in_any`).
         """
         scored: list[tuple[tuple[int, int, int], SymbolClaim, Timeline]] = []
         for order, symbol in enumerate(cores):
@@ -112,10 +113,8 @@ class VersionRangeConsistency(BaseCheck):
             introduced = _introduced(timeline)
             key = (1 if introduced is None else 0, introduced or 0, order)
             scored.append((key, symbol, timeline))
-        if not scored:
-            return None
         scored.sort(key=lambda entry: entry[0])
-        return scored[0][1], scored[0][2]
+        return [(symbol, timeline) for _key, symbol, timeline in scored]
 
     # --- "affected from X" ---------------------------------------------------------------
 
@@ -173,6 +172,28 @@ class VersionRangeConsistency(BaseCheck):
         return above[0] if above else None
 
     # --- "fixed in X" ----------------------------------------------------------------------
+
+    def _fixed_in_any(
+        self,
+        ctx: CheckContext,
+        claim: VersionClaim,
+        ranked: Sequence[tuple[SymbolClaim, Timeline]],
+    ) -> Evidence | None:
+        """Judge a fix release against every core symbol, refuting only if none changed.
+
+        A fix may land in any of the functions the report calls central, so one untouched
+        core symbol says nothing while another one changed in that release (P4). Support wins
+        over a refusal, and a refusal wins over a refutation.
+        """
+        found: list[Evidence] = []
+        for core, timeline in ranked:
+            if ctx.expired():
+                return None
+            evidence = self._fixed_in(ctx, claim, core, timeline)
+            if evidence is not None:
+                found.append(evidence)
+        rank = {"SUPPORTS": 0, "NEUTRAL": 1, "REFUTES": 2}
+        return min(found, key=lambda e: rank.get(e.outcome, 1), default=None)
 
     def _fixed_in(
         self, ctx: CheckContext, claim: VersionClaim, core: SymbolClaim, timeline: Timeline

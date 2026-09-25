@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# curl: a sanitizer build of src/curl with minimal features (SPEC §13.2, MUST).
+# UNVERIFIED: these configure flags have NOT been run. The development machine has no
+# container engine, so they were written from curl's configure documentation and must be
+# verified per era by the sandbox CI job (older releases may lack some --without-* flags;
+# autoconf only warns about unknown ones). Tags look like curl-8_10_1.
+id: curl
+title: curl command-line tool (sanitizer build, minimal features)
+match: {products: [curl, libcurl], tag_pattern: "curl-{major}_{minor}_{patch}"}
+image: {dockerfile: docker/recipes/c-toolchain.Dockerfile, tag: "nikasha/recipe-c:1"}
+build:
+  env:
+    CC: clang
+    CFLAGS: "-O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined"
+    LDFLAGS: "-fsanitize=address,undefined"
+  steps:
+    - "autoreconf -fi"
+    - "./configure --disable-shared --enable-static --without-ssl --without-libpsl --without-zlib --without-brotli --without-zstd --without-nghttp2 --without-libidn2 --without-librtmp --disable-ldap --disable-ldaps --disable-docs --disable-manual"
+    - "make -j4"
+  outputs: ["src/curl"]
+  timeout_s: 1800
+  work_size: 2g
+run:
+  kinds:
+    cli: {cmd: ["/build/curl", "{args}"]}
+    file_input: {cmd: ["/build/curl", "--config", "/poc/{file}"]}
+  env:
+    ASAN_OPTIONS: "abort_on_error=1:detect_leaks=0:symbolize=1"
+    UBSAN_OPTIONS: "print_stacktrace=1:halt_on_error=1"
+  timeout_s: 30
+limits: {cpus: 2, memory: "2g", pids: 256, output_bytes: 1048576}

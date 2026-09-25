@@ -61,7 +61,7 @@ and the lock never learned about the extras until M7.
 | `[mcp]` | `mcp` ≥ 2.2, < 3 (**added M7**: mcp 2.2.0, MIT) | **The SDK is now 2.x, and FastMCP was renamed:** `from mcp.server import MCPServer`, then `MCPServer("nikasha")`, `@server.tool()`, `server.run()` (stdio by default). The standalone `fastmcp` package is not used. |
 | `[web]` | `fastapi`, `uvicorn`, `python-multipart` (**added M7**: fastapi 0.141.1, uvicorn 0.53.0, python-multipart 0.0.32; all MIT/BSD) | Local web UI (M7) |
 | `[llm]` | `anthropic`, `openai`; Ollama over plain HTTP (**added M7**: anthropic 1.8.0, openai 3.19.2; MIT and Apache-2.0) | Off by default; no hard-coded model IDs |
-| `[bench]` | `numpy`, `scikit-learn`, `matplotlib` | Calibration and charts only; the core never imports them |
+| `[bench]` | `numpy`, `scikit-learn`, `matplotlib` (**added M6**: numpy 2.5.3, scikit-learn 1.9.1, matplotlib 3.11.2; BSD-3-Clause, BSD-3-Clause, matplotlib licence (PSF-style)) | Calibration and charts only; the core never imports them |
 
 ## Development tools
 

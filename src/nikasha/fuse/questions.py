@@ -141,7 +141,8 @@ def listed(value: object, limit: int = MAX_LISTED) -> str:
         return ""
     if len(values) > limit:
         head = ", ".join(values[:limit])
-        return f"{head} and {len(values) - limit} others"
+        rest = len(values) - limit
+        return f"{head} and {rest} {'other' if rest == 1 else 'others'}"
     if len(values) == 1:
         return values[0]
     return f"{', '.join(values[:-1])} and {values[-1]}"

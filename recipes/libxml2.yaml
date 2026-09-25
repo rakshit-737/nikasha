@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# libxml2: xmllint (SPEC §13.2, SHOULD).
+# UNVERIFIED: these build steps have NOT been run. The development machine has no container
+# engine; they follow libxml2's autotools build (autogen.sh, present through the 2.14
+# series) and must be verified per era by the sandbox CI job.
+id: libxml2
+title: libxml2 xmllint (sanitizer build)
+match: {products: [libxml2], tag_pattern: "v{major}.{minor}.{patch}"}
+image: {dockerfile: docker/recipes/c-toolchain.Dockerfile, tag: "nikasha/recipe-c:1"}
+build:
+  env:
+    CC: clang
+    CFLAGS: "-O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined"
+    LDFLAGS: "-fsanitize=address,undefined"
+    NOCONFIGURE: "1"
+  steps:
+    - "./autogen.sh"
+    - "./configure --disable-shared --without-python --without-zlib --without-lzma --without-http --without-ftp"
+    - "make -j4 xmllint"
+  outputs: ["xmllint"]
+  timeout_s: 1800
+  work_size: 2g
+run:
+  kinds:
+    cli: {cmd: ["/build/xmllint", "{args}"]}
+    file_input: {cmd: ["/build/xmllint", "--noout", "/poc/{file}"]}
+  env:
+    ASAN_OPTIONS: "abort_on_error=1:detect_leaks=0:symbolize=1"
+    UBSAN_OPTIONS: "print_stacktrace=1:halt_on_error=1"
+  timeout_s: 30
+limits: {cpus: 2, memory: "2g", pids: 256, output_bytes: 1048576}

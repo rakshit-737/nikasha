@@ -60,6 +60,7 @@ _STRIP_RE = re.compile(
     "["
     "\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f"  # C0/C1 controls; tab and newline survive
     "\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff"  # zero-width, bidi, BOM
+    "\ud800-\udfff"  # lone surrogates: a JSON round-trip can carry them; UTF-8 cannot
     "]"
 )
 

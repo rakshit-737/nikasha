@@ -208,6 +208,22 @@ def test_a_mirror_under_the_project_name_is_not_foreign(make_ctx: MakeContext) -
     assert _run(make_ctx, [c]) == []
 
 
+@pytest.mark.parametrize(
+    ("kind", "url"),
+    [
+        # A forge-wide advisory page is not a repository (regression: it was refuted).
+        ("advisory", "https://github.com/advisories/GHSA-abcd-efgh-ijkl"),
+        # The fuzzer that found the bug is not a claim that the bug lives there.
+        ("url", "https://github.com/AFLplusplus/AFLplusplus"),
+    ],
+)
+def test_a_link_that_places_nothing_in_another_repository_is_not_foreign(
+    make_ctx: MakeContext, kind: str, url: str
+) -> None:
+    c = _reference(ref_kind=kind, value=url, repo_url=url)
+    assert _run(make_ctx, [c]) == []
+
+
 def test_normalize_repo_ignores_local_paths_and_keeps_forge_identity() -> None:
     assert normalize_repo("https://GitHub.com/Owner/Repo.git/") == "github.com/owner/repo"
     assert normalize_repo("https://www.github.com/o/r") == "github.com/o/r"
@@ -490,8 +506,8 @@ class TestRefutationGate:
 
     def test_a_negated_foreign_repo_claim_is_not_refuted(self, make_ctx: MakeContext) -> None:
         c = _reference(
-            ref_kind="url",
-            value="https://github.com/other/thing",
+            ref_kind="pr",
+            value="https://github.com/other/thing/pull/7",
             repo_url="https://github.com/other/thing",
             negated=True,
         )
@@ -527,8 +543,8 @@ def test_registered_and_runnable_through_the_runner(
         claims=[
             _reference(ref_kind="commit", value=commits["v1.2.0"]),
             _reference(
-                ref_kind="url",
-                value="https://github.com/other/thing",
+                ref_kind="pr",
+                value="https://github.com/other/thing/pull/7",
                 repo_url="https://github.com/other/thing",
             ),
         ]
