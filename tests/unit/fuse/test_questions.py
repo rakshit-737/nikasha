@@ -537,6 +537,7 @@ def test_ranged(value: object, expected: str) -> None:
         (["a"], "a"),
         (["a", "b"], "a and b"),
         (["a", "b", "c"], "a, b and c"),
+        (["a", "b", "c", "d"], "a, b, c and 1 other"),
         (["a", "b", "c", "d", "e"], "a, b, c and 2 others"),
     ],
 )

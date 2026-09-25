@@ -216,10 +216,19 @@ class TraceVersionFit(BaseCheck):
             return _Scan({}, (), True, WINDOW_RADIUS)  # a pre-release anchor has no window
         fits: dict[str, _Fit] = {}
         partial: set[str] = set()
-        radius, complete = WINDOW_RADIUS, True
+        radius, complete, attempted = WINDOW_RADIUS, True, 0
         while True:
             window = releases.window(anchor, radius)
             for release in _outwards(window, order, home, seen=fits):
+                # Poll *before* scoring: a scan that already scored every release in the
+                # window is complete, whatever the clock says afterwards. Polling after the
+                # last release made identical inputs flip ``scan_complete`` (and so the
+                # summary and the content-derived evidence ID) on timing alone (P2). The
+                # claimed release is always scored, so every outcome has its baseline.
+                if attempted and ctx.expired():
+                    complete = False
+                    break
+                attempted += 1
                 analysis = analyze_trace(
                     ctx.index, release.commit, claim, project=ctx.resolution.project
                 )
@@ -229,9 +238,6 @@ class TraceVersionFit(BaseCheck):
                     fits[release.name] = _Fit(
                         release, analysis.ratio, analysis, rank, abs(rank - home)
                     )
-                if ctx.expired():
-                    complete = False
-                    break
             reached = max((fit.ratio for fit in fits.values()), default=0.0)
             if not complete or reached >= USABLE_FIT or len(window) >= len(finals):
                 break

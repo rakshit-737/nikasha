@@ -53,13 +53,23 @@ def claim_detail(claim: ClaimBase) -> str:
     return " ".join(parts)
 
 
+def _printable(text: str) -> str:
+    """``text`` with every non-printable character except newline and tab replaced by ``?``.
+
+    Rich's :class:`~rich.text.Text` passes ESC, BEL and bidi overrides straight to the
+    terminal, so raw report text could retitle the window or recolour output (P7). The
+    replacement is one character for one, so claim span offsets stay valid.
+    """
+    return "".join(ch if ch in "\n\t" or ch.isprintable() else "?" for ch in text)
+
+
 def _shorten(text: str, limit: int = _MAX_CELL) -> str:
-    one_line = " ".join(text.split())
+    one_line = _printable(" ".join(text.split()))
     return one_line if len(one_line) <= limit else one_line[: limit - 1] + "…"
 
 
 def highlighted_body(report: Report, claims: tuple[ClaimBase, ...]) -> Text:
-    text = Text(report.body, no_wrap=False)
+    text = Text(_printable(report.body), no_wrap=False)
     # Containers (traces, patches) first so finer claims paint over them.
     ordered = sorted(claims, key=lambda c: -(c.spans[0].end - c.spans[0].start))
     for claim in ordered:
@@ -88,7 +98,7 @@ def claims_table(claims: tuple[ClaimBase, ...]) -> Table:
             claim.role,
             scope,
             Text(_shorten(claim.spans[0].text)),
-            Text(claim_detail(claim)),
+            Text(_printable(claim_detail(claim))),
         )
     return table
 
@@ -96,9 +106,9 @@ def claims_table(claims: tuple[ClaimBase, ...]) -> Table:
 def render_extract(
     console: Console, report: Report, claims: tuple[ClaimBase, ...], warnings: tuple[str, ...]
 ) -> None:
-    title = Text(report.title or report.source.uri or "report")
+    title = Text(_shorten(report.title or report.source.uri or "report", 120))
     legend = Text("  ").join(Text(k, style=s) for k, s in KIND_STYLES.items())
     console.print(Panel(Group(highlighted_body(report, claims)), title=title, subtitle=legend))
     console.print(claims_table(claims))
     for warning in (*report.warnings, *warnings):
-        console.print(Text(f"warning: {warning}", style="yellow"))
+        console.print(Text(f"warning: {_printable(warning)}", style="yellow"))

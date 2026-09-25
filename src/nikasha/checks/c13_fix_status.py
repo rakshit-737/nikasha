@@ -70,9 +70,13 @@ class FixStatus(BaseCheck):
                 break
             # One sink per path: the evidence for a file carries the log that produced it.
             records: list[CommandRecord] = []
-            commits = self._later_commits(ctx, branch, path, ref_epoch, records)
+            commits, capped = self._later_commits(ctx, branch, path, ref_epoch, records)
             if commits:
-                out.append(self._evidence(ctx, path, branch, loci[path], commits, commands=records))
+                out.append(
+                    self._evidence(
+                        ctx, path, branch, loci[path], commits, capped=capped, commands=records
+                    )
+                )
         return out
 
     # --- finding the locus --------------------------------------------------------------
@@ -106,8 +110,11 @@ class FixStatus(BaseCheck):
         path: str,
         ref_epoch: int,
         records: list[CommandRecord],
-    ) -> list[tuple[str, int]]:
+    ) -> tuple[list[tuple[str, int]], bool]:
         """``(sha, committer epoch)`` for post-ref commits on ``branch`` touching ``path``.
+
+        The flag is true when git stopped at ``--max-count``: more commits may exist even if
+        the date filter below dropped some of the ones it printed, so the count is a floor.
 
         The log is appended to ``records`` when it ran at all, so the evidence can show the
         exact query and the hash of what it printed (P6).
@@ -126,15 +133,16 @@ class FixStatus(BaseCheck):
             result = ctx.resolution.repo.run(argv, timeout=LOG_TIMEOUT_S, record=records)
         except ExternalToolError:
             # A history query that runs out of time yields no information, never a finding.
-            return []
+            return [], False
         if result.returncode != 0:
-            return []
+            return [], False
+        lines = result.stdout.decode("utf-8", "replace").splitlines()
         commits: list[tuple[str, int]] = []
-        for line in result.stdout.decode("utf-8", "replace").splitlines():
+        for line in lines:
             sha, _, epoch = line.partition(" ")
             if len(sha) == _SHA_HEX_LEN and epoch.isdigit() and int(epoch) > ref_epoch:
                 commits.append((sha, int(epoch)))
-        return commits
+        return commits, len(lines) > MAX_COMMITS
 
     # --- evidence ---------------------------------------------------------------------------
 
@@ -146,10 +154,11 @@ class FixStatus(BaseCheck):
         claims: Sequence[Claim],
         commits: Sequence[tuple[str, int]],
         *,
+        capped: bool = False,
         commands: Sequence[CommandRecord] = (),
     ) -> Evidence:
         listed = list(commits[:MAX_COMMITS])
-        truncated = len(commits) > MAX_COMMITS
+        truncated = capped or len(commits) > MAX_COMMITS
         newest_sha, newest_epoch = listed[0]
         details: dict[str, Any] = {
             "outcome": "modified_after",
@@ -186,7 +195,7 @@ def _date(epoch: int) -> str:
 
 def _tail(extra: int, truncated: bool, branch: str) -> str:
     if extra <= 0:
-        return ""
+        return " and possibly more" if truncated else ""
     count = f"{extra} or more" if truncated else str(extra)
     plural = "" if extra == 1 and not truncated else "s"
     return f" and {count} later commit{plural} on {branch}"

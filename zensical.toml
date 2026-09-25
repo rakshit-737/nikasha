@@ -1,0 +1,91 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Documentation site (ADR 0008). Build: uvx zensical==0.0.64 build  (--strict fails until the ADR 0000 SPEC.md link is fixed)
+
+[project]
+site_name = "Nikasha"
+site_description = "Proof, not prose. Fact-check vulnerability reports against the real code at the exact version they name."
+site_url = "https://rakshit-737.github.io/nikasha/"
+repo_url = "https://github.com/rakshit-737/nikasha"
+repo_name = "rakshit-737/nikasha"
+docs_dir = "docs"
+site_dir = "site"
+copyright = "Nikasha authors. Code Apache-2.0, documentation CC-BY-4.0."
+nav = [
+  { "Home" = "index.md" },
+  { "Install" = "install.md" },
+  { "Quickstart" = "quickstart.md" },
+  { "Concepts" = "concepts.md" },
+  { "Checks reference" = "checks.md" },
+  { "Sandbox" = "sandbox.md" },
+  { "Configuration" = "configuration.md" },
+  { "Integrations" = [
+    { "GitHub Action" = "action.md" },
+    { "MCP server" = "mcp.md" },
+    { "Web UI" = "web-ui.md" },
+    { "LLM (optional)" = "llm.md" },
+  ] },
+  { "Threat model" = "THREAT_MODEL.md" },
+  { "Decisions (ADRs)" = [
+    { "0000 Rename" = "adr/0000-rename.md" },
+    { "0001 Architecture" = "adr/0001-architecture.md" },
+    { "0002 Dependencies" = "adr/0002-dependencies.md" },
+    { "0003 Differentiation" = "adr/0003-differentiation-vs-slopcheck.md" },
+    { "0004 Timeline" = "adr/0004-timeline.md" },
+    { "0005 Trace fixtures" = "adr/0005-trace-fixture-scope.md" },
+    { "0006 Repository access" = "adr/0006-repository-access.md" },
+    { "0007 Fusion decisions" = "adr/0007-fusion-decisions.md" },
+    { "0008 Docs site" = "adr/0008-docs-site.md" },
+    { "0009 LSan, MSan, TSan" = "adr/0009-lsan-msan-tsan.md" },
+  ] },
+]
+
+[project.theme]
+language = "en"
+features = [
+  "content.code.copy",
+  "content.code.annotate",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.path",
+  "navigation.sections",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle.icon = "lucide/sun-moon"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to system preference"
+
+[project.markdown_extensions]
+abbr = {}
+admonition = {}
+attr_list = {}
+def_list = {}
+footnotes = {}
+md_in_html = {}
+tables = {}
+toc.permalink = true
+pymdownx.details = {}
+pymdownx.highlight.anchor_linenums = true
+pymdownx.highlight.pygments_lang_class = true
+pymdownx.inlinehilite = {}
+pymdownx.superfences.custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]
+pymdownx.tabbed.alternate_style = true

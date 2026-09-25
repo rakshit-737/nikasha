@@ -1,0 +1,88 @@
+{
+  "$id": "https://github.com/rakshit-737/nikasha/schema/recipe-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Nikasha reproduction recipe, version 1",
+  "description": "How to build a project in a sandbox and run a proof of concept against it (SPEC 13.2). Nikasha validates recipes with equivalent pydantic models; tests/unit/repro/test_recipes.py keeps the two in step.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "title", "match", "image", "build", "run"],
+  "$defs": {
+    "identifier": {"type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z0-9][a-z0-9_-]*$"},
+    "relpath": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9_.+@][A-Za-z0-9_./+@-]*$"},
+    "size": {"type": "string", "pattern": "^[0-9]{1,15}[kmgKMG]?$"},
+    "env": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
+      "additionalProperties": {"type": "string"}
+    },
+    "argv": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "kind": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cmd"],
+      "properties": {
+        "compile": {"$ref": "#/$defs/argv"},
+        "cmd": {"$ref": "#/$defs/argv"}
+      }
+    }
+  },
+  "properties": {
+    "id": {"$ref": "#/$defs/identifier", "description": "Must equal the file name without .yaml."},
+    "title": {"type": "string", "minLength": 1, "maxLength": 200},
+    "match": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["products", "tag_pattern"],
+      "properties": {
+        "products": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1, "maxLength": 64}},
+        "tag_pattern": {"type": "string", "minLength": 1, "maxLength": 128}
+      }
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dockerfile", "tag"],
+      "properties": {
+        "dockerfile": {"type": "string", "pattern": "^docker/recipes/[A-Za-z0-9_.+@-]+\\.Dockerfile$"},
+        "tag": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^-\\s][^\\s]*$"}
+      }
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["steps", "outputs"],
+      "properties": {
+        "env": {"$ref": "#/$defs/env"},
+        "steps": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1, "maxLength": 4096}},
+        "outputs": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/relpath"}, "description": "Copied to /build/<basename>; basenames must be unique."},
+        "timeout_s": {"type": "integer", "minimum": 1, "maximum": 21600, "default": 600},
+        "work_size": {"$ref": "#/$defs/size", "default": "2g"}
+      }
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kinds"],
+      "properties": {
+        "kinds": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {"pattern": "^[a-z0-9][a-z0-9_-]*$"},
+          "additionalProperties": {"$ref": "#/$defs/kind"}
+        },
+        "env": {"$ref": "#/$defs/env"},
+        "timeout_s": {"type": "integer", "minimum": 1, "maximum": 3600, "default": 30}
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cpus": {"type": "number", "exclusiveMinimum": 0, "maximum": 64, "default": 2},
+        "memory": {"$ref": "#/$defs/size", "default": "2g"},
+        "pids": {"type": "integer", "minimum": 16, "maximum": 4096, "default": 256},
+        "output_bytes": {"type": "integer", "minimum": 1024, "maximum": 16777216, "default": 1048576}
+      }
+    }
+  }
+}

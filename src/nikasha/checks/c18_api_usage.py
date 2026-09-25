@@ -103,9 +103,12 @@ def absence_uncertainty(sites: Sequence[Site], api: str) -> str | None:
                 f"{site.path}:{indirect.line} calls through {indirect.callee},"
                 " which could dispatch anywhere"
             )
+    # The call graph matches the bare name (``Foo::bar`` and ``obj.bar`` both mean ``bar``),
+    # so the address-taken test must too, or a qualified API name slips past it.
+    bare = api.replace("::", ".").rsplit(".", 1)[-1]
     for site in sites:
-        if site.facts is not None and api in site.facts.addr_taken:
-            return f"the address of {api} is taken in {site.path}, so it can be called unnamed"
+        if site.facts is not None and bare in site.facts.addr_taken:
+            return f"the address of {bare} is taken in {site.path}, so it can be called unnamed"
     return None
 
 

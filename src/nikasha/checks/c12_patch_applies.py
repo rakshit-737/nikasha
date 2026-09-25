@@ -16,6 +16,12 @@ commonest reason a genuine fix does not apply is that it is already merged at th
 fuzzed match will happily "apply" such a patch a second time. Calling that fabricated would
 be exactly the P4 failure Nikasha exists to avoid, so the reverse patch is tried first and
 the result is NEUTRAL with a note rather than a refutation.
+
+No ``CommandRecord`` is attached (ADR 0007 decision 4): every blob is read through the one
+long-lived ``git cat-file --batch`` process behind :meth:`~nikasha.code.gitio.GitRepo.read_file`,
+so there is no per-file :class:`~nikasha.code.gitio.GitResult` with an exit code and output
+to hash, and none is invented. The evidence location pins the commit, path and line range,
+which is everything a reader needs to repeat the comparison (P6).
 """
 
 from __future__ import annotations

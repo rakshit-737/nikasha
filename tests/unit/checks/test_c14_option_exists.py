@@ -133,7 +133,10 @@ def test_an_invented_flag_is_refuted_as_never_in_history(make_ctx: MakeContext) 
 
 def test_the_pickaxe_command_is_recorded(make_ctx: MakeContext) -> None:
     commands = _one(make_ctx, INVENTED).details["commands"]
-    assert commands[-1] == f"git log --all -1 -S{INVENTED}"
+    assert commands[-2:] == [
+        f"git log --all -1 -S{INVENTED}",
+        f"git log --all -1 -i -S{INVENTED}",
+    ]
 
 
 # --- P4: absence is only absence when the search finished ------------------------------------
@@ -251,3 +254,17 @@ def test_registered_and_runnable_through_the_runner(make_ctx: MakeContext) -> No
     assert run.check_id == "C14"
     assert run.error is None
     assert [e.outcome for e in run.evidence] == ["REFUTES"]
+
+
+def test_a_mis_cased_real_flag_is_not_refuted(make_ctx: MakeContext) -> None:
+    """P4: ``--FOLD`` for ``--fold`` is a transcription slip, not an invented option."""
+    evidence = _one(make_ctx, "--FOLD")
+    assert evidence.outcome == "NEUTRAL"
+    assert evidence.details["outcome"] == "case_variant_only"
+    assert any(" -i " in command for command in evidence.details["commands"])
+
+
+def test_a_mis_cased_constant_is_not_refuted(make_ctx: MakeContext) -> None:
+    evidence = _one(make_ctx, "hdr_value_max", option_kind="constant")
+    assert evidence.outcome == "NEUTRAL"
+    assert evidence.details["outcome"] == "case_variant_only"

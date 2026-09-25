@@ -38,6 +38,8 @@ if TYPE_CHECKING:  # pragma: no cover - imports used only for annotations
     from nikasha.code.facts import FileFacts
     from nikasha.code.index import CodeIndex
     from nikasha.model.report import Report
+    from nikasha.repro.run import ReproRun
+    from nikasha.repro.signature import ReproFailure
     from nikasha.resolve.target import Resolution
 
 #: Default wall-clock budget for one check (SPEC §12).
@@ -80,6 +82,9 @@ class CheckContext:
     #: An optional LLM provider (SPEC §16.6). ``None`` by default and in every offline run:
     #: only C20 reads it, and the framework never lets it be decisive (P2).
     llm: object | None = None
+    #: The sandboxed PoC run (M5), or the failure that stopped it. ``None`` unless the
+    #: caller ran ``--repro``: only C19 reads it, and without it C19 produces nothing.
+    repro: ReproRun | ReproFailure | None = None
     _timelines: dict[str, Timeline] = field(default_factory=dict, repr=False)
 
     # --- the resolved target ------------------------------------------------------------

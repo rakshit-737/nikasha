@@ -82,6 +82,12 @@ MAX_LISTED = 8
 MAX_TOUCHED_PATHS = 5000
 _GIT_TIMEOUT_S = 10.0
 
+#: Reference kinds that name an object *inside* a repository (a commit, a pull request, an
+#: issue, a file, a diff). Only these can place the report's bug in another project: a bare
+#: repository link is usually the fuzzer or tool that found the bug, and a forge-wide page
+#: such as ``github.com/advisories/GHSA-…`` is not a repository at all (P4).
+FOREIGN_REPO_KINDS = frozenset({"commit", "pr", "issue", "blob", "compare"})
+
 _SHA_RE = re.compile(r"\A[0-9a-f]{7,40}\Z")
 _CVE_RE = re.compile(r"\ACVE-(\d{4})-(\d{4,7})\Z", re.IGNORECASE)
 _CWE_RE = re.compile(r"\A(?:CWE[-_ ]?)?(\d{1,5})\Z", re.IGNORECASE)
@@ -524,7 +530,8 @@ class References(BaseCheck):
         foreign = _group(
             (repo, claim)
             for claim in references
-            if (repo := normalize_repo(claim.repo_url))
+            if claim.ref_kind in FOREIGN_REPO_KINDS
+            and (repo := normalize_repo(claim.repo_url))
             and repo not in home
             # A mirror or a rename under the same project name is not a different project.
             and repo.rsplit("/", 1)[-1] not in names

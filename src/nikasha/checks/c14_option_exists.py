@@ -29,8 +29,9 @@ from typing import Any
 
 from nikasha.checks.base import BaseCheck, CheckContext, make_evidence, register
 from nikasha.checks.strengths import Strengths, default_strengths
-from nikasha.code.gitio import HistoryTimeoutError
+from nikasha.code.gitio import GitRepo, HistoryTimeoutError
 from nikasha.code.literal import LiteralResult, literal_search
+from nikasha.errors import ExternalToolError
 from nikasha.model.claims import Claim, ClaimKind, OptionClaim
 from nikasha.model.evidence import CommandRecord, Evidence
 from nikasha.resolve.refs import Release
@@ -302,6 +303,29 @@ class OptionExists(BaseCheck):
                 details=details,
                 commands=records,
             )
+        try:
+            variant = _pickaxe_any_case(repo, at_ref.literal, ctx.history_timeout, records)
+        except ExternalToolError as exc:
+            reason = f"the case-insensitive history search did not finish ({exc})"
+            return self._incomplete(
+                ctx, claim, at_ref, commands, reason, withheld=never, records=records
+            )
+        details["commands"] = [*details["commands"], _any_case_command(at_ref.literal)]
+        if variant is not None:
+            # P4: "--FOLD" for "--fold" is a transcription slip, not an invented option.
+            details["first_commit_with_text"] = variant
+            details["outcome"] = "case_variant_only"
+            return make_evidence(
+                check_id=CHECK_ID,
+                group=GROUP,
+                claims=[claim],
+                outcome="NEUTRAL",
+                strength=0.0,
+                summary=f"{at_ref.literal} appears exactly in none of the {searched} releases"
+                f" searched, though commit {variant[:12]} contains it in different letter case",
+                details=details,
+                commands=records,
+            )
         return make_evidence(
             check_id=CHECK_ID,
             group=GROUP,
@@ -309,7 +333,7 @@ class OptionExists(BaseCheck):
             outcome="REFUTES",
             strength=never,
             summary=f"{at_ref.literal} appears in none of the {searched} releases searched"
-            " and in no commit in the repository's history",
+            " and in no commit in the repository's history, in any letter case",
             details=details | {"outcome": "never_in_history"},
             commands=records,
         )
@@ -366,3 +390,22 @@ class OptionExists(BaseCheck):
 
 def _where(ctx: CheckContext) -> str:
     return ctx.ref_name or ctx.commit[:12]
+
+
+def _any_case_command(token: str) -> str:
+    return shlex.join(["git", "log", "--all", "-1", "-i", f"-S{token}"])
+
+
+def _pickaxe_any_case(
+    repo: GitRepo, token: str, timeout: float, records: list[CommandRecord]
+) -> str | None:
+    """A commit whose diff adds or removes ``token`` in any letter case, or ``None``.
+
+    The token rides attached to ``-S`` (a data position, never an option); the caller has
+    already refused tokens that are not printable. Raises ``ExternalToolError`` on timeout.
+    """
+    result = repo.run(
+        ["log", "--all", "-1", "--format=%H", "-i", f"-S{token}"], timeout=timeout, record=records
+    )
+    sha = result.stdout.decode("ascii", "replace").strip()
+    return sha or None

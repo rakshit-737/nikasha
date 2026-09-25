@@ -19,6 +19,7 @@ from nikasha.checks.base import run_checks
 from nikasha.checks.c17_impact_consistency import (
     ImpactConsistency,
     base_score,
+    echo,
     parse_vector,
     roundup,
     severity_band,
@@ -394,3 +395,25 @@ def test_registered_and_runnable_through_the_runner(make_ctx: MakeContext) -> No
     assert run.error is None
     assert run.seconds >= 0.0
     assert [e.outcome for e in run.evidence] == ["REFUTES"]
+
+
+# --- review regressions -------------------------------------------------------------------
+
+
+def test_a_trailing_slash_is_not_a_malformed_vector() -> None:
+    metrics, reason = parse_vector(GENUINE + "/")
+    assert metrics is not None, reason
+    assert round(base_score(metrics), 1) == 5.5
+
+
+def test_echo_drops_control_characters() -> None:
+    flat = echo("Crit\x1b[31mical\x00" + chr(0x202E))
+    assert "\x1b" not in flat
+    assert "\x00" not in flat
+    assert chr(0x202E) not in flat
+
+
+@pytest.mark.parametrize("score", [math.nan, math.inf])
+def test_a_non_finite_score_is_never_refuted(make_ctx: MakeContext, score: float) -> None:
+    c = claim(ImpactClaim, cvss_score=score, severity_word="Low")
+    assert all(e.outcome != "REFUTES" for e in _run(make_ctx, [c]))

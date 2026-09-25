@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# EMPTY STUB. This manifest is populated only after the source's terms have been checked
+# and accepted by the maintainer (SPEC 17.2, ADR 0003). Until then it holds no entries and
+# nothing is fetched. Entries will carry IDs, URLs and labels only, never report text.
+source: S1
+title: "curl AI-slop list (Daniel Stenberg's public gist)"
+terms_checked: false
+entries: []

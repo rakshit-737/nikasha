@@ -332,13 +332,17 @@ def _claim_text(claim: BehaviorClaim) -> str:
 def _cited_locations(
     ctx: CheckContext, cited: Sequence[int], excerpts: Sequence[Excerpt]
 ) -> list[CodeLocation]:
-    """One location per cited line, carrying the line's text as its excerpt."""
+    """One location per excerpt that shows a cited line, carrying the line's text.
+
+    The model cites bare line numbers. When excerpts from two files both show a number,
+    nothing says which file was meant, so every candidate is cited rather than guessing
+    the first one and pointing the reader at the wrong code (P6).
+    """
     out: list[CodeLocation] = []
     for number in cited:
         for excerpt in excerpts:
             if excerpt.has_line(number):
                 out.append(ctx.location(excerpt.path, number, excerpt=excerpt.line(number)))
-                break
     return out
 
 

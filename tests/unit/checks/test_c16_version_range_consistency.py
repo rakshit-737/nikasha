@@ -210,6 +210,22 @@ class TestSelection:
         assert evidence.outcome == "SUPPORTS"
         assert evidence.details["symbol"] == "hdr_get"
 
+    def test_a_fix_in_any_core_symbol_is_not_refuted_by_another(
+        self, make_ctx: MakeContext
+    ) -> None:
+        # hdr_parse_block is untouched in v1.3.0 but util_copy_value changed there: the fix
+        # may be in either, so the earlier-introduced one must not refute the release (P4).
+        claims: list[Claim] = [fixed_in("1.3.0"), core("hdr_parse_block"), core()]
+        evidence = _only(make_ctx, claims, tag="v1.3.0")
+        assert evidence.outcome == "SUPPORTS"
+        assert evidence.details["symbol"] == "util_copy_value"
+        assert evidence.details["locus"] == "edited"
+
+    def test_every_core_symbol_untouched_still_refutes(self, make_ctx: MakeContext) -> None:
+        claims: list[Claim] = [fixed_in("1.2.0"), core("hdr_parse_block"), core("hdr_get")]
+        evidence = _only(make_ctx, claims)
+        assert evidence.outcome == "REFUTES"
+
 
 class TestP4Safeguards:
     """Absence is never proof: an incomplete or uncertain history refutes nothing."""

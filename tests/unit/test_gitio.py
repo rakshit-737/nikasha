@@ -91,3 +91,29 @@ def test_run_git_executes_allowed_command(tmp_path):
     assert result.returncode != 0
     assert Path(result.argv[0]).stem.lower() == "git"  # e.g. git, git.exe, git.EXE
     assert result.duration_ms >= 0
+
+
+def _copy_repo(src: Path, dest: Path) -> Path:
+    import shutil
+
+    shutil.copytree(src, dest)
+    return dest
+
+
+def test_grep_failure_is_not_absence(vulnlab_repo, tmp_path):
+    # A bad revision exits 128 with no output; that must not read as "no match" (P4).
+    repo = gitio.GitRepo(vulnlab_repo)
+    records: list = []
+    with pytest.raises(gitio.ExternalToolError):
+        repo.grep("x", ["deadbeef" * 5], record=records)
+    assert [r.exit_code for r in records] == [128]
+
+
+def test_pickaxe_failure_counts_as_incomplete_history(vulnlab_repo, tmp_path):
+    clone = _copy_repo(vulnlab_repo, tmp_path / "broken.git")
+    for obj in (clone / "objects").rglob("*"):
+        if obj.is_file() and obj.parent.name not in ("info",):
+            obj.chmod(0o666)
+            obj.unlink()
+    with pytest.raises(gitio.HistoryTimeoutError):
+        gitio.GitRepo(clone).pickaxe_first("foo")

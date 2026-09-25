@@ -499,6 +499,15 @@ class HistoryTimeoutError(ExternalToolError):
     """A history search exceeded its time budget, so history counts as *incomplete*."""
 
 
+class HistoryUnavailableError(HistoryTimeoutError):
+    """A history search failed (git exited with an error, e.g. a missing object), so
+    history counts as *incomplete*, exactly as for a timeout (P4)."""
+
+
+#: ``git grep`` exits 0 with matches and 1 without; anything else is a failure.
+_GREP_OK_CODES = (0, 1)
+
+
 class GitRepo:
     """Read-only, plumbing-only access to one repository (bare or not).
 
@@ -672,6 +681,11 @@ class GitRepo:
         for batch in _batches([safe_rev(r) for r in revs], MAX_ARGV_CHARS - len(pattern)):
             argv = ["grep", *flags, "-e", pattern, *batch, "--", *pathspecs]
             result = self.run(argv, timeout=timeout)
+            if result.returncode not in _GREP_OK_CODES:
+                # A bad revision or a broken object store is not "no match": returning
+                # nothing here would read as absence and could refute a true claim (P4).
+                record_command(record, result)
+                raise ExternalToolError(f"git grep failed with exit code {result.returncode}")
             hits += _parse_grep(result.stdout, batch, files_only=files_only)
             capped = len(hits) >= max_hits
             record_command(record, result, truncated=capped)
@@ -700,6 +714,9 @@ class GitRepo:
             )
         except ExternalToolError as exc:
             raise HistoryTimeoutError(str(exc)) from exc
+        if result.returncode != 0:
+            # An empty stdout from a failed log is not "never in history" (P4).
+            raise HistoryUnavailableError(f"git log -S failed with exit code {result.returncode}")
         sha = result.stdout.decode("ascii", "replace").strip()
         return sha or None
 

@@ -18,6 +18,7 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from nikasha.checks import load_checks
 from nikasha.checks.base import CheckContext, CheckRun, run_checks
@@ -34,6 +35,10 @@ from nikasha.model.result import Environment, Result
 from nikasha.model.verdict import Question, Verdict
 from nikasha.resolve.target import Resolution, resolve_target
 from nikasha.version import __version__
+
+if TYPE_CHECKING:  # pragma: no cover - annotations only
+    from nikasha.repro.run import ReproRun
+    from nikasha.repro.signature import ReproFailure
 
 
 class CheckFailedError(NikashaError):
@@ -110,6 +115,7 @@ def check_report(
     check_timeout: float = 10.0,
     index_path: Path | None = None,
     llm: object | None = None,
+    repro: ReproRun | ReproFailure | None = None,
 ) -> CheckReport:
     """Run the whole pipeline over one report and return its :class:`CheckReport`."""
     timer = _Timer()
@@ -151,6 +157,7 @@ def check_report(
                 index=index,
                 online=online,
                 llm=llm,
+                repro=repro,
             )
             with timer.stage("checks"):
                 load_checks()

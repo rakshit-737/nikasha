@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# S6: the hermetic vulnlab fixtures (fictional libhdr; examples/vulnlab). Checked against
+# the repository built by scripts/build_vulnlab.py. Labels describe the report, expected
+# describes the verdict SPEC Appendix B and tests/integration/test_check_pipeline.py pin.
+source: S6
+title: vulnlab fixtures (hermetic)
+terms_checked: true
+entries:
+  - id: vulnlab-genuine
+    path: examples/reports/genuine_hdr_overflow.md
+    label: genuine
+    expected: GROUNDED
+  - id: vulnlab-mixed-wrong-version
+    path: examples/reports/mixed_wrong_version.md
+    label: genuine
+    expected: MIXED
+    notes: real bug, real trace, wrong version named (v1.1.0 instead of v1.2.0)
+  - id: vulnlab-already-fixed
+    path: examples/reports/already_fixed.md
+    label: genuine
+    expected: MIXED
+    notes: real bug and real fix, reported against v1.3.0 where the fix is applied
+  - id: vulnlab-fabricated
+    path: examples/reports/fabricated_hdr_overflow.md
+    label: fabricated
+    expected: UNGROUNDED
+  - id: vulnlab-vague
+    path: examples/reports/vague.md
+    label: insufficient
+    expected: INSUFFICIENT

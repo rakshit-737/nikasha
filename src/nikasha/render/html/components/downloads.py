@@ -108,7 +108,10 @@ _ICON = (
 
 def data_uri(json_text: str) -> str:
     """``json_text`` as a ``data:`` URI that decodes back to exactly those bytes."""
-    return _MIME + quote(json_text, safe=_DATA_SAFE, encoding="utf-8")
+    # A lone surrogate (legal in a Python str, and in JSON as an escape) cannot be encoded
+    # as UTF-8. `backslashreplace` writes it back as the `\udXXX` JSON escape it came
+    # from; surrogates only ever occur inside JSON strings, so the document stays valid.
+    return _MIME + quote(json_text, safe=_DATA_SAFE, encoding="utf-8", errors="backslashreplace")
 
 
 def _human_bytes(count: int) -> str:
