@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -181,6 +182,9 @@ def test_repro_output_never_passes_terminal_controls(tmp_path, monkeypatch):
     assert json.loads(as_json.output)["run"]["stderr"] == HOSTILE
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="Windows file names cannot hold control characters"
+)
 def test_recipes_validate_escapes_hostile_file_names(tmp_path):
     bad = tmp_path / "x\x1b]0;t\x07.yaml"
     bad.write_text("id: [unclosed\n", encoding="utf-8")
