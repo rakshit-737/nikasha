@@ -251,7 +251,8 @@ def test_nav_lists_sandbox_and_every_adr_and_concepts_links_sandbox() -> None:
 
 def test_threat_model_names_every_online_egress() -> None:
     text = (ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8")
-    assert "raw.githubusercontent.com" in text
+    # The whole sentence, not a bare host name: this checks the docs, it validates no URL.
+    assert "CVE Program's `cvelistV5` on `raw.githubusercontent.com`" in text
     assert "CVE IDs a report cites are disclosed" in text
 
 
