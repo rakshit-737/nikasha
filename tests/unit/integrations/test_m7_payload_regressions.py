@@ -307,3 +307,17 @@ def test_a_forbidden_answer_with_quota_left_keeps_its_own_hint(
         fetch_bytes("https://api.github.com/x", service="GitHub", hints={403: "custom hint"})
     assert "custom hint" in str(caught.value)
     assert "<script>" not in str(caught.value)
+
+
+def test_own_id_in_a_reference_url_is_never_a_cve_claim() -> None:
+    """Found live on CVE-2023-38545: curl's advisory URL is named after the CVE ID. The
+    URL stays (it is the advisory), but the ID inside it must not become a CVE claim, or
+    C15 would fetch the record and count it as support for itself."""
+    from nikasha.extract import extract_claims  # noqa: PLC0415
+    from nikasha.ingest import ingest_string  # noqa: PLC0415
+
+    body = "## References\n\n- https://curl.se/docs/CVE-2023-38545.html\n"
+    claims = extract_claims(ingest_string(body, input_format="markdown")).claims
+    assert "CVE-2023-38545" not in {
+        getattr(c, "value", None) for c in claims if getattr(c, "ref_kind", None) == "cve"
+    }

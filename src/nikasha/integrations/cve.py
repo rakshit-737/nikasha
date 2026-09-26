@@ -25,7 +25,9 @@ Three rules shape the module:
   ID, so C15 cannot fetch that record and count it as support for the report it came
   from. The structured lines never carry it, and every mention of it in the free prose
   (descriptions, rejection notices) is replaced by ``this record``. The ID lives in the
-  report title and in the source URI instead.
+  report title and in the source URI instead. A reference URL may still contain it (an
+  advisory page named after the ID); extraction never turns a CVE ID inside a URL into a
+  CVE claim, so C15 still cannot fetch the record from its own body.
 
 The heavy imports (pipeline, checks, tree-sitter) are deferred to the functions that need
 them, so registering the command keeps ``nikasha version`` fast.

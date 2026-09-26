@@ -16,6 +16,8 @@ import pytest
 
 from nikasha.checks.c15_references import fetch_cve
 from nikasha.errors import NikashaError
+from nikasha.extract import extract_claims
+from nikasha.ingest import ingest_string
 from nikasha.integrations.cve import declared_target, fetch_record, render_body
 from nikasha.integrations.gh_advisories import fetch_advisories
 from nikasha.integrations.h1 import fetch_report
@@ -36,7 +38,15 @@ def test_real_cve_records_parse(cve_id: str) -> None:
     assert record.state == "PUBLISHED"
     assert record.affected
     body = render_body(record)
-    assert cve_id not in body  # a record never vouches for itself
+    # A record never vouches for itself: its own ID may appear inside a reference URL (for
+    # example curl.se/docs/<ID>.html), but it must never become a CVE claim C15 would fetch.
+    report = ingest_string(body, input_format="markdown")
+    cve_claims = {
+        getattr(c, "value", None)
+        for c in extract_claims(report).claims
+        if getattr(c, "ref_kind", None) == "cve"
+    }
+    assert cve_id not in cve_claims
     for product in record.affected:
         for version in product.versions:
             assert version.less_than != version.version or version.version in {"0", "*"}
