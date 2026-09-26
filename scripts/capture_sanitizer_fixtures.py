@@ -180,10 +180,11 @@ _VPX_CONFIGURE = (
     " --disable-install-docs --disable-webm-io --disable-libyuv && make -j4"
 )
 #: The exported tree has no .git (scripts/version needs one) and no submodule checkout, and
-#: automake insists that the conditional SUBDIRS entry modules/oniguruma exists even when
-#: Oniguruma is disabled, so an empty directory stands in for it.
+#: automake insists that the conditional SUBDIRS entry exists even when Oniguruma is
+#: disabled, so an empty directory stands in for it (modules/ up to 1.7, vendor/ from 1.8).
 _JQ_BUILD = (
-    "printf '#!/bin/sh\\necho exported\\n' > scripts/version && mkdir -p modules/oniguruma"
+    "printf '#!/bin/sh\\necho exported\\n' > scripts/version"
+    " && mkdir -p modules/oniguruma vendor/oniguruma"
     " && autoreconf -i"
     " && ./configure --with-oniguruma=no --disable-docs --disable-shared"
     # `make jq` alone skips BUILT_SOURCES (src/builtin.inc), so build the default target.
