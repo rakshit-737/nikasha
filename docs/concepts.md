@@ -5,6 +5,13 @@ SPDX-License-Identifier: CC-BY-4.0
 
 # Concepts
 
+Nikasha's main job is **grounding**: showing which claims in a report the code supports,
+at the version the report names, with evidence for each. Its strongest evidence is
+**reproduction** in the sandbox. Refutations are kept, gated and conservative, but they are
+leads and questions for the reporter, not a fabrication detector: on the M3.5 curl corpus
+they did not separate slop from genuine reports, while support did
+([ADR 0012](adr/0012-reposition-after-m35.md)).
+
 ## Pipeline
 
 ```mermaid

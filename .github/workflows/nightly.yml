@@ -35,7 +35,7 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           version: ${{ env.UV_VERSION }}
-      - run: uv sync --locked --all-groups
+      - run: uv sync --locked --all-groups --all-extras
       - run: docker version
       # Images are built as their own steps so an image failure is not mistaken for a test
       # failure.
@@ -45,5 +45,7 @@ jobs:
         run: docker build -f docker/recipes/c-toolchain.Dockerfile -t nikasha/recipe-c:1 docker/recipes
       - name: Network tests
         run: uv run pytest -m "network and not sandbox" -q
+      # Runs even when the network step failed, so one outage does not hide the other suite.
       - name: Sandbox and network tests
+        if: ${{ !cancelled() }}
         run: uv run pytest -m "sandbox and network" -q

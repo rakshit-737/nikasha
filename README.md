@@ -7,24 +7,25 @@ SPDX-License-Identifier: CC-BY-4.0
 
 **Proof, not prose.**
 
-Nikasha (निकष, *touchstone*: the stone used to assay gold) checks the factual claims in a
-vulnerability report against the source code at the exact version the report names. It
-runs offline against a git repository, is deterministic (the same report and the same
-commit give byte-identical JSON, with no LLM involved), and returns an evidence-backed
-verdict in which every finding carries the evidence behind it (the repository, commit, path
-and lines where there is code, and the git command with output hashes where one was run),
-plus neutral questions to send back to the reporter. It judges claims, never people: there
-is no "AI detection" anywhere in it.
+Nikasha (निकष, *touchstone*: the stone used to assay gold) shows which claims in a
+vulnerability report the source code supports, at the exact version the report names, and
+can reproduce the crash in a hardened sandbox. It runs offline against a git repository, is
+deterministic (the same report and the same commit give byte-identical JSON, with no LLM
+involved), and every finding carries the evidence behind it (the repository, commit, path
+and lines where there is code, and the git command with output hashes where one was run).
+Claims the code does not support become neutral questions for the reporter, never
+accusations. It judges claims, never people: it is not a "slop" or AI detector
+([ADR 0012](docs/adr/0012-reposition-after-m35.md)).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/terminal-check-ungrounded-dark.svg">
   <img alt="nikasha check on the fabricated_hdr_overflow demo fixture: verdict UNGROUNDED, grounding 0/100, the evidence table, and six questions for the reporter" src="docs/assets/terminal-check-ungrounded-light.svg" width="100%">
 </picture>
 
-> **Status: first release (`0.1.0`).** Everything shown on this page is a real run against
+> **Status: first release (`0.1.0`).** The screenshots on this page are real runs against
 > the bundled **vulnlab demo** (a fictional C library with a deliberately introduced heap
-> overflow), not against real reports. The early real-world gate (M3.5) has not run yet, so
-> Nikasha has **no accuracy numbers on real reports**, and this page makes no such claim.
+> overflow). The only numbers on real reports are the M3.5 gate below: one corpus (curl),
+> 175 reports, no calibration yet.
 
 ## The five verdicts
 
@@ -183,23 +184,41 @@ When principles conflict, safety wins: P4 first, then P5, then P3.
 
 A static "does this function exist?" check alone is not enough.
 [slopcheck](https://github.com/GaganGanesh98/SlopCheck) measured six static existence checks
-(file, line range, symbol, snippet, commit and tagged version) on 557 publicly disclosed curl
-reports, every one scored against HEAD rather than the version it named, and published a
-careful negative result: the checks flagged confirmed, genuine reports about as often as the
-reports they were meant to catch. Nikasha treats that as the baseline to beat and targets its
-measured failure modes (version pinning, claim scoping, negation, line binding, structural
-trace and patch checks), but **whether that is enough is an open question until the M3.5 gate
-runs**. Its results will be published whatever they are, and thresholds are never adjusted to
-pass it.
+on 557 publicly disclosed curl reports, all scored against HEAD, and published a careful
+negative result: its checks flagged confirmed, genuine reports about as often as slop.
+Nikasha targeted those failure modes (version pinning, claim scoping, negation, line binding,
+structural trace and patch checks) and then ran the same kind of gate (M3.5).
+
+### Real-world results (M3.5, 2026-09-26)
+
+175 labelled curl reports from slopcheck's index (126 confirmed genuine, 49 from curl's
+AI-slop list), each checked at the version it names. Full numbers and reading in
+[`PROGRESS.md`](PROGRESS.md) and [ADR 0012](docs/adr/0012-reposition-after-m35.md).
+
+- **No false UNGROUNDED:** 0 of 126 genuine reports. With n=126 the Wilson 95% upper bound
+  is 2.96%, so this does *not* yet show the ≤1% target.
+- **Refutations do not separate slop from genuine reports.** At least one REFUTES finding
+  on 20.6% of genuine and 20.4% of slop reports (J about 0, no better than slopcheck).
+  Nikasha never said UNGROUNDED on this corpus, and MIXED was as common on genuine reports
+  as on slop.
+- **Support carries the only signal.** GROUNDED on 25% of genuine reports against 10% of
+  slop. The best threshold on the grounding score reaches J 0.249 against 0.103 for a
+  seeded random score, but that threshold was chosen after the fact, so it is optimistic.
+- Still open: hand-checked precision of 40 random refutations.
+
+So Nikasha is positioned as a **grounding and reproduction** tool: it shows what the code
+supports and can reproduce crashes. Refutations stay gated and conservative and are shown
+as questions, not as a fabrication detector. No threshold or strength was changed after
+the gate.
 
 | Milestone | Status |
 |---|---|
 | M0 Bootstrap · M1 Models, intake, extraction · M2 Resolution and code intelligence · M3 Checks, fusion, CLI outputs · M4 HTML report | **done** (measurements in [`PROGRESS.md`](PROGRESS.md) and [ADR 0004](docs/adr/0004-timeline.md)) |
-| M3.5 Early real-world gate (curl corpus vs. slopcheck) | **not started**: needs network access and a check of HackerOne's terms for the disclosed-report endpoint before any report is fetched |
+| M3.5 Early real-world gate (curl corpus vs. slopcheck) | **measured**: P4 held (0/126), no separation from refutations; decision: reposition ([ADR 0012](docs/adr/0012-reposition-after-m35.md)); 40-refutation hand-check open |
 | M5 Sandbox reproduction | **sandbox CI green with the real recipe image**; curl/sqlite/libxml2 recipes unverified end-to-end |
-| M6 NikashaBench and calibration | **machinery done**; the real-report splits wait on M3.5 corpus access |
+| M6 NikashaBench and calibration | **machinery done**; next: supporting-evidence recall, reproduction rate, refutation precision (ADR 0012) |
 | M7 Integrations | **done** (a GitHub Action, `nikasha lint`, the MCP server, the web UI, the optional model layer; network paths tested with stubs only) |
-| M8 Launch polish and v0.1.0 | **tooling done, not published**: a release is a public, irreversible action that waits for the maintainer's approval |
+| M8 Launch polish and v0.1.0 | **done**: v0.1.0 released 2026-09-26 on PyPI, GHCR and GitHub Releases |
 | M9 Stretch | not started |
 
 ## More

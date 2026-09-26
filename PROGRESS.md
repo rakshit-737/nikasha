@@ -13,12 +13,12 @@ The living build log. Milestones follow SPEC §22, plus **M3.5** from ADR 0003.
 | M1 Models, intake, extraction (+ claim scoping, polarity) | **done** (LSan/MSan/TSan parsers deferred, ADR 0005) |
 | M2 Resolution and code intelligence | **done** (numbers in ADR 0004) |
 | M3 Checks, fusion, CLI outputs | **done** (numbers below) |
-| M3.5 Early real-world gate (curl corpus vs. slopcheck) | **measured 2026-09-26: no separation; P4 held (0/126)**; 40-refutation hand-check and maintainer decision pending |
+| M3.5 Early real-world gate (curl corpus vs. slopcheck) | **measured 2026-09-26: no separation; P4 held (0/126)**; decision (b) reposition around grounding and reproduction (ADR 0012); 40-refutation hand-check still open |
 | M4 HTML report and media v1 | **done** (PNG captures need Playwright; CI is the source of truth) |
 | M5 Sandbox reproduction | **sandbox CI green with the real recipe image** (run 36129155719: Fedora `c-toolchain.Dockerfile` built, 21 passed); curl/sqlite/libxml2 recipes still unverified end to end |
 | M6 NikashaBench | **machinery done** (S5/S6 offline); real splits wait on M3.5 corpus access |
 | M7 Integrations | **done** (network paths tested with stubs only; see below) |
-| M8 Launch polish and v0.1.0 | **tooling done, not published**: release, docs and screenshots workflows, `release-check` passes; publishing needs the maintainer |
+| M8 Launch polish and v0.1.0 | **done**: v0.1.0 released 2026-09-26 (PyPI, GHCR amd64/arm64, GitHub Release); `pip install nikasha` verified |
 | M9 Stretch | not started |
 
 ## M0: Bootstrap (2026-09-23)
@@ -304,12 +304,26 @@ INSUFFICIENT 34.
 - Not done: the hand-checked precision of 40 random REFUTES findings (ADR 0003) needs a
   human reviewer. No threshold was changed.
 
+### Decision (2026-09-26)
+
+- The maintainer chose option **(b), reposition** (ADR 0012): Nikasha leads with grounding
+  (which claims the code supports, at which version, with evidence) and sandbox
+  reproduction. Refutations stay gated and conservative and are presented as questions and
+  leads, never as a fabrication detector. UNGROUNDED keeps only its existing strict rule.
+  No threshold, strength or scoring change until calibration on more data (M6).
+- README, `docs/index.md` and `docs/concepts.md` reworded; a short "Real-world results
+  (M3.5)" section publishes the numbers above with their caveats.
+
 ### Next / questions for the maintainer
 
-- Decide per ADR 0003: continue, reposition around support evidence, reproduction and
-  dossiers, or stop. The data favour repositioning: the static layer is safe (P4) but not
-  a slop detector.
-- Hand-check 40 random REFUTES findings for per-finding precision.
+- **Still open:** hand-check 40 random REFUTES findings for per-finding precision.
+  `scripts/handcheck_sample.py` (seeded, deterministic) writes a blind worksheet (no
+  genuine/slop label) to `bench/cache/handcheck-2026-09-26.md` (gitignored). The run has
+  59 REFUTES findings, so the sample is a full 40. `results.jsonl` stores only check,
+  group, outcome and strength per finding, so the worksheet says where to look
+  (`nikasha check` on the report) for the claim, summary and location.
+- M6: measure supporting-evidence recall, reproduction rate and refutation precision
+  (ADR 0012).
 
 ## M4: HTML report and media (2026-09-24)
 

@@ -40,6 +40,7 @@ nav = [
     { "0009 LSan, MSan, TSan" = "adr/0009-lsan-msan-tsan.md" },
     { "0010 Sandbox tmpfs mode" = "adr/0010-sandbox-tmpfs-mode.md" },
     { "0011 HackerOne corpus access" = "adr/0011-hackerone-corpus-access.md" },
+    { "0012 Reposition after M3.5" = "adr/0012-reposition-after-m35.md" },
   ] },
 ]
 
