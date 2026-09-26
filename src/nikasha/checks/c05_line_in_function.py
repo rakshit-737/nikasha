@@ -26,14 +26,17 @@ Two softenings matter more than the refutation itself:
 
 from __future__ import annotations
 
+import time
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from nikasha.checks.base import BaseCheck, CheckContext, make_evidence, register
 from nikasha.checks.strengths import Strengths, default_strengths
+from nikasha.code.amalgamation import cached_amalgamation, resolve_source
 from nikasha.code.facts import FileFacts, SymbolDef
 from nikasha.code.trace_forensics import app_frames, same_function
+from nikasha.errors import NikashaError
 from nikasha.model.claims import Claim, ClaimKind, LineClaim, TraceClaim
 from nikasha.model.evidence import CodeLocation, Evidence
 from nikasha.resolve.refs import Release
@@ -67,6 +70,8 @@ class _Site:
     function: str
     frame: int | None = None
     end_line: int | None = None
+    #: The ``sqlite3.c`` path and line this site was mapped from (SPEC §11.5), if any.
+    amalgamation: tuple[str, int] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,7 +139,7 @@ class LineInFunction(BaseCheck):
                     out.append(evidence)
         return out
 
-    def _one(self, ctx: CheckContext, claim: Claim, site: _Site) -> Evidence | None:
+    def _one(self, ctx: CheckContext, claim: Claim, site: _Site) -> Evidence | None:  # noqa: PLR0911
         if len(site.function) > MAX_FUNCTION_NAME:
             return self._neutral(
                 claim,
@@ -149,11 +154,35 @@ class LineInFunction(BaseCheck):
         path = candidates[0] if len(candidates) == 1 else site.path
         generated = ctx.generated(path)
         if generated is not None:
+            mapped = (
+                _map_amalgamation(ctx, path, site) if generated.kind == "amalgamation" else None
+            )
+            if isinstance(mapped, _Site):
+                evidence = self._one(ctx, claim, mapped)
+                if evidence is None or evidence.outcome != "REFUTES":
+                    return evidence
+                # P4: an amalgamation line is only as good as the release it came from, and
+                # one built from another version shifts every line; a mapped mismatch is
+                # shown but never counts against the report.
+                return self._neutral(
+                    claim,
+                    mapped,
+                    summary=f"the line is not inside {mapped.function}() as mapped, but an"
+                    " amalgamation from another release would shift every line, so this is"
+                    " not judged",
+                    details={"outcome": "amalgamation_mismatch", "mapped": evidence.summary},
+                )
+            extra = {"amalgamation": mapped} if isinstance(mapped, str) else {}
             return self._neutral(
                 claim,
                 site,
                 summary=f"{path} is {generated.kind}, so its line numbers are not judged",
-                details={"outcome": "generated", "path": path, "generated": generated.reason},
+                details={
+                    "outcome": "generated",
+                    "path": path,
+                    "generated": generated.reason,
+                    **extra,
+                },
             )
         if len(candidates) != 1:
             return None  # missing or ambiguous: C02 owns that finding
@@ -492,6 +521,9 @@ def _named_near(ctx: CheckContext, claim: LineClaim, actual: SymbolDef) -> bool:
 
 def _say(site: _Site, text: str) -> str:
     """Name the frame a trace finding came from, so each piece of evidence stands alone."""
+    if site.amalgamation is not None:
+        amal_path, amal_line = site.amalgamation
+        text = f"{amal_path}:{amal_line} is {site.path}:{site.line} in the release: {text}"
     return f"frame #{site.frame}: {text}" if site.frame is not None else text
 
 
@@ -499,5 +531,41 @@ def _details(site: _Site, **extra: object) -> dict[str, Any]:
     details: dict[str, Any] = {"path": site.path, "line": site.line, "function": site.function}
     if site.frame is not None:
         details["frame"] = site.frame
+    if site.amalgamation is not None:
+        details["amalgamation"] = {"path": site.amalgamation[0], "line": site.amalgamation[1]}
     details.update(extra)
     return details
+
+
+def _map_amalgamation(  # noqa: PLR0911 - one return per unmappable case
+    ctx: CheckContext, path: str, site: _Site
+) -> _Site | str | None:
+    """Map ``sqlite3.c:<line>`` to the source file and line at the resolved release (SPEC
+    §11.5). Only with ``--online`` (P3, the zip is fetched once and cached) and only for a
+    ``version-X.Y.Z`` release of SQLite. Returns the mapped site, a reason it could not be
+    mapped (kept in the neutral evidence), or ``None`` when mapping does not apply."""
+    project = ctx.resolution.project
+    if project is None or project.name != "sqlite" or path.rsplit("/", 1)[-1] != "sqlite3.c":
+        return None
+    if site.amalgamation is not None:
+        return None  # never map twice
+    if not ctx.online:
+        return "not mapped to its source file: the amalgamation is only fetched with --online"
+    ref = ctx.ref_name or ""
+    if not ref.startswith("version-"):
+        return "not mapped: the target is not a SQLite version-X.Y.Z release tag"
+    epoch = ctx.resolution.repo.commit_epoch(ctx.commit)
+    if epoch is None:
+        return "not mapped: the release date is unknown"
+    year = time.gmtime(epoch).tm_year
+    try:
+        amal = cached_amalgamation(ref, (year, year + 1, year - 1), online=True)
+    except NikashaError as exc:
+        return f"not mapped: {exc}"
+    hit = amal.lookup(site.line)
+    if hit is None:
+        return f"not mapped: line {site.line} is a banner or outside any inlined file"
+    source = resolve_source(hit.file, ctx.tree_paths)
+    if source is None:
+        return f"line {site.line} is in {hit.file}, which is itself generated or not in git"
+    return replace(site, path=source, line=hit.line, end_line=None, amalgamation=(path, site.line))

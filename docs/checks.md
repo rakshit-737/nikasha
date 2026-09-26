@@ -143,6 +143,7 @@ Applies to: `line`, `trace`
 
 | Outcome | Strength |
 |---|---|
+| `amalgamation_mismatch` | — (not scored) |
 | `budget_expired` | — (not scored) |
 | `enclosing_function_named` | — (not scored) |
 | `fits_nearby_release` | -0.30 |
