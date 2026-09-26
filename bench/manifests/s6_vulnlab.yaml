@@ -3,7 +3,9 @@
 #
 # S6: the hermetic vulnlab fixtures (fictional libhdr; examples/vulnlab). Checked against
 # the repository built by scripts/build_vulnlab.py. Labels describe the report, expected
-# describes the verdict SPEC Appendix B and tests/integration/test_check_pipeline.py pin.
+# describes the verdict SPEC Appendix B and tests/integration/test_check_pipeline.py pin
+# for a static run. The PoC is the project's own (examples/vulnlab/pocs/); the sandbox
+# test tests/sandbox/test_bench_repro_subset.py runs the --repro subset in CI.
 source: S6
 title: vulnlab fixtures (hermetic)
 terms_checked: true
@@ -12,6 +14,10 @@ entries:
     path: examples/reports/genuine_hdr_overflow.md
     label: genuine
     expected: GROUNDED
+    # --repro subset: the PoC crashes v1.2.0, so with --repro the verdict is REPRODUCED.
+    version: v1.2.0
+    poc: examples/vulnlab/pocs/hdr_overflow.txt
+    recipe: vulnlab
   - id: vulnlab-mixed-wrong-version
     path: examples/reports/mixed_wrong_version.md
     label: genuine
@@ -22,6 +28,10 @@ entries:
     label: genuine
     expected: MIXED
     notes: real bug and real fix, reported against v1.3.0 where the fix is applied
+    # --repro subset: the same PoC at the fixed v1.3.0 must not crash, so no REPRODUCED.
+    version: v1.3.0
+    poc: examples/vulnlab/pocs/hdr_overflow.txt
+    recipe: vulnlab
   - id: vulnlab-fabricated
     path: examples/reports/fabricated_hdr_overflow.md
     label: fabricated

@@ -70,9 +70,13 @@ offline. The result goes to C19 alongside the static checks.
 - With `--repro` and an engine, every record gets a `repro` field: `not_in_subset`, `ran`
   or `failed`. A failure keeps only the exception class, as C19 `ERROR` evidence with
   stage `build_failed` or `infra_error`. `metrics.json` gets a `repro` count per status.
-- The committed manifests name no PoCs yet, because the vulnlab examples ship no PoC files.
-  So today every case is `not_in_subset`, and `--repro` changes no verdict until an entry
-  adds `poc`, `recipe` and `version`.
+- S6 has a two-case subset: `vulnlab-genuine` (the project's own PoC,
+  `examples/vulnlab/pocs/hdr_overflow.txt`, at v1.2.0, where it crashes, so the verdict
+  becomes REPRODUCED) and `vulnlab-already-fixed` (the same PoC at the fixed v1.3.0, which
+  must not crash, so the verdict stays MIXED). Every other case is `not_in_subset`. With
+  `--repro`, `vulnlab-genuine` differs from its static `expected: GROUNDED`, and RESULTS.md
+  lists that difference. `tests/sandbox/test_bench_repro_subset.py` runs this subset in
+  the sandbox CI job.
 
 ## Layout
 

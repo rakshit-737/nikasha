@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# S4 (optional, SPEC 17.2): the Linux-kernel false-positive dataset (arXiv 2605.07678,
+# https://github.com/tianjiashuo/False-Positive-from-Linux-Kernel). SPEC 17.2 allows it only
+# if its license allows. Checked 2026-09-26 through the GitHub API: the repository declares
+# no license, so nothing may be taken from it and this split stays empty.
+source: S4
+title: "Linux-kernel false-positive dataset (not used: no license)"
+terms_checked: false
+entries: []

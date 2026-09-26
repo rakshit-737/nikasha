@@ -20,10 +20,10 @@ says who wrote a report.
 
 | Source | What | Label | Status in this repository |
 |---|---|---|---|
-| S1 | curl's public list of AI-generated security reports (HackerOne links) | fabricated | Empty stub. Filled only after the maintainer has checked and accepted the source's terms. |
-| S2 | curl's genuine CVE reports (`curl.se/docs/vuln.json`, HackerOne issue URLs) | genuine | Empty stub, for the same reason. |
-| S3 | Fabricated CVE records from JFrog's analysis, content from cvelistV5 | fabricated | Empty stub, for the same reason. |
-| S4 | Linux-kernel false-positive dataset | n/a | Not included; depends on its license. |
+| S1 | curl's public list of AI-generated security reports (HackerOne links) | fabricated | 49 HackerOne IDs and labels (via the slopcheck curl index, ADR 0011); text fetched at runtime into the gitignored cache. |
+| S2 | curl's genuine CVE reports (`curl.se/docs/vuln.json`, HackerOne issue URLs) | genuine | 126 HackerOne IDs of reports curl confirmed (ADR 0011). All 124 `vuln.json` records with a HackerOne issue URL are among them (checked 2026-09-26). |
+| S3 | Fabricated CVE records from JFrog's analysis, content from cvelistV5 | fabricated | No cases: all six SQLite CVEs the post names are REJECTED with blanked records (checked 2026-09-26), so they are listed as exclusions (SPEC §17.2). |
+| S4 | Linux-kernel false-positive dataset | n/a | Not included: the repository declares no license (checked 2026-09-26). |
 | S5 | Seeded mutations M1–M7 of the S6 genuine and wrong-version fixtures | per mutation | 2 bases × 7 mutations × 3 seeds = 42 cases, generated in memory. |
 | S6 | The vulnlab fixtures in `examples/reports/` (fictional `libhdr`) | genuine / fabricated / insufficient | 5 cases. |
 | S7 | LLM-written fabricated reports | synthetic | Not included. Never mixed into real-world metrics. |

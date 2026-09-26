@@ -120,6 +120,31 @@ class Entry(_Frozen):
         return self
 
 
+class Exclusion(_Frozen):
+    """A source item deliberately left out, with a one-line reason (SPEC §17.2).
+
+    For example a REJECTED CVE record whose content has been blanked: the spec says to
+    exclude it and document the exclusion, so the manifest records the ID and why.
+    """
+
+    id: str
+    reason: str
+
+    @field_validator("id")
+    @classmethod
+    def _check_id(cls, value: str) -> str:
+        if not _ID.fullmatch(value):
+            raise ValueError(f"bad excluded id {value!r}")
+        return value
+
+    @field_validator("reason")
+    @classmethod
+    def _check_reason(cls, value: str) -> str:
+        if not value.strip() or len(value) > NOTES_MAX or "\n" in value or "\r" in value:
+            raise ValueError(f"reason must be one non-empty line of at most {NOTES_MAX} chars")
+        return value
+
+
 class Generator(_Frozen):
     """S5 only: which S6 entries to mutate, with which mutations and seeds."""
 
@@ -143,6 +168,8 @@ class Manifest(_Frozen):
     title: str
     terms_checked: bool = False
     entries: tuple[Entry, ...] = ()
+    #: Source items left out on purpose, each with its reason (never counted as cases).
+    excluded: tuple[Exclusion, ...] = ()
     generator: Generator | None = None
 
     @field_validator("source")
@@ -154,9 +181,9 @@ class Manifest(_Frozen):
 
     @model_validator(mode="after")
     def _consistent(self) -> Manifest:
-        ids = [e.id for e in self.entries]
+        ids = [e.id for e in self.entries] + [x.id for x in self.excluded]
         if len(ids) != len(set(ids)):
-            raise ValueError(f"{self.source}: duplicate entry ids")
+            raise ValueError(f"{self.source}: duplicate entry or excluded ids")
         remote = [e.id for e in self.entries if e.url is not None]
         if remote and not self.terms_checked:
             raise ValueError(

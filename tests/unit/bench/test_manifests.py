@@ -22,10 +22,10 @@ def _write(tmp_path: Path, body: str) -> Path:
 
 def test_committed_manifests_load_and_split() -> None:
     manifests = load_manifests(MANIFESTS)
-    assert [m.source for m in manifests] == ["S1", "S2", "S3", "S5", "S6"]
+    assert [m.source for m in manifests] == ["S1", "S2", "S3", "S4", "S5", "S6"]
     assert [m.source for m in for_split(manifests, "synthetic")] == ["S5", "S6"]
-    assert [m.source for m in for_split(manifests, "real")] == ["S1", "S2", "S3"]
-    assert len(for_split(manifests, "all")) == 5
+    assert [m.source for m in for_split(manifests, "real")] == ["S1", "S2", "S3", "S4"]
+    assert len(for_split(manifests, "all")) == 6
 
 
 def test_real_sources_hold_only_hackerone_ids_after_terms_check() -> None:
@@ -37,7 +37,7 @@ def test_real_sources_hold_only_hackerone_ids_after_terms_check() -> None:
             assert manifest.terms_checked is True
             assert entry.path is None
             assert entry.url == "https://hackerone.com/reports/" + entry.id.removeprefix("h1-")
-    assert counts == {"S1": 49, "S2": 126, "S3": 0}
+    assert counts == {"S1": 49, "S2": 126, "S3": 0, "S4": 0}
     s1 = next(m for m in load_manifests(MANIFESTS) if m.source == "S1")
     assert {e.label for e in s1.entries} == {"fabricated"}
 

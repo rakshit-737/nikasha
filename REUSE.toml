@@ -10,7 +10,7 @@ SPDX-FileCopyrightText = "2026 The Nikasha Authors"
 SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
-path = ["schema/**", "tests/fixtures/**", "examples/**/*.json"]
+path = ["schema/**", "tests/fixtures/**", "examples/**/*.json", "examples/vulnlab/pocs/**"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 The Nikasha Authors"
 SPDX-License-Identifier = "Apache-2.0"

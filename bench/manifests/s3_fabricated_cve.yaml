@@ -1,10 +1,32 @@
 # SPDX-FileCopyrightText: 2026 The Nikasha Authors
 # SPDX-License-Identifier: Apache-2.0
 #
-# EMPTY STUB. This manifest is populated only after the source's terms have been checked
-# and accepted by the maintainer (SPEC 17.2, ADR 0003). Until then it holds no entries and
-# nothing is fetched. Entries will carry IDs, URLs and labels only, never report text.
+# S3 (SPEC 17.2): the CVE IDs from JFrog Security Research, "SQLite Critical CVEs or LLM
+# Slop?" (https://research.jfrog.com/post/sqlite-critical-cves-or-llm-slops/, published
+# 2026-07-30), with content to come from cvelistV5. IDs and reasons only; never record text.
+#
+# Checked 2026-09-26: the post names six SQLite CVEs. All six are REJECTED in cvelistV5
+# (https://github.com/CVEProject/cvelistV5, cves/2026/51xxx/, rejected 2026-07-31) and their
+# records hold only the standard "DO NOT USE THIS CVE RECORD" rejection text: no affected
+# versions, no description, no references. SPEC 17.2 says to exclude such blanked records
+# and document the exclusion, so this split has no checkable entries today. The post also
+# mentions a wider batch of about 55 advisories from the same account, but names no other
+# IDs, so nothing else is listed here. The pre-rejection text still exists in cvelistV5's
+# git history; using it would need a maintainer decision (it is not the current record).
 source: S3
 title: "Fabricated CVE records (JFrog analysis; content from cvelistV5)"
-terms_checked: false
+terms_checked: true
 entries: []
+excluded:
+  - id: cve-2026-51296
+    reason: "REJECTED 2026-07-31 in cvelistV5; record content blanked (SPEC 17.2 exclusion)"
+  - id: cve-2026-51297
+    reason: "REJECTED 2026-07-31 in cvelistV5; record content blanked (SPEC 17.2 exclusion)"
+  - id: cve-2026-51300
+    reason: "REJECTED 2026-07-31 in cvelistV5; record content blanked (SPEC 17.2 exclusion)"
+  - id: cve-2026-51302
+    reason: "REJECTED 2026-07-31 in cvelistV5; record content blanked (SPEC 17.2 exclusion)"
+  - id: cve-2026-51303
+    reason: "REJECTED 2026-07-31 in cvelistV5; record content blanked (SPEC 17.2 exclusion)"
+  - id: cve-2026-51304
+    reason: "REJECTED 2026-07-31 in cvelistV5; record content blanked (SPEC 17.2 exclusion)"
