@@ -513,6 +513,29 @@ INSUFFICIENT 34.
   in `tests/integration/test_m7_network.py` run in Nightly. Not verified: the HackerOne API
   (needs credentials), anonymous GitHub at scale, cloud LLM providers (no keys).
 
+## Maintainer-delegated decisions (2026-09-27)
+
+- **M3.5 hand-check (model-judged by an AI agent, not human-verified).** REFUTES precision
+  is 3/38 = 0.08 (Wilson 95% 0.03-0.21); C02 is 0/22. Causes: claim scoping (PoC files,
+  system headers, third-party permalinks treated as project claims), `master` resolved to
+  today's tip instead of the report's date, commit hashes read as symbols or as the tested
+  version, a Markdown escape mangling a file name, one polarity miss, one C11 parse miss.
+  P4 held only because refutations are weighted weakly. Some verdicts also move with the
+  per-check wall-clock budgets (two MIXED reports became UNGROUNDED on re-run).
+  Details: `docs/research/2026-09-26-handcheck.md`. **Next: fix these causes, then re-run
+  M3.5.** `results.jsonl` now records each finding's claim, summary and location.
+- **S3.** The six JFrog SQLite CVEs use their pre-rejection cvelistV5 records, pinned by
+  commit (ADR 0011 addendum; `nikasha bench fetch-cvelist --online`). All six are
+  INSUFFICIENT against sqlite 3.41.0, none UNGROUNDED. C02 takes a CVE-ID-shaped file name
+  from reference URLs as a file claim (extraction false positive, open).
+- **SPEC §0.** The Alpha-Omega "AI-finder guidance" claim has no primary source (the
+  OpenSSF page is an eBook landing page without that wording), so it is removed. The
+  $12.5M funding is confirmed (The Register, 2026-03-18; granted by Anthropic, AWS, GitHub,
+  Google, Microsoft and OpenAI).
+- **C19.** A timeout on a report that claims a hang (CWE-400/835 family or a hang word in
+  the title) is NEUTRAL `timeout_consistent_with_hang`, never REPRODUCED and no longer a
+  -0.5 `no_crash`. Body-only hang claims still give `no_crash`.
+
 ## Carry-overs to later milestones
 
 - **M3:**
