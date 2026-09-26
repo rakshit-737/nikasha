@@ -314,10 +314,9 @@ complete example.
 ### Adding a trace format
 
 Trace parsers live in `src/nikasha/extract/traces/`, one module per format, on top of
-`common.py` (SPEC §9.5). Nine formats exist today (ASan, UBSan, valgrind, gdb, Python,
-Java, Go, Rust, Node). LSan, MSan and TSan are declared in the `TraceFormat` literal but
-have no parser, because no real fixtures exist yet; they are planned for M5, captured from
-real, already-fixed public bugs (ADR 0005, `PROGRESS.md`).
+`common.py` (SPEC §9.5). All twelve formats exist today (ASan, UBSan, LSan, MSan, TSan,
+valgrind, gdb, Python, Java, Go, Rust, Node). The LSan, MSan and TSan fixtures come from
+already-fixed public bugs through `scripts/capture_sanitizer_fixtures.py` (ADR 0009).
 
 1. **Capture real fixtures first: at least three, never hand-written or edited**
    (ADR 0005). `scripts/capture_trace_fixtures.py` is the only way fixtures are made. It

@@ -37,7 +37,9 @@ maintainer then decided on a narrower scope.
 ## Consequences
 
 - 9 of the 12 required trace formats ship in M1. Reports containing LSan, MSan or TSan
-  output still yield every other claim; their traces are simply not parsed.
+  output still yield every other claim; their traces are simply not parsed. *Amended
+  2026-09-26:* 12 of 12. LSan, MSan and TSan fixtures were captured from already-fixed
+  public bugs and the parsers are registered (ADR 0009).
 - ASan fixtures show the *current* wording ("0 bytes **after** 64-byte region"; a SUMMARY
   naming `__asan_memcpy` and the module, not an app frame's file:line). The parser also
   accepts the older wording ("to the right of"). C11's consistency rules (M3) must accept

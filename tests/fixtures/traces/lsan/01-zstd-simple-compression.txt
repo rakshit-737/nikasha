@@ -1,0 +1,14 @@
+
+=================================================================
+==24==ERROR: LeakSanitizer: detected memory leaks
+
+Direct leak of 15 byte(s) in 1 object(s) allocated from:
+    #0 0x000000432b33 in malloc (/work/tree/simple_compression+0x432b33) (BuildId: 6c6a95eb8d592e65e26d9227afb5ca8349ed377c)
+    #1 0x000000436337 in malloc_orDie /work/tree/examples/simple_compression.c:39:24
+    #2 0x000000436337 in createOutFilename_orDie /work/tree/examples/simple_compression.c:109:28
+    #3 0x000000436337 in main /work/tree/examples/simple_compression.c:128:37
+    #4 0x7f3b5c5b5680 in __libc_start_call_main /usr/src/debug/glibc-2.43-8.fc44.x86_64/csu/../sysdeps/nptl/libc_start_call_main.h:59:16
+    #5 0x7f3b5c5b5797 in __libc_start_main@GLIBC_2.2.5 /usr/src/debug/glibc-2.43-8.fc44.x86_64/csu/../csu/libc-start.c:360:3
+    #6 0x000000400844 in _start (/work/tree/simple_compression+0x400844) (BuildId: 6c6a95eb8d592e65e26d9227afb5ca8349ed377c)
+
+SUMMARY: LeakSanitizer: 15 byte(s) leaked in 1 allocation(s).

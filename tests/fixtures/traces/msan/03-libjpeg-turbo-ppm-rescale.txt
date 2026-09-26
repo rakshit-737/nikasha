@@ -1,0 +1,13 @@
+==332==WARNING: MemorySanitizer: use-of-uninitialized-value
+    #0 0x00000056aad1 in rgb_ycc_convert_internal /work/tree/jccolext.c:61:33
+    #1 0x00000056aad1 in rgb_ycc_convert /work/tree/jccolor.c:267:5
+    #2 0x00000051bbae in pre_process_data /work/tree/jcprepct.c:147:5
+    #3 0x0000004ed3d7 in process_data_simple_main /work/tree/jcmainct.c:87:7
+    #4 0x0000004e9ac7 in jpeg_write_scanlines /work/tree/jcapistd.c:109:3
+    #5 0x00000049f9b8 in main /work/tree/cjpeg.c:666:11
+    #6 0x7f34d69ba680 in __libc_start_call_main /usr/src/debug/glibc-2.43-8.fc44.x86_64/csu/../sysdeps/nptl/libc_start_call_main.h:59:16
+    #7 0x7f34d69ba797 in __libc_start_main@GLIBC_2.2.5 /usr/src/debug/glibc-2.43-8.fc44.x86_64/csu/../csu/libc-start.c:360:3
+    #8 0x0000004006e4 in _start (/work/tree/build/cjpeg-static+0x4006e4) (BuildId: f9a54758fba9a4ddf56db9168badea19545849f2)
+
+SUMMARY: MemorySanitizer: use-of-uninitialized-value /work/tree/jccolext.c:61:33 in rgb_ycc_convert_internal
+Exiting

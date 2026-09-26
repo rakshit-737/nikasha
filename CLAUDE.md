@@ -70,7 +70,7 @@ are stubs until their milestones.
 | `model/` | frozen pydantic models; `ids.py` content IDs; `result.py` JSON | done (M1) |
 | `ingest/` | text / Markdown / HTML → `Report` with `SourceMap`; attachments | done (M1; email etc. M7) |
 | `extract/` | registry + one module per claim kind; `pipeline.py` merges, scopes, orders | done (M1) |
-| `extract/traces/` | one parser per trace format on `common.py` | 9/12 formats (ADR 0005) |
+| `extract/traces/` | one parser per trace format on `common.py` | 12/12 formats (ADR 0005, 0009) |
 | `render/extract_view.py` | `nikasha extract` view | done (M1) |
 | `resolve/` | `refs.py` tag parsing and `ReleaseList`; `repo.py` clone cache; `target.py` repo and commit resolution; `products.py` loads `data/known_projects.yaml` | done (M2) |
 | `code/` | `languages`, `parser` (+ `symbols`, `calls`, `macros`, `preproc`, `queries/*.scm`) → `facts.FileFacts`; `index.py` SQLite by blob; `timeline.py`; `callgraph.py`; `trace_forensics.py`; `generated.py`; `literal.py` (capped `git grep -F`); `pathtrie`, `bktree`, `fingerprint` | done (M2) |

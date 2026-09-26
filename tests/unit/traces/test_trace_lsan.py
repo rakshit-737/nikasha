@@ -1,10 +1,10 @@
 # SPDX-FileCopyrightText: 2026 The Nikasha Authors
 # SPDX-License-Identifier: Apache-2.0
-"""LSAN parser: API-contract tests here, real-fixture tests skip until captured (ADR 0009).
+"""LSAN parser: API-contract tests and value tests on the real fixtures (ADR 0009).
 
 No hand-written LSAN traces are used (CLAUDE.md: trace fixtures are real output only). The
 fixture tests read `tests/fixtures/traces/lsan/`, which only
-`scripts/capture_sanitizer_fixtures.py` writes, and skip until that capture has run.
+`scripts/capture_sanitizer_fixtures.py` writes.
 """
 
 from __future__ import annotations
@@ -29,8 +29,8 @@ PARSER = LsanParser()
 HEADER = "==1==ERROR: LeakSanitizer: detected memory leaks"
 
 
-def test_not_registered_by_default() -> None:
-    assert "lsan" not in PARSERS  # ADR 0009: registered only once real fixtures pass
+def test_registered() -> None:
+    assert isinstance(PARSERS["lsan"], type(PARSER))  # ADR 0009: real fixtures committed
     assert PARSER.format == "lsan"
 
 
@@ -77,8 +77,7 @@ def _fixtures() -> list[Path]:
 
 def test_real_fixtures_parse() -> None:
     fixtures = _fixtures()
-    if not fixtures:
-        pytest.skip("no real lsan fixtures yet: run scripts/capture_sanitizer_fixtures.py")
+    assert fixtures, "real lsan fixtures are committed (ADR 0009)"
     assert len(fixtures) >= 3  # SPEC §9.5
     for path in fixtures:
         traces = PARSER.parse(path.read_text(encoding="utf-8"))
@@ -88,6 +87,70 @@ def test_real_fixtures_parse() -> None:
         assert data.frames, path.name
         assert any(not f.is_runtime and f.path and f.line for f in data.frames), path.name
         assert data.summary, path.name
+
+
+# --- values from the real fixtures (tests/fixtures/traces/lsan/README.md) -----------------
+
+LSAN_CASES = [
+    # name, pid, bytes, first app frame (function, file, line, col)
+    ("01-zstd-simple-compression.txt", 24, 15,
+     ("malloc_orDie", "/work/tree/examples/simple_compression.c", 39, 24)),
+    ("02-jq-setpath-array-key.txt", 4072, 272,
+     ("jv_mem_alloc", "/work/tree/src/jv_alloc.c", 141, 13)),
+    ("03-zstd-recursive-symlink.txt", 93, 13,
+     ("UTIL_prepareFileList", "/work/tree/programs/util.c", 237, 24)),
+]  # fmt: skip
+
+
+@pytest.mark.parametrize(("name", "pid", "size", "app"), LSAN_CASES)
+def test_fixture_values(name: str, pid: int, size: int, app: tuple[str, str, int, int]) -> None:
+    text = (FIXTURES / name).read_text(encoding="utf-8")
+    traces = PARSER.parse(text)
+    assert len(traces) == 1
+    trace = traces[0]
+    data = trace.data
+    body = text[trace.start : trace.end]
+    summary = f"SUMMARY: LeakSanitizer: {size} byte(s) leaked in 1 allocation(s)."
+    assert body.startswith("=" * 65 + f"\n=={pid}==ERROR: LeakSanitizer: detected memory leaks")
+    assert body.endswith(summary)
+    assert (data.bug_type, data.message, data.pid, data.pids_seen) == (
+        "memory-leak",
+        "detected memory leaks",
+        pid,
+        (pid,),
+    )
+    assert data.summary == summary
+    assert data.frames == data.alloc_frames
+    assert data.other_stacks == ()
+    assert data.frames[0].function == "malloc"
+    assert data.frames[0].is_runtime
+    first_app = next(f for f in data.frames if not f.is_runtime)
+    assert (first_app.function, first_app.path, first_app.line, first_app.col) == app
+    assert data.frames[-1].function == "_start"
+    assert data.frames[-1].is_runtime
+    assert [f.index for f in data.frames] == list(range(len(data.frames)))
+    assert not next(f for f in data.frames if f.function == "main").is_runtime
+
+
+def test_frame_with_file_but_no_line_keeps_the_path() -> None:
+    # jq 1.7.1 prints ``#7 0x... in jv_setpath /work/tree/src/jv_aux.c`` (no :line). The path
+    # used to end up inside the function name.
+    text = (FIXTURES / "02-jq-setpath-array-key.txt").read_text(encoding="utf-8")
+    frames = PARSER.parse(text)[0].data.frames
+    assert (frames[7].function, frames[7].path, frames[7].line) == (
+        "jv_setpath",
+        "/work/tree/src/jv_aux.c",
+        None,
+    )
+    assert (frames[8].function, frames[8].path) == ("jq_next", "/work/tree/src/execute.c")
+    assert (frames[6].function, frames[6].line) == ("jv_array_indexes", 1026)
+
+
+def test_prose_before_the_report_is_not_part_of_it() -> None:
+    text = (FIXTURES / "02-jq-setpath-array-key.txt").read_text(encoding="utf-8")
+    trace = PARSER.parse(text)[0]
+    assert text.startswith("jq: error")
+    assert "jq: error" not in text[trace.start : trace.end]
 
 
 # --- capture script (scripts/capture_sanitizer_fixtures.py): pure parts, no engine needed ---

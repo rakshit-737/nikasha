@@ -12,6 +12,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- LSan, MSan and TSan traces are parsed (12 of 12 formats). Their parsers are registered
+  now that real fixtures from nine already-fixed public bugs are committed (ADR 0009).
+
+### Fixed
+
+- A sanitizer frame with a file but no line (`in func /src/a.c`) no longer puts the path
+  into the function name.
+- TSan lock-order-inversion reports now have a primary stack and a thread, and intercepted
+  `pthread_*` frames count as runtime frames.
+
 ## [0.1.0] - 2026-09-26
 
 ### Added

@@ -125,7 +125,16 @@ def split_frame_rest(rest: str) -> FrameParts:
         return FrameParts(head.strip() or None, *location)
     if last == "<null>" and head:
         return FrameParts(head.strip())
+    if head.strip() and _is_bare_path(last):
+        # The symbolizer knew the file but not the line (real LSan output from jq 1.7.1:
+        # ``#7 0x… in jv_setpath /work/tree/src/jv_aux.c``).
+        return FrameParts(head.strip(), last)
     return FrameParts(rest or None)
+
+
+def _is_bare_path(token: str) -> bool:
+    """An absolute source path with no ``:line`` (``/src/a.c``), never an operator name."""
+    return len(token) > 1 and token.startswith("/") and "(" not in token and ")" not in token
 
 
 def parse_sanitizer_frame(line: str) -> Frame | None:

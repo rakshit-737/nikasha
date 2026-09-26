@@ -1,10 +1,10 @@
 # SPDX-FileCopyrightText: 2026 The Nikasha Authors
 # SPDX-License-Identifier: Apache-2.0
-"""MSAN parser: API-contract tests here, real-fixture tests skip until captured (ADR 0009).
+"""MSAN parser: API-contract tests and value tests on the real fixtures (ADR 0009).
 
 No hand-written MSAN traces are used (CLAUDE.md: trace fixtures are real output only). The
 fixture tests read `tests/fixtures/traces/msan/`, which only
-`scripts/capture_sanitizer_fixtures.py` writes, and skip until that capture has run.
+`scripts/capture_sanitizer_fixtures.py` writes.
 """
 
 from __future__ import annotations
@@ -25,8 +25,8 @@ PARSER = MsanParser()
 HEADER = "==1==WARNING: MemorySanitizer: use-of-uninitialized-value"
 
 
-def test_not_registered_by_default() -> None:
-    assert "msan" not in PARSERS  # ADR 0009: registered only once real fixtures pass
+def test_registered() -> None:
+    assert isinstance(PARSERS["msan"], type(PARSER))  # ADR 0009: real fixtures committed
     assert PARSER.format == "msan"
 
 
@@ -73,8 +73,7 @@ def _fixtures() -> list[Path]:
 
 def test_real_fixtures_parse() -> None:
     fixtures = _fixtures()
-    if not fixtures:
-        pytest.skip("no real msan fixtures yet: run scripts/capture_sanitizer_fixtures.py")
+    assert fixtures, "real msan fixtures are committed (ADR 0009)"
     assert len(fixtures) >= 3  # SPEC §9.5
     for path in fixtures:
         traces = PARSER.parse(path.read_text(encoding="utf-8"))
@@ -107,3 +106,52 @@ def test_capture_image_has_msan_runtime() -> None:
         engine, sandbox.ContainerSpec(image=image, cmd=("bash", "-c", script)), timeout_s=120.0
     )
     assert b"MemorySanitizer: use-of-uninitialized-value" in result.stderr, result.stderr[-2000:]
+
+
+# --- values from the real fixtures (tests/fixtures/traces/msan/README.md) -----------------
+
+MSAN_CASES = [
+    # name, pid, top frame (function, file, line, col), frame count
+    ("01-jq-check-literal.txt", 4072, ("check_literal", "/work/tree/src/jv_parse.c", 517, 24), 7),
+    ("02-zlib-gzclose-next-in.txt", 118, ("deflate", "/work/tree/deflate.c", 679, 34), 9),
+    ("03-libjpeg-turbo-ppm-rescale.txt", 332,
+     ("rgb_ycc_convert_internal", "/work/tree/jccolext.c", 61, 33), 9),
+]  # fmt: skip
+
+
+@pytest.mark.parametrize(("name", "pid", "top", "count"), MSAN_CASES)
+def test_fixture_values(name: str, pid: int, top: tuple[str, str, int, int], count: int) -> None:
+    text = (FIXTURES / name).read_text(encoding="utf-8")
+    traces = PARSER.parse(text)
+    assert len(traces) == 1
+    trace = traces[0]
+    data = trace.data
+    assert trace.start == 0
+    assert text[trace.start : trace.end].endswith("\nExiting")
+    assert trace.end == len(text.rstrip("\n"))
+    assert (data.bug_type, data.message, data.pid, data.pids_seen) == (
+        "use-of-uninitialized-value",
+        "use-of-uninitialized-value",
+        pid,
+        (pid,),
+    )
+    assert len(data.frames) == count
+    frame = data.frames[0]
+    assert (frame.function, frame.path, frame.line, frame.col) == top
+    assert not frame.is_runtime
+    assert (data.summary_path, data.summary_line, data.summary_function) == (
+        top[1],
+        top[2],
+        top[0],
+    )
+    assert data.summary is not None
+    assert data.summary.startswith("SUMMARY: MemorySanitizer: use-of-uninitialized-value /work/")
+    # built without -fsanitize-memory-track-origins: no origin stacks
+    assert data.alloc_frames == ()
+    assert data.other_stacks == ()
+    assert [f.function for f in data.frames[-3:]] == [
+        "__libc_start_call_main",
+        "__libc_start_main",
+        "_start",
+    ]
+    assert all(f.is_runtime for f in data.frames[-3:])

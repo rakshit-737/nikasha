@@ -1,0 +1,43 @@
+==================
+WARNING: ThreadSanitizer: data race (pid=937)
+  Write of size 8 at 0x726c000009c8 by main thread:
+    #0 stream_decode_mt /work/tree/src/liblzma/common/stream_decoder_mt.c:1071:22 (xz+0x4e6b29) (BuildId: 11c67d817dddc3b3f508dbf10d6f4e7b59514642)
+    #1 lzma_code /work/tree/src/liblzma/common/common.c:293:17 (xz+0x4c9afa) (BuildId: 11c67d817dddc3b3f508dbf10d6f4e7b59514642)
+    #2 coder_normal /work/tree/src/xz/coder.c:1226:9 (xz+0x4bef89) (BuildId: 11c67d817dddc3b3f508dbf10d6f4e7b59514642)
+    #3 coder_run /work/tree/src/xz/coder.c:1444:16 (xz+0x4bef89)
+    #4 main /work/tree/src/xz/main.c:319:3 (xz+0x4c1c5c) (BuildId: 11c67d817dddc3b3f508dbf10d6f4e7b59514642)
+
+  Previous write of size 8 at 0x726c000009c8 by thread T1 (mutexes: write M0):
+    #0 worker_decoder /work/tree/src/liblzma/common/stream_decoder_mt.c:460:27 (xz+0x4e90d8) (BuildId: 11c67d817dddc3b3f508dbf10d6f4e7b59514642)
+
+  Location is heap block of size 1768 at 0x726c00000700 allocated by main thread:
+    #0 malloc <null> (xz+0x433ab4) (BuildId: 11c67d817dddc3b3f508dbf10d6f4e7b59514642)
+    #1 lzma_alloc /work/tree/src/liblzma/common/common.c:50:9 (xz+0x4c9287) (BuildId: 11c67d817dddc3b3f508dbf10d6f4e7b59514642)
+    #2 stream_decoder_mt_init /work/tree/src/liblzma/common/stream_decoder_mt.c:1895:11 (xz+0x4e5ea7) (BuildId: 11c67d817dddc3b3f508dbf10d6f4e7b59514642)
+    #3 lzma_stream_decoder_mt /work/tree/src/liblzma/common/stream_decoder_mt.c:1998:22 (xz+0x4e5ae0) (BuildId: 11c67d817dddc3b3f508dbf10d6f4e7b59514642)
+    #4 coder_init /work/tree/src/xz/coder.c:956:10 (xz+0x4beb58) (BuildId: 11c67d817dddc3b3f508dbf10d6f4e7b59514642)
+    #5 coder_run /work/tree/src/xz/coder.c:1412:40 (xz+0x4beb58)
+    #6 main /work/tree/src/xz/main.c:319:3 (xz+0x4c1c5c) (BuildId: 11c67d817dddc3b3f508dbf10d6f4e7b59514642)
+
+  Mutex M0 (0x726c00000928) created at:
+    #0 pthread_mutex_init <null> (xz+0x437830) (BuildId: 11c67d817dddc3b3f508dbf10d6f4e7b59514642)
+    #1 mythread_mutex_init /work/tree/src/common/mythread.h:208:9 (xz+0x4e5ed3) (BuildId: 11c67d817dddc3b3f508dbf10d6f4e7b59514642)
+    #2 stream_decoder_mt_init /work/tree/src/liblzma/common/stream_decoder_mt.c:1901:7 (xz+0x4e5ed3)
+    #3 lzma_stream_decoder_mt /work/tree/src/liblzma/common/stream_decoder_mt.c:1998:22 (xz+0x4e5ae0) (BuildId: 11c67d817dddc3b3f508dbf10d6f4e7b59514642)
+    #4 coder_init /work/tree/src/xz/coder.c:956:10 (xz+0x4beb58) (BuildId: 11c67d817dddc3b3f508dbf10d6f4e7b59514642)
+    #5 coder_run /work/tree/src/xz/coder.c:1412:40 (xz+0x4beb58)
+    #6 main /work/tree/src/xz/main.c:319:3 (xz+0x4c1c5c) (BuildId: 11c67d817dddc3b3f508dbf10d6f4e7b59514642)
+
+  Thread T1 (tid=952, running) created by main thread at:
+    #0 pthread_create <null> (xz+0x435e4e) (BuildId: 11c67d817dddc3b3f508dbf10d6f4e7b59514642)
+    #1 mythread_create /work/tree/src/common/mythread.h:190:18 (xz+0x4e8b56) (BuildId: 11c67d817dddc3b3f508dbf10d6f4e7b59514642)
+    #2 initialize_new_thread /work/tree/src/liblzma/common/stream_decoder_mt.c:585:6 (xz+0x4e8b56)
+    #3 get_thread /work/tree/src/liblzma/common/stream_decoder_mt.c:626:19 (xz+0x4e8b56)
+    #4 stream_decode_mt /work/tree/src/liblzma/common/stream_decoder_mt.c:1436:9 (xz+0x4e73d8) (BuildId: 11c67d817dddc3b3f508dbf10d6f4e7b59514642)
+    #5 lzma_code /work/tree/src/liblzma/common/common.c:293:17 (xz+0x4c9afa) (BuildId: 11c67d817dddc3b3f508dbf10d6f4e7b59514642)
+    #6 coder_init /work/tree/src/xz/coder.c:1001:18 (xz+0x4beb8b) (BuildId: 11c67d817dddc3b3f508dbf10d6f4e7b59514642)
+    #7 coder_run /work/tree/src/xz/coder.c:1412:40 (xz+0x4beb8b)
+    #8 main /work/tree/src/xz/main.c:319:3 (xz+0x4c1c5c) (BuildId: 11c67d817dddc3b3f508dbf10d6f4e7b59514642)
+
+SUMMARY: ThreadSanitizer: data race /work/tree/src/liblzma/common/stream_decoder_mt.c:1071:22 in stream_decode_mt
+==================

@@ -1,0 +1,14 @@
+
+=================================================================
+==93==ERROR: LeakSanitizer: detected memory leaks
+
+Direct leak of 13 byte(s) in 1 object(s) allocated from:
+    #0 0x000000432d73 in malloc (/work/tree/programs/zstd+0x432d73) (BuildId: bcad7eafc39fe50e9cc0983d214937cb514f2e35)
+    #1 0x0000004c1da2 in UTIL_prepareFileList /work/tree/programs/util.c:237:24
+    #2 0x0000004c2093 in UTIL_createFileList /work/tree/programs/util.c:325:24
+    #3 0x0000004bf129 in main /work/tree/programs/zstdcli.c:999:28
+    #4 0x7ff6ffa34680 in __libc_start_call_main /usr/src/debug/glibc-2.43-8.fc44.x86_64/csu/../sysdeps/nptl/libc_start_call_main.h:59:16
+    #5 0x7ff6ffa34797 in __libc_start_main@GLIBC_2.2.5 /usr/src/debug/glibc-2.43-8.fc44.x86_64/csu/../csu/libc-start.c:360:3
+    #6 0x000000400a84 in _start (/work/tree/programs/zstd+0x400a84) (BuildId: bcad7eafc39fe50e9cc0983d214937cb514f2e35)
+
+SUMMARY: LeakSanitizer: 13 byte(s) leaked in 1 allocation(s).

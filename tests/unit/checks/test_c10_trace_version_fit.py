@@ -257,7 +257,9 @@ def test_identical_input_gives_identical_evidence(make_ctx: MakeContext) -> None
 
 def test_registered_and_runnable_through_the_runner(make_ctx: MakeContext) -> None:
     ctx = make_ctx(claims=[trace(FITS_V121)])
-    (run,) = run_checks(ctx, checks=[TraceVersionFit()])
+    # A generous limit: this test is about registration, not speed (a slow disk can hit the
+    # default and get the fixed timed-out NEUTRAL, which is correct but not what is tested).
+    (run,) = run_checks(ctx, checks=[TraceVersionFit()], timeout=600.0)
     assert run.check_id == "C10"
     assert run.error is None
     assert [e.outcome for e in run.evidence] == ["REFUTES"]

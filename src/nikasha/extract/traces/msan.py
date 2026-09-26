@@ -1,10 +1,9 @@
 # SPDX-FileCopyrightText: 2026 The Nikasha Authors
 # SPDX-License-Identifier: Apache-2.0
-"""MemorySanitizer reports (SPEC §9.5). **Unverified against real output** (ADR 0009).
+"""MemorySanitizer reports (SPEC §9.5). Checked against real output (ADR 0009).
 
-Written from the documented MemorySanitizer format, not from captured fixtures, so it is not
-registered in :data:`common.PARSERS` until ``scripts/capture_sanitizer_fixtures.py`` has
-produced real fixtures and the ``sandbox``-marked tests pass on them.
+Registered in :data:`common.PARSERS`. The real fixtures in ``tests/fixtures/traces/msan/``
+come from ``scripts/capture_sanitizer_fixtures.py`` (already-fixed public bugs, ADR 0009).
 
 Expected shape (``-fsanitize-memory-track-origins`` adds the origin stacks)::
 
@@ -26,7 +25,14 @@ from __future__ import annotations
 import re
 
 from nikasha.extract.traces.asan import parse_sanitizer_frame, parse_summary_location
-from nikasha.extract.traces.common import Line, ParsedTrace, parse_int, run_guarded, split_lines
+from nikasha.extract.traces.common import (
+    Line,
+    ParsedTrace,
+    parse_int,
+    register,
+    run_guarded,
+    split_lines,
+)
 from nikasha.extract.traces.lsan import (
     Scanned,
     is_separator,
@@ -134,8 +140,9 @@ def _build(
     return ParsedTrace(start=lines[first].start, end=lines[last].end, data=data)
 
 
+@register
 class MsanParser:
-    """MemorySanitizer reports (not registered by default; see ADR 0009)."""
+    """MemorySanitizer reports (fixtures: ``tests/fixtures/traces/msan/``)."""
 
     format: TraceFormat = "msan"
 

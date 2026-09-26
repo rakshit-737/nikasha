@@ -1,0 +1,347 @@
+Warning: vpxenc was compiled without WebM container support.Producing IVF output
+==================
+WARNING: ThreadSanitizer: data race (pid=1680)
+  Write of size 1 at 0x7f0f482c5b87 by thread T4:
+    #0 mbloop_filter_horizontal_edge_c <null> (vpxenc+0x4a02a8) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #1 vp8_loop_filter_mbh_c <null> (vpxenc+0x49fcfd) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_loop_filter_frame <null> (vpxenc+0x49e2f1) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8_loopfilter_frame <null> (vpxenc+0x421882) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 thread_loopfilter <null> (vpxenc+0x41b6a8) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+
+  Previous read of size 1 at 0x7f0f482c5b87 by main thread:
+    #0 vpx_mse16x16_c <null> (vpxenc+0x4965dc) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #1 calc_plane_error <null> (vpxenc+0x42c47c) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_get_compressed_data <null> (vpxenc+0x4239f3) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8e_encode <null> (vpxenc+0x4139ca) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 vpx_codec_encode <null> (vpxenc+0x4114bb) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #5 encode_frame /work/tree/vpxenc.c:1450 (vpxenc+0x40e0fe) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #6 main /work/tree/vpxenc.c:1946 (vpxenc+0x40e0fe)
+
+  Location is heap block of size 1580583 at 0x7f0f48272000 allocated by main thread:
+    #0 malloc <null> (libtsan.so.2+0x4d013) (BuildId: 0cdc18bb66a294b4b8e1e35fb289c44e387e985e)
+    #1 vpx_memalign <null> (vpxenc+0x412b51) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_yv12_realloc_frame_buffer <null> (vpxenc+0x45a281) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8_yv12_alloc_frame_buffer <null> (vpxenc+0x45a4f8) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 vp8_alloc_frame_buffers <null> (vpxenc+0x4971ff) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #5 vp8_alloc_compressor_data <null> (vpxenc+0x41dc69) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #6 vp8_change_config <null> (vpxenc+0x41fafe) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #7 vp8_create_compressor <null> (vpxenc+0x41fefc) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #8 vp8e_init <null> (vpxenc+0x41300e) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #9 vpx_codec_enc_init_ver <null> (vpxenc+0x410f4b) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #10 initialize_encoder /work/tree/vpxenc.c:1345 (vpxenc+0x40dd9f) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #11 main /work/tree/vpxenc.c:1857 (vpxenc+0x40dd9f)
+
+  Thread T4 (tid=1702, running) created by main thread at:
+    #0 pthread_create <null> (libtsan.so.2+0x1fd86) (BuildId: 0cdc18bb66a294b4b8e1e35fb289c44e387e985e)
+    #1 vp8cx_create_encoder_threads <null> (vpxenc+0x419f0f) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_create_compressor <null> (vpxenc+0x420adf) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8e_init <null> (vpxenc+0x41300e) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 vpx_codec_enc_init_ver <null> (vpxenc+0x410f4b) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #5 initialize_encoder /work/tree/vpxenc.c:1345 (vpxenc+0x40dd9f) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #6 main /work/tree/vpxenc.c:1857 (vpxenc+0x40dd9f)
+
+SUMMARY: ThreadSanitizer: data race (/work/tree/vpxenc+0x4a02a8) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061) in mbloop_filter_horizontal_edge_c
+==================
+==================
+WARNING: ThreadSanitizer: data race (pid=1680)
+  Write of size 1 at 0x7f0f482c5bb6 by thread T4:
+    #0 mbloop_filter_horizontal_edge_c <null> (vpxenc+0x4a02a8) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #1 vp8_loop_filter_mbh_c <null> (vpxenc+0x49fcfd) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_loop_filter_frame <null> (vpxenc+0x49e2f1) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8_loopfilter_frame <null> (vpxenc+0x421882) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 thread_loopfilter <null> (vpxenc+0x41b6a8) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+
+  Previous read of size 1 at 0x7f0f482c5bb6 by main thread:
+    #0 vpx_mse16x16_c <null> (vpxenc+0x4965ab) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #1 calc_plane_error <null> (vpxenc+0x42c47c) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_get_compressed_data <null> (vpxenc+0x4239f3) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8e_encode <null> (vpxenc+0x4139ca) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 vpx_codec_encode <null> (vpxenc+0x4114bb) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #5 encode_frame /work/tree/vpxenc.c:1450 (vpxenc+0x40e0fe) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #6 main /work/tree/vpxenc.c:1946 (vpxenc+0x40e0fe)
+
+  Location is heap block of size 1580583 at 0x7f0f48272000 allocated by main thread:
+    #0 malloc <null> (libtsan.so.2+0x4d013) (BuildId: 0cdc18bb66a294b4b8e1e35fb289c44e387e985e)
+    #1 vpx_memalign <null> (vpxenc+0x412b51) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_yv12_realloc_frame_buffer <null> (vpxenc+0x45a281) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8_yv12_alloc_frame_buffer <null> (vpxenc+0x45a4f8) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 vp8_alloc_frame_buffers <null> (vpxenc+0x4971ff) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #5 vp8_alloc_compressor_data <null> (vpxenc+0x41dc69) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #6 vp8_change_config <null> (vpxenc+0x41fafe) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #7 vp8_create_compressor <null> (vpxenc+0x41fefc) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #8 vp8e_init <null> (vpxenc+0x41300e) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #9 vpx_codec_enc_init_ver <null> (vpxenc+0x410f4b) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #10 initialize_encoder /work/tree/vpxenc.c:1345 (vpxenc+0x40dd9f) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #11 main /work/tree/vpxenc.c:1857 (vpxenc+0x40dd9f)
+
+  Thread T4 (tid=1702, running) created by main thread at:
+    #0 pthread_create <null> (libtsan.so.2+0x1fd86) (BuildId: 0cdc18bb66a294b4b8e1e35fb289c44e387e985e)
+    #1 vp8cx_create_encoder_threads <null> (vpxenc+0x419f0f) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_create_compressor <null> (vpxenc+0x420adf) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8e_init <null> (vpxenc+0x41300e) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 vpx_codec_enc_init_ver <null> (vpxenc+0x410f4b) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #5 initialize_encoder /work/tree/vpxenc.c:1345 (vpxenc+0x40dd9f) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #6 main /work/tree/vpxenc.c:1857 (vpxenc+0x40dd9f)
+
+SUMMARY: ThreadSanitizer: data race (/work/tree/vpxenc+0x4a02a8) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061) in mbloop_filter_horizontal_edge_c
+==================
+==================
+WARNING: ThreadSanitizer: data race (pid=1680)
+  Write of size 1 at 0x7f0f482c5676 by thread T4:
+    #0 mbloop_filter_horizontal_edge_c <null> (vpxenc+0x4a02db) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #1 vp8_loop_filter_mbh_c <null> (vpxenc+0x49fcfd) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_loop_filter_frame <null> (vpxenc+0x49e2f1) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8_loopfilter_frame <null> (vpxenc+0x421882) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 thread_loopfilter <null> (vpxenc+0x41b6a8) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+
+  Previous read of size 1 at 0x7f0f482c5676 by main thread:
+    #0 vpx_mse16x16_c <null> (vpxenc+0x4965ab) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #1 calc_plane_error <null> (vpxenc+0x42c47c) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_get_compressed_data <null> (vpxenc+0x4239f3) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8e_encode <null> (vpxenc+0x4139ca) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 vpx_codec_encode <null> (vpxenc+0x4114bb) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #5 encode_frame /work/tree/vpxenc.c:1450 (vpxenc+0x40e0fe) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #6 main /work/tree/vpxenc.c:1946 (vpxenc+0x40e0fe)
+
+  Location is heap block of size 1580583 at 0x7f0f48272000 allocated by main thread:
+    #0 malloc <null> (libtsan.so.2+0x4d013) (BuildId: 0cdc18bb66a294b4b8e1e35fb289c44e387e985e)
+    #1 vpx_memalign <null> (vpxenc+0x412b51) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_yv12_realloc_frame_buffer <null> (vpxenc+0x45a281) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8_yv12_alloc_frame_buffer <null> (vpxenc+0x45a4f8) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 vp8_alloc_frame_buffers <null> (vpxenc+0x4971ff) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #5 vp8_alloc_compressor_data <null> (vpxenc+0x41dc69) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #6 vp8_change_config <null> (vpxenc+0x41fafe) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #7 vp8_create_compressor <null> (vpxenc+0x41fefc) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #8 vp8e_init <null> (vpxenc+0x41300e) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #9 vpx_codec_enc_init_ver <null> (vpxenc+0x410f4b) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #10 initialize_encoder /work/tree/vpxenc.c:1345 (vpxenc+0x40dd9f) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #11 main /work/tree/vpxenc.c:1857 (vpxenc+0x40dd9f)
+
+  Thread T4 (tid=1702, running) created by main thread at:
+    #0 pthread_create <null> (libtsan.so.2+0x1fd86) (BuildId: 0cdc18bb66a294b4b8e1e35fb289c44e387e985e)
+    #1 vp8cx_create_encoder_threads <null> (vpxenc+0x419f0f) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_create_compressor <null> (vpxenc+0x420adf) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8e_init <null> (vpxenc+0x41300e) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 vpx_codec_enc_init_ver <null> (vpxenc+0x410f4b) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #5 initialize_encoder /work/tree/vpxenc.c:1345 (vpxenc+0x40dd9f) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #6 main /work/tree/vpxenc.c:1857 (vpxenc+0x40dd9f)
+
+SUMMARY: ThreadSanitizer: data race (/work/tree/vpxenc+0x4a02db) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061) in mbloop_filter_horizontal_edge_c
+==================
+==================
+WARNING: ThreadSanitizer: data race (pid=1680)
+  Write of size 1 at 0x7f0f482c5697 by thread T4:
+    #0 mbloop_filter_horizontal_edge_c <null> (vpxenc+0x4a02db) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #1 vp8_loop_filter_mbh_c <null> (vpxenc+0x49fcfd) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_loop_filter_frame <null> (vpxenc+0x49e2f1) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8_loopfilter_frame <null> (vpxenc+0x421882) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 thread_loopfilter <null> (vpxenc+0x41b6a8) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+
+  Previous read of size 1 at 0x7f0f482c5697 by main thread:
+    #0 vpx_mse16x16_c <null> (vpxenc+0x4965dc) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #1 calc_plane_error <null> (vpxenc+0x42c47c) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_get_compressed_data <null> (vpxenc+0x4239f3) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8e_encode <null> (vpxenc+0x4139ca) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 vpx_codec_encode <null> (vpxenc+0x4114bb) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #5 encode_frame /work/tree/vpxenc.c:1450 (vpxenc+0x40e0fe) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #6 main /work/tree/vpxenc.c:1946 (vpxenc+0x40e0fe)
+
+  Location is heap block of size 1580583 at 0x7f0f48272000 allocated by main thread:
+    #0 malloc <null> (libtsan.so.2+0x4d013) (BuildId: 0cdc18bb66a294b4b8e1e35fb289c44e387e985e)
+    #1 vpx_memalign <null> (vpxenc+0x412b51) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_yv12_realloc_frame_buffer <null> (vpxenc+0x45a281) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8_yv12_alloc_frame_buffer <null> (vpxenc+0x45a4f8) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 vp8_alloc_frame_buffers <null> (vpxenc+0x4971ff) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #5 vp8_alloc_compressor_data <null> (vpxenc+0x41dc69) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #6 vp8_change_config <null> (vpxenc+0x41fafe) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #7 vp8_create_compressor <null> (vpxenc+0x41fefc) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #8 vp8e_init <null> (vpxenc+0x41300e) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #9 vpx_codec_enc_init_ver <null> (vpxenc+0x410f4b) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #10 initialize_encoder /work/tree/vpxenc.c:1345 (vpxenc+0x40dd9f) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #11 main /work/tree/vpxenc.c:1857 (vpxenc+0x40dd9f)
+
+  Thread T4 (tid=1702, running) created by main thread at:
+    #0 pthread_create <null> (libtsan.so.2+0x1fd86) (BuildId: 0cdc18bb66a294b4b8e1e35fb289c44e387e985e)
+    #1 vp8cx_create_encoder_threads <null> (vpxenc+0x419f0f) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_create_compressor <null> (vpxenc+0x420adf) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8e_init <null> (vpxenc+0x41300e) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 vpx_codec_enc_init_ver <null> (vpxenc+0x410f4b) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #5 initialize_encoder /work/tree/vpxenc.c:1345 (vpxenc+0x40dd9f) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #6 main /work/tree/vpxenc.c:1857 (vpxenc+0x40dd9f)
+
+SUMMARY: ThreadSanitizer: data race (/work/tree/vpxenc+0x4a02db) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061) in mbloop_filter_horizontal_edge_c
+==================
+==================
+WARNING: ThreadSanitizer: data race (pid=1680)
+  Write of size 1 at 0x7f0f4813d90e by thread T4:
+    #0 mbloop_filter_horizontal_edge_c <null> (vpxenc+0x4a02a8) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #1 vp8_loop_filter_mbh_c <null> (vpxenc+0x49fcfd) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_loop_filter_frame <null> (vpxenc+0x49e2f1) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8_loopfilter_frame <null> (vpxenc+0x421882) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 thread_loopfilter <null> (vpxenc+0x41b6a8) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+
+  Previous read of size 1 at 0x7f0f4813d90e by main thread:
+    #0 vpx_mse16x16_c <null> (vpxenc+0x496733) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #1 calc_plane_error <null> (vpxenc+0x42c47c) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_get_compressed_data <null> (vpxenc+0x4239f3) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8e_encode <null> (vpxenc+0x4139ca) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 vpx_codec_encode <null> (vpxenc+0x4114bb) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #5 encode_frame /work/tree/vpxenc.c:1450 (vpxenc+0x40e0fe) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #6 main /work/tree/vpxenc.c:1946 (vpxenc+0x40e0fe)
+
+  Location is heap block of size 1580583 at 0x7f0f480ef000 allocated by main thread:
+    #0 malloc <null> (libtsan.so.2+0x4d013) (BuildId: 0cdc18bb66a294b4b8e1e35fb289c44e387e985e)
+    #1 vpx_memalign <null> (vpxenc+0x412b51) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_yv12_realloc_frame_buffer <null> (vpxenc+0x45a281) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8_yv12_alloc_frame_buffer <null> (vpxenc+0x45a4f8) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 vp8_alloc_frame_buffers <null> (vpxenc+0x49724c) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #5 vp8_alloc_compressor_data <null> (vpxenc+0x41dc69) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #6 vp8_change_config <null> (vpxenc+0x41fafe) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #7 vp8_create_compressor <null> (vpxenc+0x41fefc) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #8 vp8e_init <null> (vpxenc+0x41300e) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #9 vpx_codec_enc_init_ver <null> (vpxenc+0x410f4b) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #10 initialize_encoder /work/tree/vpxenc.c:1345 (vpxenc+0x40dd9f) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #11 main /work/tree/vpxenc.c:1857 (vpxenc+0x40dd9f)
+
+  Thread T4 (tid=1702, running) created by main thread at:
+    #0 pthread_create <null> (libtsan.so.2+0x1fd86) (BuildId: 0cdc18bb66a294b4b8e1e35fb289c44e387e985e)
+    #1 vp8cx_create_encoder_threads <null> (vpxenc+0x419f0f) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_create_compressor <null> (vpxenc+0x420adf) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8e_init <null> (vpxenc+0x41300e) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 vpx_codec_enc_init_ver <null> (vpxenc+0x410f4b) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #5 initialize_encoder /work/tree/vpxenc.c:1345 (vpxenc+0x40dd9f) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #6 main /work/tree/vpxenc.c:1857 (vpxenc+0x40dd9f)
+
+SUMMARY: ThreadSanitizer: data race (/work/tree/vpxenc+0x4a02a8) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061) in mbloop_filter_horizontal_edge_c
+==================
+==================
+WARNING: ThreadSanitizer: data race (pid=1680)
+  Write of size 1 at 0x7f0f4820e216 by thread T4:
+    #0 mbloop_filter_horizontal_edge_c <null> (vpxenc+0x4a02db) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #1 vp8_loop_filter_mbh_c <null> (vpxenc+0x49fd3e) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_loop_filter_frame <null> (vpxenc+0x49e2f1) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8_loopfilter_frame <null> (vpxenc+0x421882) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 thread_loopfilter <null> (vpxenc+0x41b6a8) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+
+  Previous read of size 1 at 0x7f0f4820e216 by main thread:
+    #0 vpx_mse16x16_c <null> (vpxenc+0x4965ab) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #1 calc_plane_error <null> (vpxenc+0x42c47c) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_get_compressed_data <null> (vpxenc+0x423aa4) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8e_encode <null> (vpxenc+0x4139ca) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 vpx_codec_encode <null> (vpxenc+0x4114bb) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #5 encode_frame /work/tree/vpxenc.c:1450 (vpxenc+0x40e0fe) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #6 main /work/tree/vpxenc.c:1946 (vpxenc+0x40e0fe)
+
+  Location is heap block of size 1580583 at 0x7f0f480ef000 allocated by main thread:
+    #0 malloc <null> (libtsan.so.2+0x4d013) (BuildId: 0cdc18bb66a294b4b8e1e35fb289c44e387e985e)
+    #1 vpx_memalign <null> (vpxenc+0x412b51) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_yv12_realloc_frame_buffer <null> (vpxenc+0x45a281) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8_yv12_alloc_frame_buffer <null> (vpxenc+0x45a4f8) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 vp8_alloc_frame_buffers <null> (vpxenc+0x49724c) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #5 vp8_alloc_compressor_data <null> (vpxenc+0x41dc69) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #6 vp8_change_config <null> (vpxenc+0x41fafe) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #7 vp8_create_compressor <null> (vpxenc+0x41fefc) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #8 vp8e_init <null> (vpxenc+0x41300e) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #9 vpx_codec_enc_init_ver <null> (vpxenc+0x410f4b) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #10 initialize_encoder /work/tree/vpxenc.c:1345 (vpxenc+0x40dd9f) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #11 main /work/tree/vpxenc.c:1857 (vpxenc+0x40dd9f)
+
+  Thread T4 (tid=1702, running) created by main thread at:
+    #0 pthread_create <null> (libtsan.so.2+0x1fd86) (BuildId: 0cdc18bb66a294b4b8e1e35fb289c44e387e985e)
+    #1 vp8cx_create_encoder_threads <null> (vpxenc+0x419f0f) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_create_compressor <null> (vpxenc+0x420adf) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8e_init <null> (vpxenc+0x41300e) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 vpx_codec_enc_init_ver <null> (vpxenc+0x410f4b) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #5 initialize_encoder /work/tree/vpxenc.c:1345 (vpxenc+0x40dd9f) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #6 main /work/tree/vpxenc.c:1857 (vpxenc+0x40dd9f)
+
+SUMMARY: ThreadSanitizer: data race (/work/tree/vpxenc+0x4a02db) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061) in mbloop_filter_horizontal_edge_c
+==================
+==================
+WARNING: ThreadSanitizer: data race (pid=1680)
+  Write of size 1 at 0x7f0f4820e6c7 by thread T4:
+    #0 mbloop_filter_horizontal_edge_c <null> (vpxenc+0x4a02a8) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #1 vp8_loop_filter_mbh_c <null> (vpxenc+0x49fd3e) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_loop_filter_frame <null> (vpxenc+0x49e2f1) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8_loopfilter_frame <null> (vpxenc+0x421882) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 thread_loopfilter <null> (vpxenc+0x41b6a8) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+
+  Previous read of size 1 at 0x7f0f4820e6c7 by main thread:
+    #0 vpx_mse16x16_c <null> (vpxenc+0x4965dc) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #1 calc_plane_error <null> (vpxenc+0x42c47c) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_get_compressed_data <null> (vpxenc+0x423aa4) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8e_encode <null> (vpxenc+0x4139ca) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 vpx_codec_encode <null> (vpxenc+0x4114bb) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #5 encode_frame /work/tree/vpxenc.c:1450 (vpxenc+0x40e0fe) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #6 main /work/tree/vpxenc.c:1946 (vpxenc+0x40e0fe)
+
+  Location is heap block of size 1580583 at 0x7f0f480ef000 allocated by main thread:
+    #0 malloc <null> (libtsan.so.2+0x4d013) (BuildId: 0cdc18bb66a294b4b8e1e35fb289c44e387e985e)
+    #1 vpx_memalign <null> (vpxenc+0x412b51) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_yv12_realloc_frame_buffer <null> (vpxenc+0x45a281) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8_yv12_alloc_frame_buffer <null> (vpxenc+0x45a4f8) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 vp8_alloc_frame_buffers <null> (vpxenc+0x49724c) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #5 vp8_alloc_compressor_data <null> (vpxenc+0x41dc69) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #6 vp8_change_config <null> (vpxenc+0x41fafe) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #7 vp8_create_compressor <null> (vpxenc+0x41fefc) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #8 vp8e_init <null> (vpxenc+0x41300e) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #9 vpx_codec_enc_init_ver <null> (vpxenc+0x410f4b) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #10 initialize_encoder /work/tree/vpxenc.c:1345 (vpxenc+0x40dd9f) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #11 main /work/tree/vpxenc.c:1857 (vpxenc+0x40dd9f)
+
+  Thread T4 (tid=1702, running) created by main thread at:
+    #0 pthread_create <null> (libtsan.so.2+0x1fd86) (BuildId: 0cdc18bb66a294b4b8e1e35fb289c44e387e985e)
+    #1 vp8cx_create_encoder_threads <null> (vpxenc+0x419f0f) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_create_compressor <null> (vpxenc+0x420adf) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8e_init <null> (vpxenc+0x41300e) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 vpx_codec_enc_init_ver <null> (vpxenc+0x410f4b) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #5 initialize_encoder /work/tree/vpxenc.c:1345 (vpxenc+0x40dd9f) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #6 main /work/tree/vpxenc.c:1857 (vpxenc+0x40dd9f)
+
+SUMMARY: ThreadSanitizer: data race (/work/tree/vpxenc+0x4a02a8) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061) in mbloop_filter_horizontal_edge_c
+==================
+==================
+WARNING: ThreadSanitizer: data race (pid=1680)
+  Write of size 1 at 0x7f0f48252b6e by thread T4:
+    #0 mbloop_filter_vertical_edge_c <null> (vpxenc+0x4a0bfc) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #1 vp8_loop_filter_mbv_c <null> (vpxenc+0x4a0446) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_loop_filter_frame <null> (vpxenc+0x49e2ad) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8_loopfilter_frame <null> (vpxenc+0x421882) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 thread_loopfilter <null> (vpxenc+0x41b6a8) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+
+  Previous read of size 1 at 0x7f0f48252b6e by main thread:
+    #0 vpx_mse16x16_c <null> (vpxenc+0x496733) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #1 calc_plane_error <null> (vpxenc+0x42c47c) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_get_compressed_data <null> (vpxenc+0x423b48) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8e_encode <null> (vpxenc+0x4139ca) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 vpx_codec_encode <null> (vpxenc+0x4114bb) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #5 encode_frame /work/tree/vpxenc.c:1450 (vpxenc+0x40e0fe) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #6 main /work/tree/vpxenc.c:1946 (vpxenc+0x40e0fe)
+
+  Location is heap block of size 1580583 at 0x7f0f480ef000 allocated by main thread:
+    #0 malloc <null> (libtsan.so.2+0x4d013) (BuildId: 0cdc18bb66a294b4b8e1e35fb289c44e387e985e)
+    #1 vpx_memalign <null> (vpxenc+0x412b51) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_yv12_realloc_frame_buffer <null> (vpxenc+0x45a281) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8_yv12_alloc_frame_buffer <null> (vpxenc+0x45a4f8) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 vp8_alloc_frame_buffers <null> (vpxenc+0x49724c) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #5 vp8_alloc_compressor_data <null> (vpxenc+0x41dc69) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #6 vp8_change_config <null> (vpxenc+0x41fafe) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #7 vp8_create_compressor <null> (vpxenc+0x41fefc) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #8 vp8e_init <null> (vpxenc+0x41300e) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #9 vpx_codec_enc_init_ver <null> (vpxenc+0x410f4b) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #10 initialize_encoder /work/tree/vpxenc.c:1345 (vpxenc+0x40dd9f) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #11 main /work/tree/vpxenc.c:1857 (vpxenc+0x40dd9f)
+
+  Thread T4 (tid=1702, running) created by main thread at:
+    #0 pthread_create <null> (libtsan.so.2+0x1fd86) (BuildId: 0cdc18bb66a294b4b8e1e35fb289c44e387e985e)
+    #1 vp8cx_create_encoder_threads <null> (vpxenc+0x419f0f) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #2 vp8_create_compressor <null> (vpxenc+0x420adf) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #3 vp8e_init <null> (vpxenc+0x41300e) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #4 vpx_codec_enc_init_ver <null> (vpxenc+0x410f4b) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #5 initialize_encoder /work/tree/vpxenc.c:1345 (vpxenc+0x40dd9f) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061)
+    #6 main /work/tree/vpxenc.c:1857 (vpxenc+0x40dd9f)
+
+SUMMARY: ThreadSanitizer: data race (/work/tree/vpxenc+0x4a0bfc) (BuildId: bf2cd0051604073b1e807cfe9efc4cc2a166b061) in mbloop_filter_vertical_edge_c
+==================
+Stream 0 PSNR (Overall/Avg/Y/U/V) 19.172 19.591 19.528 19.716 19.726
+ThreadSanitizer: reported 8 warnings

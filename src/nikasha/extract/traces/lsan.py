@@ -1,11 +1,9 @@
 # SPDX-FileCopyrightText: 2026 The Nikasha Authors
 # SPDX-License-Identifier: Apache-2.0
-"""LeakSanitizer reports (SPEC §9.5). **Unverified against real output** (ADR 0009).
+"""LeakSanitizer reports (SPEC §9.5). Checked against real output (ADR 0009).
 
-This parser is written from the LeakSanitizer output format as documented upstream, not from
-captured fixtures, so it is *not* registered in :data:`common.PARSERS` (importing this module
-has no side effect). It is registered once ``scripts/capture_sanitizer_fixtures.py`` has
-produced real fixtures and the ``sandbox``-marked tests pass on them.
+Registered in :data:`common.PARSERS`. The real fixtures in ``tests/fixtures/traces/lsan/``
+come from ``scripts/capture_sanitizer_fixtures.py`` (already-fixed public bugs, ADR 0009).
 
 Expected shape (standalone LSan, or ASan's built-in leak check)::
 
@@ -33,6 +31,7 @@ from nikasha.extract.traces.common import (
     Line,
     ParsedTrace,
     parse_int,
+    register,
     run_guarded,
     split_lines,
 )
@@ -213,8 +212,9 @@ def _build(
     return ParsedTrace(start=lines[first].start, end=lines[scanned.last].end, data=data)
 
 
+@register
 class LsanParser:
-    """LeakSanitizer reports (not registered by default; see ADR 0009)."""
+    """LeakSanitizer reports (fixtures: ``tests/fixtures/traces/lsan/``)."""
 
     format: TraceFormat = "lsan"
 

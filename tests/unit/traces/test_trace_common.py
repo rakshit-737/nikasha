@@ -5,6 +5,7 @@
 import time
 from itertools import pairwise
 from pathlib import Path
+from typing import get_args
 
 import pytest
 from hypothesis import given, settings
@@ -29,7 +30,20 @@ from nikasha.ingest import ingest_string
 from nikasha.model.claims import TraceClaim, TraceData, TraceFormat
 
 TRACES = Path(__file__).parents[2] / "fixtures" / "traces"
-FORMATS = ("asan", "ubsan", "valgrind", "gdb", "python", "java", "go", "rust", "node")
+FORMATS = (
+    "asan",
+    "ubsan",
+    "lsan",
+    "msan",
+    "tsan",
+    "valgrind",
+    "gdb",
+    "python",
+    "java",
+    "go",
+    "rust",
+    "node",
+)
 
 
 # --- normalize_path ---------------------------------------------------------------------
@@ -189,10 +203,11 @@ def test_register_rejects_duplicates() -> None:
 
 
 def test_registered_formats() -> None:
-    # LSan, MSan and TSan are in the TraceFormat enum but have no parser: no real fixtures
-    # were captured for them, and SPEC §9.5 requires three per parser.
-    assert set(PARSERS) == set(FORMATS)
-    assert not {"lsan", "msan", "tsan"} & set(PARSERS)
+    # All 12 formats of the TraceFormat literal are registered (ADR 0009), and each has the
+    # three real fixtures SPEC §9.5 requires.
+    assert set(PARSERS) == set(FORMATS) == set(get_args(TraceFormat))
+    for fmt in FORMATS:
+        assert len(list((TRACES / fmt).glob("*.txt"))) >= 3, fmt
 
 
 # --- parse_traces overlap handling ------------------------------------------------------

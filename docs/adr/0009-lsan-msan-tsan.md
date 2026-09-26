@@ -5,7 +5,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 # ADR 0009: LSan, MSan and TSan parsers ship unverified and unregistered
 
-- **Status:** accepted
+- **Status:** accepted; parsers registered 2026-09-26 (see "Registered" below)
 - **Date:** 2026-09-24
 - **Amends:** ADR 0005 (fixture sources)
 
@@ -58,9 +58,9 @@ yet.
     arbitrary text, linear time on hostile input, determinism, not registered, and the
     capture script's acceptance, fixed-tag, catalogue and argv-hardening rules.
     `test_regex_linear.py` also covers every module-level pattern.
-  - `test_real_fixtures_parse` is in the default suite (it only reads committed files). It
-    **skips** until `tests/fixtures/traces/{lsan,msan,tsan}/` holds captures, so today it
-    checks nothing.
+  - `test_real_fixtures_parse` is in the default suite (it only reads committed files).
+    *Amended 2026-09-26:* the fixtures are committed, so it no longer skips; it fails if
+    they are missing.
   - `test_capture_image_has_msan_runtime` is marked `sandbox` and `network` (it may build
     the Fedora image). The CI sandbox job runs `sandbox and not network`, so it does not run
     in CI. **Whether the Fedora capture image ships the MSan runtime is unverified**: on
@@ -186,8 +186,32 @@ committed, the fixture tests pass, and after any parser fixes the real output ca
    assertions (functions, files, lines) as the other formats' tests do;
 4. update ADR 0005's consequences: 12 of 12 formats.
 
+## Registered (2026-09-26)
+
+The capture ran in CI (`sanitizer-fixtures.yml`, run 36233319870) and all nine catalogued
+bugs passed (report at the vulnerable tag, clean at the fixed tag). The fixtures are
+committed unedited under `tests/fixtures/traces/{lsan,msan,tsan}/`, each with the README the
+script wrote. They hold only container paths (`/work/tree/...`, `/usr/src/debug/...`).
+The steps above are done: the three parsers use `@register`, and each test file asserts
+values (functions, files, lines, summaries, threads) on every fixture.
+
+Real output exposed three parser bugs, each now covered by a test that reads the fixture:
+
+- a frame with a file but no line (`#7 0x... in jv_setpath /work/tree/src/jv_aux.c`, jq)
+  put the path inside the function name (`asan.split_frame_rest`, shared by all sanitizers);
+- a TSan lock-order-inversion report (pigz) has no access stack, so it had no primary
+  frames; the first "Mutex ... acquired here while holding" stack is now primary, and its
+  thread is recorded;
+- TSan intercepts `pthread_*` inside the binary (`#0 pthread_mutex_lock <null> (pigz+0x...)`),
+  so those frames were counted as application frames; the pthread entry points joined
+  `common.LIBC_FUNCTIONS`.
+
+What the fixtures do not cover: MSan origin stacks (the captures were built without
+`-fsanitize-memory-track-origins`), LSan indirect leaks and multi-leak reports, and TSan
+reports on atomics or signals. Those paths are still written from the documented format.
+
 ## Consequences
 
-- There are still 9 of 12 parsed formats in the default pipeline until the steps above land.
-- Until the catalogued bugs have been captured and the fixtures committed, these parsers
-  stay unverified; this ADR does not claim otherwise.
+- All 12 trace formats of SPEC §9.5 are parsed in the default pipeline.
+- The LSan, MSan and TSan parsers are checked against real output for the shapes above;
+  the uncovered shapes listed there are not.

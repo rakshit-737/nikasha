@@ -10,7 +10,7 @@ The living build log. Milestones follow SPEC §22, plus **M3.5** from ADR 0003.
 | Milestone | Status |
 |---|---|
 | M0 Bootstrap | **done**: repo live at https://github.com/rakshit-737/nikasha |
-| M1 Models, intake, extraction (+ claim scoping, polarity) | **done** (LSan/MSan/TSan parsers deferred, ADR 0005) |
+| M1 Models, intake, extraction (+ claim scoping, polarity) | **done** (LSan/MSan/TSan registered 2026-09-26 with real fixtures, ADR 0009) |
 | M2 Resolution and code intelligence | **done** (numbers in ADR 0004) |
 | M3 Checks, fusion, CLI outputs | **done** (numbers below) |
 | M3.5 Early real-world gate (curl corpus vs. slopcheck) | **measured 2026-09-26: no separation; P4 held (0/126)**; decision (b) reposition around grounding and reproduction (ADR 0012); 40-refutation hand-check still open |
@@ -479,6 +479,13 @@ INSUFFICIENT 34.
   sandbox API and validates output before writing anything, but its `BUGS` catalogue is
   empty on purpose: each entry (public repo, vulnerable and fixed tags, fix SHA, trigger)
   must be verified by a person. SPEC §9.5 asks for three per format.
+- *2026-09-26:* **registered.** CI run 36233319870 captured all nine catalogued bugs; the
+  fixtures are committed unedited in `tests/fixtures/traces/{lsan,msan,tsan}/` (container
+  paths only). Real output exposed three parser bugs, now fixed with fixture tests: a frame
+  with a file but no line put the path into the function name (jq LSan); TSan
+  lock-order-inversion reports had no primary stack (pigz); intercepted `pthread_*` frames
+  counted as application frames. Not covered by the fixtures: MSan origin stacks, LSan
+  indirect leaks, TSan atomics and signals (ADR 0009).
 
 ## Items 4-8 after v0.1.0 (2026-09-26)
 

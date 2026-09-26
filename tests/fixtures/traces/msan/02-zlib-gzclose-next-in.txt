@@ -1,0 +1,13 @@
+==118==WARNING: MemorySanitizer: use-of-uninitialized-value
+    #0 0x0000004c5611 in deflate /work/tree/deflate.c:679:34
+    #1 0x0000004b5906 in gz_comp /work/tree/gzwrite.c:115:15
+    #2 0x0000004b959b in gzclose_w /work/tree/gzwrite.c:562:9
+    #3 0x0000004a114e in gzclose /work/tree/gzclose.c:21:55
+    #4 0x00000049e266 in gz_compress /work/tree/test/minigzip.c:387:9
+    #5 0x0000004a06c8 in main /work/tree/test/minigzip.c:614:13
+    #6 0x7f1e3ab46680 in __libc_start_call_main /usr/src/debug/glibc-2.43-8.fc44.x86_64/csu/../sysdeps/nptl/libc_start_call_main.h:59:16
+    #7 0x7f1e3ab46797 in __libc_start_main@GLIBC_2.2.5 /usr/src/debug/glibc-2.43-8.fc44.x86_64/csu/../csu/libc-start.c:360:3
+    #8 0x0000004006f4 in _start (/work/tree/minigzip+0x4006f4) (BuildId: 7bfa57b82d2ac2e62f4abe700df1a7cbd46095c8)
+
+SUMMARY: MemorySanitizer: use-of-uninitialized-value /work/tree/deflate.c:679:34 in deflate
+Exiting

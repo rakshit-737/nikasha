@@ -1,0 +1,655 @@
+==================
+WARNING: ThreadSanitizer: lock-order-inversion (potential deadlock) (pid=26)
+  Cycle in lock order graph: M0 (0x721800003000) => M1 (0x721800000120) => M0
+
+  Mutex M1 acquired here while holding mutex M0 in thread T1:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 drop_space /work/tree/pigz.c:1462:9 (pigz+0x4cb690) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 write_thread /work/tree/pigz.c:1920:13 (pigz+0x4c9865) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+    Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get more informative warning message
+
+  Mutex M0 acquired here while holding mutex M1 in thread T4:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 get_space /work/tree/pigz.c:1406:9 (pigz+0x4c9e44) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 compress_thread /work/tree/pigz.c:1696:24 (pigz+0x4ca70a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T1 (tid=69, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2009:15 (pigz+0x4bec26) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bec26)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T4 (tid=72, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2145:19 (pigz+0x4bf834) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bf834)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+SUMMARY: ThreadSanitizer: lock-order-inversion (potential deadlock) (/work/tree/pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80) in pthread_mutex_lock
+==================
+==================
+WARNING: ThreadSanitizer: lock-order-inversion (potential deadlock) (pid=26)
+  Cycle in lock order graph: M0 (0x721800000300) => M1 (0x7218000000c0) => M0
+
+  Mutex M1 acquired here while holding mutex M0 in thread T3:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 drop_space /work/tree/pigz.c:1462:9 (pigz+0x4cb690) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 compress_thread /work/tree/pigz.c:1856:13 (pigz+0x4ca4a1) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+    Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get more informative warning message
+
+  Mutex M0 acquired here while holding mutex M1 in main thread:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 get_space /work/tree/pigz.c:1406:9 (pigz+0x4c9e44) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 parallel_compress /work/tree/pigz.c:2033:20 (pigz+0x4bf03e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 process /work/tree/pigz.c:3932:9 (pigz+0x4bf03e)
+    #5 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T3 (tid=71, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2145:19 (pigz+0x4bf834) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bf834)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+SUMMARY: ThreadSanitizer: lock-order-inversion (potential deadlock) (/work/tree/pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80) in pthread_mutex_lock
+==================
+==================
+WARNING: ThreadSanitizer: lock-order-inversion (potential deadlock) (pid=26)
+  Cycle in lock order graph: M0 (0x721800006000) => M1 (0x721800000120) => M0
+
+  Mutex M1 acquired here while holding mutex M0 in thread T1:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 drop_space /work/tree/pigz.c:1462:9 (pigz+0x4cb690) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 write_thread /work/tree/pigz.c:1920:13 (pigz+0x4c9865) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+    Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get more informative warning message
+
+  Mutex M0 acquired here while holding mutex M1 in thread T3:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 get_space /work/tree/pigz.c:1406:9 (pigz+0x4c9e44) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 compress_thread /work/tree/pigz.c:1696:24 (pigz+0x4ca70a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T1 (tid=69, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2009:15 (pigz+0x4bec26) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bec26)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T3 (tid=71, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2145:19 (pigz+0x4bf834) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bf834)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+SUMMARY: ThreadSanitizer: lock-order-inversion (potential deadlock) (/work/tree/pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80) in pthread_mutex_lock
+==================
+==================
+WARNING: ThreadSanitizer: lock-order-inversion (potential deadlock) (pid=26)
+  Cycle in lock order graph: M0 (0x721800000240) => M1 (0x7218000000c0) => M0
+
+  Mutex M1 acquired here while holding mutex M0 in thread T1:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 drop_space /work/tree/pigz.c:1462:9 (pigz+0x4cb690) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 write_thread /work/tree/pigz.c:1913:13 (pigz+0x4c977b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+    Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get more informative warning message
+
+  Mutex M0 acquired here while holding mutex M1 in main thread:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 get_space /work/tree/pigz.c:1406:9 (pigz+0x4c9e44) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 parallel_compress /work/tree/pigz.c:2033:20 (pigz+0x4bf03e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 process /work/tree/pigz.c:3932:9 (pigz+0x4bf03e)
+    #5 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T1 (tid=69, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2009:15 (pigz+0x4bec26) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bec26)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+SUMMARY: ThreadSanitizer: lock-order-inversion (potential deadlock) (/work/tree/pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80) in pthread_mutex_lock
+==================
+==================
+WARNING: ThreadSanitizer: lock-order-inversion (potential deadlock) (pid=26)
+  Cycle in lock order graph: M0 (0x721800000480) => M1 (0x7218000000c0) => M0
+
+  Mutex M1 acquired here while holding mutex M0 in thread T1:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 drop_space /work/tree/pigz.c:1462:9 (pigz+0x4cb690) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 write_thread /work/tree/pigz.c:1913:13 (pigz+0x4c977b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+    Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get more informative warning message
+
+  Mutex M0 acquired here while holding mutex M1 in main thread:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 get_space /work/tree/pigz.c:1406:9 (pigz+0x4c9e44) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 parallel_compress /work/tree/pigz.c:2033:20 (pigz+0x4bf03e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 process /work/tree/pigz.c:3932:9 (pigz+0x4bf03e)
+    #5 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T1 (tid=69, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2009:15 (pigz+0x4bec26) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bec26)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+SUMMARY: ThreadSanitizer: lock-order-inversion (potential deadlock) (/work/tree/pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80) in pthread_mutex_lock
+==================
+==================
+WARNING: ThreadSanitizer: lock-order-inversion (potential deadlock) (pid=26)
+  Cycle in lock order graph: M0 (0x721800009000) => M1 (0x721800000120) => M0
+
+  Mutex M1 acquired here while holding mutex M0 in thread T1:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 drop_space /work/tree/pigz.c:1462:9 (pigz+0x4cb690) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 write_thread /work/tree/pigz.c:1920:13 (pigz+0x4c9865) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+    Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get more informative warning message
+
+  Mutex M0 acquired here while holding mutex M1 in thread T3:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 get_space /work/tree/pigz.c:1406:9 (pigz+0x4c9e44) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 compress_thread /work/tree/pigz.c:1696:24 (pigz+0x4ca70a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T1 (tid=69, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2009:15 (pigz+0x4bec26) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bec26)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T3 (tid=71, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2145:19 (pigz+0x4bf834) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bf834)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+SUMMARY: ThreadSanitizer: lock-order-inversion (potential deadlock) (/work/tree/pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80) in pthread_mutex_lock
+==================
+==================
+WARNING: ThreadSanitizer: lock-order-inversion (potential deadlock) (pid=26)
+  Cycle in lock order graph: M0 (0x721800000600) => M1 (0x7218000000c0) => M0
+
+  Mutex M1 acquired here while holding mutex M0 in thread T1:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 drop_space /work/tree/pigz.c:1462:9 (pigz+0x4cb690) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 write_thread /work/tree/pigz.c:1913:13 (pigz+0x4c977b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+    Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get more informative warning message
+
+  Mutex M0 acquired here while holding mutex M1 in main thread:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 get_space /work/tree/pigz.c:1406:9 (pigz+0x4c9e44) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 parallel_compress /work/tree/pigz.c:2033:20 (pigz+0x4bf03e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 process /work/tree/pigz.c:3932:9 (pigz+0x4bf03e)
+    #5 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T1 (tid=69, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2009:15 (pigz+0x4bec26) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bec26)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+SUMMARY: ThreadSanitizer: lock-order-inversion (potential deadlock) (/work/tree/pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80) in pthread_mutex_lock
+==================
+==================
+WARNING: ThreadSanitizer: lock-order-inversion (potential deadlock) (pid=26)
+  Cycle in lock order graph: M0 (0x721800003060) => M1 (0x721800000120) => M0
+
+  Mutex M1 acquired here while holding mutex M0 in thread T1:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 drop_space /work/tree/pigz.c:1462:9 (pigz+0x4cb690) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 write_thread /work/tree/pigz.c:1920:13 (pigz+0x4c9865) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+    Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get more informative warning message
+
+  Mutex M0 acquired here while holding mutex M1 in thread T4:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 get_space /work/tree/pigz.c:1406:9 (pigz+0x4c9e44) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 compress_thread /work/tree/pigz.c:1696:24 (pigz+0x4ca70a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T1 (tid=69, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2009:15 (pigz+0x4bec26) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bec26)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T4 (tid=72, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2145:19 (pigz+0x4bf834) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bf834)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+SUMMARY: ThreadSanitizer: lock-order-inversion (potential deadlock) (/work/tree/pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80) in pthread_mutex_lock
+==================
+==================
+WARNING: ThreadSanitizer: lock-order-inversion (potential deadlock) (pid=26)
+  Cycle in lock order graph: M0 (0x721800000540) => M1 (0x7218000000c0) => M0
+
+  Mutex M1 acquired here while holding mutex M0 in thread T5:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 drop_space /work/tree/pigz.c:1462:9 (pigz+0x4cb690) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 compress_thread /work/tree/pigz.c:1856:13 (pigz+0x4ca4a1) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+    Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get more informative warning message
+
+  Mutex M0 acquired here while holding mutex M1 in main thread:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 get_space /work/tree/pigz.c:1406:9 (pigz+0x4c9e44) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 parallel_compress /work/tree/pigz.c:2033:20 (pigz+0x4bf03e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 process /work/tree/pigz.c:3932:9 (pigz+0x4bf03e)
+    #5 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T5 (tid=73, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2145:19 (pigz+0x4bf834) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bf834)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+SUMMARY: ThreadSanitizer: lock-order-inversion (potential deadlock) (/work/tree/pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80) in pthread_mutex_lock
+==================
+==================
+WARNING: ThreadSanitizer: lock-order-inversion (potential deadlock) (pid=26)
+  Cycle in lock order graph: M0 (0x721800000840) => M1 (0x7218000000c0) => M0
+
+  Mutex M1 acquired here while holding mutex M0 in thread T1:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 drop_space /work/tree/pigz.c:1462:9 (pigz+0x4cb690) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 write_thread /work/tree/pigz.c:1913:13 (pigz+0x4c977b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+    Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get more informative warning message
+
+  Mutex M0 acquired here while holding mutex M1 in main thread:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 get_space /work/tree/pigz.c:1406:9 (pigz+0x4c9e44) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 parallel_compress /work/tree/pigz.c:2033:20 (pigz+0x4bf03e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 process /work/tree/pigz.c:3932:9 (pigz+0x4bf03e)
+    #5 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T1 (tid=69, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2009:15 (pigz+0x4bec26) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bec26)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+SUMMARY: ThreadSanitizer: lock-order-inversion (potential deadlock) (/work/tree/pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80) in pthread_mutex_lock
+==================
+==================
+WARNING: ThreadSanitizer: lock-order-inversion (potential deadlock) (pid=26)
+  Cycle in lock order graph: M0 (0x721800000780) => M1 (0x7218000000c0) => M0
+
+  Mutex M1 acquired here while holding mutex M0 in thread T1:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 drop_space /work/tree/pigz.c:1462:9 (pigz+0x4cb690) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 write_thread /work/tree/pigz.c:1913:13 (pigz+0x4c977b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+    Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get more informative warning message
+
+  Mutex M0 acquired here while holding mutex M1 in main thread:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 get_space /work/tree/pigz.c:1406:9 (pigz+0x4c9e44) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 parallel_compress /work/tree/pigz.c:2033:20 (pigz+0x4bf03e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 process /work/tree/pigz.c:3932:9 (pigz+0x4bf03e)
+    #5 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T1 (tid=69, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2009:15 (pigz+0x4bec26) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bec26)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+SUMMARY: ThreadSanitizer: lock-order-inversion (potential deadlock) (/work/tree/pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80) in pthread_mutex_lock
+==================
+==================
+WARNING: ThreadSanitizer: lock-order-inversion (potential deadlock) (pid=26)
+  Cycle in lock order graph: M0 (0x7218000006c0) => M1 (0x7218000000c0) => M0
+
+  Mutex M1 acquired here while holding mutex M0 in thread T1:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 drop_space /work/tree/pigz.c:1462:9 (pigz+0x4cb690) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 write_thread /work/tree/pigz.c:1913:13 (pigz+0x4c977b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+    Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get more informative warning message
+
+  Mutex M0 acquired here while holding mutex M1 in main thread:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 get_space /work/tree/pigz.c:1406:9 (pigz+0x4c9e44) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 parallel_compress /work/tree/pigz.c:2033:20 (pigz+0x4bf03e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 process /work/tree/pigz.c:3932:9 (pigz+0x4bf03e)
+    #5 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T1 (tid=69, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2009:15 (pigz+0x4bec26) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bec26)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+SUMMARY: ThreadSanitizer: lock-order-inversion (potential deadlock) (/work/tree/pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80) in pthread_mutex_lock
+==================
+==================
+WARNING: ThreadSanitizer: lock-order-inversion (potential deadlock) (pid=26)
+  Cycle in lock order graph: M0 (0x72180000c000) => M1 (0x721800000120) => M0
+
+  Mutex M1 acquired here while holding mutex M0 in thread T1:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 drop_space /work/tree/pigz.c:1462:9 (pigz+0x4cb690) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 write_thread /work/tree/pigz.c:1920:13 (pigz+0x4c9865) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+    Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get more informative warning message
+
+  Mutex M0 acquired here while holding mutex M1 in thread T5:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 get_space /work/tree/pigz.c:1406:9 (pigz+0x4c9e44) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 compress_thread /work/tree/pigz.c:1696:24 (pigz+0x4ca70a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T1 (tid=69, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2009:15 (pigz+0x4bec26) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bec26)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T5 (tid=73, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2145:19 (pigz+0x4bf834) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bf834)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+SUMMARY: ThreadSanitizer: lock-order-inversion (potential deadlock) (/work/tree/pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80) in pthread_mutex_lock
+==================
+==================
+WARNING: ThreadSanitizer: lock-order-inversion (potential deadlock) (pid=26)
+  Cycle in lock order graph: M0 (0x721800000900) => M1 (0x7218000000c0) => M0
+
+  Mutex M1 acquired here while holding mutex M0 in thread T4:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 drop_space /work/tree/pigz.c:1462:9 (pigz+0x4cb690) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 compress_thread /work/tree/pigz.c:1856:13 (pigz+0x4ca4a1) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+    Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get more informative warning message
+
+  Mutex M0 acquired here while holding mutex M1 in main thread:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 get_space /work/tree/pigz.c:1406:9 (pigz+0x4c9e44) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 parallel_compress /work/tree/pigz.c:2033:20 (pigz+0x4bf03e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 process /work/tree/pigz.c:3932:9 (pigz+0x4bf03e)
+    #5 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T4 (tid=72, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2145:19 (pigz+0x4bf834) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bf834)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+SUMMARY: ThreadSanitizer: lock-order-inversion (potential deadlock) (/work/tree/pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80) in pthread_mutex_lock
+==================
+==================
+WARNING: ThreadSanitizer: lock-order-inversion (potential deadlock) (pid=26)
+  Cycle in lock order graph: M0 (0x7218000003c0) => M1 (0x7218000000c0) => M0
+
+  Mutex M1 acquired here while holding mutex M0 in thread T1:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 drop_space /work/tree/pigz.c:1462:9 (pigz+0x4cb690) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 write_thread /work/tree/pigz.c:1913:13 (pigz+0x4c977b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+    Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get more informative warning message
+
+  Mutex M0 acquired here while holding mutex M1 in main thread:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 get_space /work/tree/pigz.c:1406:9 (pigz+0x4c9e44) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 parallel_compress /work/tree/pigz.c:2033:20 (pigz+0x4bf03e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 process /work/tree/pigz.c:3932:9 (pigz+0x4bf03e)
+    #5 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T1 (tid=69, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2009:15 (pigz+0x4bec26) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bec26)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+SUMMARY: ThreadSanitizer: lock-order-inversion (potential deadlock) (/work/tree/pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80) in pthread_mutex_lock
+==================
+==================
+WARNING: ThreadSanitizer: lock-order-inversion (potential deadlock) (pid=26)
+  Cycle in lock order graph: M0 (0x7218000030c0) => M1 (0x721800000120) => M0
+
+  Mutex M1 acquired here while holding mutex M0 in thread T1:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 drop_space /work/tree/pigz.c:1462:9 (pigz+0x4cb690) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 write_thread /work/tree/pigz.c:1920:13 (pigz+0x4c9865) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+    Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get more informative warning message
+
+  Mutex M0 acquired here while holding mutex M1 in thread T2:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 get_space /work/tree/pigz.c:1406:9 (pigz+0x4c9e44) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 compress_thread /work/tree/pigz.c:1696:24 (pigz+0x4ca70a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T1 (tid=69, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2009:15 (pigz+0x4bec26) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bec26)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T2 (tid=70, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2145:19 (pigz+0x4bf834) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bf834)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+SUMMARY: ThreadSanitizer: lock-order-inversion (potential deadlock) (/work/tree/pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80) in pthread_mutex_lock
+==================
+==================
+WARNING: ThreadSanitizer: lock-order-inversion (potential deadlock) (pid=26)
+  Cycle in lock order graph: M0 (0x721800009060) => M1 (0x721800000120) => M0
+
+  Mutex M1 acquired here while holding mutex M0 in thread T1:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 drop_space /work/tree/pigz.c:1462:9 (pigz+0x4cb690) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 write_thread /work/tree/pigz.c:1920:13 (pigz+0x4c9865) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+    Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get more informative warning message
+
+  Mutex M0 acquired here while holding mutex M1 in thread T5:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 get_space /work/tree/pigz.c:1406:9 (pigz+0x4c9e44) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 compress_thread /work/tree/pigz.c:1696:24 (pigz+0x4ca70a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T1 (tid=69, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2009:15 (pigz+0x4bec26) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bec26)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T5 (tid=73, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2145:19 (pigz+0x4bf834) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bf834)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+SUMMARY: ThreadSanitizer: lock-order-inversion (potential deadlock) (/work/tree/pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80) in pthread_mutex_lock
+==================
+==================
+WARNING: ThreadSanitizer: lock-order-inversion (potential deadlock) (pid=26)
+  Cycle in lock order graph: M0 (0x721800006060) => M1 (0x721800000120) => M0
+
+  Mutex M1 acquired here while holding mutex M0 in thread T1:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 drop_space /work/tree/pigz.c:1462:9 (pigz+0x4cb690) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 write_thread /work/tree/pigz.c:1920:13 (pigz+0x4c9865) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+    Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get more informative warning message
+
+  Mutex M0 acquired here while holding mutex M1 in thread T2:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 get_space /work/tree/pigz.c:1406:9 (pigz+0x4c9e44) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 compress_thread /work/tree/pigz.c:1696:24 (pigz+0x4ca70a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T1 (tid=69, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2009:15 (pigz+0x4bec26) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bec26)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T2 (tid=70, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2145:19 (pigz+0x4bf834) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bf834)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+SUMMARY: ThreadSanitizer: lock-order-inversion (potential deadlock) (/work/tree/pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80) in pthread_mutex_lock
+==================
+==================
+WARNING: ThreadSanitizer: lock-order-inversion (potential deadlock) (pid=26)
+  Cycle in lock order graph: M0 (0x72180000c060) => M1 (0x721800000120) => M0
+
+  Mutex M1 acquired here while holding mutex M0 in thread T1:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 drop_space /work/tree/pigz.c:1462:9 (pigz+0x4cb690) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 write_thread /work/tree/pigz.c:1920:13 (pigz+0x4c9865) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+    Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get more informative warning message
+
+  Mutex M0 acquired here while holding mutex M1 in thread T5:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 get_space /work/tree/pigz.c:1406:9 (pigz+0x4c9e44) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 compress_thread /work/tree/pigz.c:1696:24 (pigz+0x4ca70a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T1 (tid=69, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2009:15 (pigz+0x4bec26) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bec26)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T5 (tid=73, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2145:19 (pigz+0x4bf834) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bf834)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+SUMMARY: ThreadSanitizer: lock-order-inversion (potential deadlock) (/work/tree/pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80) in pthread_mutex_lock
+==================
+==================
+WARNING: ThreadSanitizer: lock-order-inversion (potential deadlock) (pid=26)
+  Cycle in lock order graph: M0 (0x721800000e40) => M1 (0x7218000000c0) => M0
+
+  Mutex M1 acquired here while holding mutex M0 in thread T1:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 drop_space /work/tree/pigz.c:1462:9 (pigz+0x4cb690) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 write_thread /work/tree/pigz.c:1913:13 (pigz+0x4c977b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 ignition /work/tree/yarn.c:253:5 (pigz+0x4cd12e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+    Hint: use TSAN_OPTIONS=second_deadlock_stack=1 to get more informative warning message
+
+  Mutex M0 acquired here while holding mutex M1 in main thread:
+    #0 pthread_mutex_lock <null> (pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 possess /work/tree/yarn.c:115:16 (pigz+0x4cca4a) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 get_space /work/tree/pigz.c:1406:9 (pigz+0x4c9e44) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 parallel_compress /work/tree/pigz.c:2033:20 (pigz+0x4bf03e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #4 process /work/tree/pigz.c:3932:9 (pigz+0x4bf03e)
+    #5 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+  Thread T1 (tid=69, running) created by main thread at:
+    #0 pthread_create <null> (pigz+0x435e5e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #1 launch /work/tree/yarn.c:288:16 (pigz+0x4ccf8e) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #2 parallel_compress /work/tree/pigz.c:2009:15 (pigz+0x4bec26) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+    #3 process /work/tree/pigz.c:3932:9 (pigz+0x4bec26)
+    #4 main /work/tree/pigz.c:4420:17 (pigz+0x4bbf7f) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80)
+
+SUMMARY: ThreadSanitizer: lock-order-inversion (potential deadlock) (/work/tree/pigz+0x437b6b) (BuildId: 3634cf596fc8ff128f76aaba5daa6718e0e9cb80) in pthread_mutex_lock
+==================
+ThreadSanitizer: reported 20 warnings

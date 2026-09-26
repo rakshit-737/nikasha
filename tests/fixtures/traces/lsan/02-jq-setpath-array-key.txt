@@ -1,0 +1,22 @@
+jq: error (at <unknown>): Cannot update field at array index of array
+
+=================================================================
+==4072==ERROR: LeakSanitizer: detected memory leaks
+
+Direct leak of 272 byte(s) in 1 object(s) allocated from:
+    #0 0x000000433303 in malloc (/work/tree/jq+0x433303) (BuildId: 9dd67247e5c614ed13556b00b4ee3e70fa4334a0)
+    #1 0x000000443b08 in jv_mem_alloc /work/tree/src/jv_alloc.c:141:13
+    #2 0x000000440319 in jvp_array_alloc /work/tree/src/jv.c:801:18
+    #3 0x000000440319 in jvp_array_new /work/tree/src/jv.c:809:39
+    #4 0x000000440319 in jv_array_sized /work/tree/src/jv.c:958:10
+    #5 0x000000440319 in jv_array /work/tree/src/jv.c:962:10
+    #6 0x000000440319 in jv_array_indexes /work/tree/src/jv.c:1026:12
+    #7 0x000000444c0a in jv_setpath /work/tree/src/jv_aux.c
+    #8 0x00000043bb4e in jq_next /work/tree/src/execute.c
+    #9 0x0000004386b7 in process /work/tree/src/main.c:200:31
+    #10 0x0000004380ec in main /work/tree/src/main.c:733:11
+    #11 0x7fbe6d264680 in __libc_start_call_main /usr/src/debug/glibc-2.43-8.fc44.x86_64/csu/../sysdeps/nptl/libc_start_call_main.h:59:16
+    #12 0x7fbe6d264797 in __libc_start_main@GLIBC_2.2.5 /usr/src/debug/glibc-2.43-8.fc44.x86_64/csu/../csu/libc-start.c:360:3
+    #13 0x000000401014 in _start (/work/tree/jq+0x401014) (BuildId: 9dd67247e5c614ed13556b00b4ee3e70fa4334a0)
+
+SUMMARY: LeakSanitizer: 272 byte(s) leaked in 1 allocation(s).

@@ -1,0 +1,11 @@
+==4072==WARNING: MemorySanitizer: use-of-uninitialized-value
+    #0 0x0000004d82f4 in check_literal /work/tree/src/jv_parse.c:517:24
+    #1 0x0000004d68bd in jv_parser_next /work/tree/src/jv_parse.c:833:16
+    #2 0x0000004e575f in jq_util_input_next_input /work/tree/src/util.c:430:15
+    #3 0x0000004a19d6 in main /work/tree/src/main.c:737:34
+    #4 0x7fc794b7c680 in __libc_start_call_main /usr/src/debug/glibc-2.43-8.fc44.x86_64/csu/../sysdeps/nptl/libc_start_call_main.h:59:16
+    #5 0x7fc794b7c797 in __libc_start_main@GLIBC_2.2.5 /usr/src/debug/glibc-2.43-8.fc44.x86_64/csu/../csu/libc-start.c:360:3
+    #6 0x000000400d94 in _start (/work/tree/jq+0x400d94) (BuildId: 0631a9e15fb7c624ff1e5aadb22fd9557fc4cd26)
+
+SUMMARY: MemorySanitizer: use-of-uninitialized-value /work/tree/src/jv_parse.c:517:24 in check_literal
+Exiting

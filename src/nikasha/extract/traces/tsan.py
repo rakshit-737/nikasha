@@ -1,10 +1,12 @@
 # SPDX-FileCopyrightText: 2026 The Nikasha Authors
 # SPDX-License-Identifier: Apache-2.0
-"""ThreadSanitizer reports (SPEC §9.5). **Unverified against real output** (ADR 0009).
+"""ThreadSanitizer reports (SPEC §9.5). Checked against real output (ADR 0009).
 
-Written from the documented ThreadSanitizer format, not from captured fixtures, so it is not
-registered in :data:`common.PARSERS` until ``scripts/capture_sanitizer_fixtures.py`` has
-produced real fixtures and the ``sandbox``-marked tests pass on them.
+Registered in :data:`common.PARSERS`. The real fixtures in ``tests/fixtures/traces/tsan/``
+come from ``scripts/capture_sanitizer_fixtures.py`` (already-fixed public bugs, ADR 0009).
+Real output often prints ``func <null> (module+0x…)`` for frames without debug info, and
+lock-order-inversion reports have no access stack: their first "Mutex … acquired here"
+stack is the primary one.
 
 Expected shape (TSan frames carry no ``0x…`` pc and put the module last)::
 
@@ -39,6 +41,7 @@ from nikasha.extract.traces.common import (
     make_frame,
     parse_hex,
     parse_int,
+    register,
     run_guarded,
     split_lines,
     split_location,
@@ -60,6 +63,10 @@ _ACCESS_RE = re.compile(
     rf"at ({_HEX}) by ([^\n:]{{1,200}}+)"
 )
 _THREAD_RE = re.compile(r"\bthread (T\d{1,10})\b")
+#: The first stack of a lock-order-inversion report, which has no memory-access stack.
+_ACQUIRED_RE = re.compile(
+    r"^[ \t]{0,8}Mutex M\d{1,10} acquired here while holding mutex M\d{1,10} ([^\n]*+)"
+)
 _HEAP_LOCATION_RE = re.compile(r"^[ \t]{0,8}Location is heap block ")
 _SUMMARY_RE = re.compile(r"^[ \t]{0,8}SUMMARY: ThreadSanitizer: ([^\n]*+)$")
 _DETAIL_RE = re.compile(r"^[ \t]{0,8}(?:Location is |Mutex |Thread |ThreadSanitizer: |HINT|Hint)")
@@ -144,6 +151,8 @@ def _is_label(line: str, details: _Details) -> bool:
         details.access = MemoryAccess(kind=_ACCESS_KINDS[m.group(2).lower()], size=int(m.group(3)))
         details.access_address = parse_hex(m.group(4))
         details.thread = _thread(m.group(5))
+    elif (m := _ACQUIRED_RE.match(line)) and details.access is None and details.thread is None:
+        details.thread = _thread(m.group(1).removeprefix("in "))
     return True
 
 
@@ -154,7 +163,8 @@ def _sort_runs(scanned: Scanned) -> tuple[list[Frame], list[Frame], list[Stack]]
     for n, (label, run) in enumerate(scanned.runs):
         text = label or ""
         access = _ACCESS_RE.match(text)
-        if not frames and ((access is not None and access.group(1) is None) or label is None):
+        primary = access is not None and access.group(1) is None
+        if not frames and (primary or label is None or _ACQUIRED_RE.match(text)):
             frames = run
         elif _HEAP_LOCATION_RE.match(text) and not alloc:
             alloc = run
@@ -244,8 +254,9 @@ def _build(
     return ParsedTrace(start=lines[first].start, end=lines[last].end, data=data)
 
 
+@register
 class TsanParser:
-    """ThreadSanitizer reports (not registered by default; see ADR 0009)."""
+    """ThreadSanitizer reports (fixtures: ``tests/fixtures/traces/tsan/``)."""
 
     format: TraceFormat = "tsan"
 

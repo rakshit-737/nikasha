@@ -7,16 +7,18 @@ Importing this package registers every parser in :data:`common.PARSERS`.
 
 from __future__ import annotations
 
-# Parser modules register themselves on import; import each format module here. LSan, MSan
-# and TSan have no parser yet: no real fixtures were captured for them (SPEC §9.5 requires 3).
+# Parser modules register themselves on import; import each format module here.
 from nikasha.extract.traces import (  # noqa: F401
     asan,
     gdb,
     go_panic,
     java,
+    lsan,
+    msan,
     node,
     python_tb,
     rust_panic,
+    tsan,
     ubsan,
     valgrind,
 )

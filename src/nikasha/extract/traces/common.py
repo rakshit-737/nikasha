@@ -131,6 +131,25 @@ LIBC_FUNCTIONS: frozenset[str] = frozenset(
         "fwrite",
         "fread",
         "malloc_printerr",
+        # pthread entry points: TSan intercepts them inside the binary (real output prints
+        # ``#0 pthread_mutex_lock <null> (pigz+0x…)``), so only the name gives them away.
+        "pthread_create",
+        "pthread_join",
+        "pthread_detach",
+        "pthread_mutex_init",
+        "pthread_mutex_destroy",
+        "pthread_mutex_lock",
+        "pthread_mutex_trylock",
+        "pthread_mutex_unlock",
+        "pthread_rwlock_rdlock",
+        "pthread_rwlock_wrlock",
+        "pthread_rwlock_unlock",
+        "pthread_cond_wait",
+        "pthread_cond_timedwait",
+        "pthread_cond_signal",
+        "pthread_cond_broadcast",
+        "pthread_spin_lock",
+        "pthread_spin_unlock",
     }
 )
 
