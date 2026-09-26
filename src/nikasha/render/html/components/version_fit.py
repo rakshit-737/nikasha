@@ -160,17 +160,27 @@ def _count(value: object) -> int | None:
     return value
 
 
+_PAIR = 2  # one ``[release, ratio]`` entry of ``ratios_in_release_order``
+
+
 def _ratios(details: dict[str, Any]) -> list[tuple[str, float]]:
-    """``ratios`` as a list in the order C10 stored it, which is release order.
+    """C10's per-release ratios in release order (``ratios_in_release_order``, else ``ratios``).
 
     Anything that is not a name mapped to a finite number is dropped rather than trusted:
     a ``Result`` may have been loaded from a JSON file this process did not write.
     """
-    raw = details.get("ratios")
-    if not isinstance(raw, dict):
-        return []
+    ordered = details.get("ratios_in_release_order")
+    items: list[tuple[object, object]] = []
+    if isinstance(ordered, list):
+        # Preferred: JSON keeps list order, while ``Result.to_json`` sorts ``ratios`` keys.
+        items = [(p[0], p[1]) for p in ordered if isinstance(p, list | tuple) and len(p) == _PAIR]
+    else:
+        raw = details.get("ratios")
+        if not isinstance(raw, dict):
+            return []
+        items = list(raw.items())
     out: list[tuple[str, float]] = []
-    for name, value in raw.items():
+    for name, value in items:
         ratio = _number(value)
         if isinstance(name, str) and ratio is not None:
             out.append((name, ratio))

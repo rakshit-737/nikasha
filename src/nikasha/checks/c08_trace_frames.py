@@ -325,6 +325,13 @@ def _frame_detail(
         mismatched.append(_function_mismatch(frame, check))
     detail["matched"] = matched
     detail["mismatched"] = mismatched
+    # The same three answers as booleans (``None`` = not asked), so a renderer never has
+    # to classify the sentences above back into questions.
+    detail["checks"] = {
+        "file": check.file_exists,
+        "function": check.function_matches,
+        "line": check.line_in_bounds,
+    }
     detail["status"] = "consistent" if check.consistent else "inconsistent"
     if not check.consistent:
         undecided = _synthetic_reason(frame, check) or _missing_file_reason(

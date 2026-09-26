@@ -250,7 +250,7 @@ def test_uncertain_is_not_absent() -> None:
 
 
 def test_uncertain_does_not_invent_absence_for_the_other_releases() -> None:
-    """C03's uncertain branch drops ``defined_in``, so the rest is unknown, not absent."""
+    """A fixture without ``defined_in``: the rest is unknown, not absent."""
     html = render([evidence(uncertain(), outcome="NEUTRAL", strength=0.0)])
     assert "tl-unknown" in html
     assert "not determined in v1.0.0 through v1.1.0" in html

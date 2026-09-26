@@ -247,6 +247,7 @@ Applies to: `trace`
 | `other_release_fits` | -0.30 |
 | `partial_fit` | — (not scored) |
 | `scan_incomplete` | — (not scored) |
+| `scan_timed_out` | — (not scored) |
 
 ## C11
 

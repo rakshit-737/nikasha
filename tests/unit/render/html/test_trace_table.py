@@ -475,6 +475,35 @@ def test_a_question_answered_both_ways_is_not_checked() -> None:
     assert trace_table._marks(detail)["line"] == "unknown"
 
 
+def test_structured_checks_win_over_prose() -> None:
+    """C08's booleans are read directly; the prose is only a fallback for old results."""
+    detail = {
+        "checks": {"file": True, "function": False, "line": None},
+        "claimed_path": "src/hdr.c",
+        "function": "hdr_get",
+        "index": 1,
+        "line": 9,
+        "matched": ["something this view has never seen"],
+        "mismatched": [],
+        "resolved_path": "src/hdr.c",
+        "status": "inconsistent",
+    }
+    assert trace_table._marks(detail) == {"file": "yes", "function": "no", "line": "unknown"}
+
+
+def test_structured_checks_with_junk_values_are_not_checked() -> None:
+    detail = {
+        "checks": {"file": "yes", "function": 1},
+        "status": "inconsistent",
+    }
+    assert trace_table._marks(detail) == dict.fromkeys(("file", "function", "line"), "unknown")
+
+
+def test_structured_checks_never_mark_a_skipped_frame() -> None:
+    detail = {"checks": {"file": False, "function": False, "line": False}, "status": "skipped"}
+    assert set(trace_table._marks(detail).values()) == {"unknown"}
+
+
 def test_legend_explains_the_third_state() -> None:
     html = render(*fabricated()).html
     assert "never counted against a report" in html

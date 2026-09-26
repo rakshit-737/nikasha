@@ -15,7 +15,7 @@ The living build log. Milestones follow SPEC §22, plus **M3.5** from ADR 0003.
 | M3 Checks, fusion, CLI outputs | **done** (numbers below) |
 | M3.5 Early real-world gate (curl corpus vs. slopcheck) | not started |
 | M4 HTML report and media v1 | **done** (PNG captures need Playwright; CI is the source of truth) |
-| M5 Sandbox reproduction | **built, not done**: sandbox tests pass locally on Docker against a stand-in image; done when `sandbox.yml` is green in CI with the real recipe image |
+| M5 Sandbox reproduction | **sandbox CI green with the real recipe image** (run 36129155719: Fedora `c-toolchain.Dockerfile` built, 21 passed); curl/sqlite/libxml2 recipes still unverified end to end |
 | M6 NikashaBench | **machinery done** (S5/S6 offline); real splits wait on M3.5 corpus access |
 | M7 Integrations | **done** (network paths tested with stubs only; see below) |
 | M8 Launch polish and v0.1.0 | **tooling done, not published**: release, docs and screenshots workflows, `release-check` passes; publishing needs the maintainer |
@@ -276,10 +276,10 @@ The living build log. Milestones follow SPEC §22, plus **M3.5** from ADR 0003.
   downloads byte-identical to the embedded JSON.
 
 ### Open
-- C08 records frame findings as prose; the trace table classifies sentences back. It should
-  emit booleans (`checks: {file, function, line}`). C03's `uncertain` branch omits `defined_in`.
-- `Result.to_json` sorts keys, so C10's release-ordered `ratios` loses order on a JSON round
-  trip. Record an ordered list alongside.
+- *Closed 2026-09-26:* C08 emits `checks: {file, function, line}` per frame and the trace table
+  reads it (prose is only a fallback); C03's `uncertain` branch carries `defined_in`.
+- *Closed 2026-09-26:* the version-fit view reads C10's `ratios_in_release_order`, so order
+  survives a JSON round trip.
 - PNG captures and the web-UI capture need Playwright (network); `screenshots.yml` owns them.
 
 ## M7: Integrations (2026-09-24)
@@ -353,6 +353,11 @@ The living build log. Milestones follow SPEC §22, plus **M3.5** from ADR 0003.
 - The real recipe image (Fedora) could not be built here: the network proxy refuses the
   Fedora registries. Local sandbox runs used a stand-in image (gcc/clang on Debian/Ubuntu).
   M5 is done only when `sandbox.yml` is green in CI with the real image.
+  *Resolved 2026-09-26 from CI logs:* `sandbox.yml` builds
+  `docker/recipes/c-toolchain.Dockerfile` (FROM `fedora:44@sha256:b4488a77…`) as
+  `nikasha/recipe-c:1` in its own step, and the tests reuse it. Main run 36129155719
+  (2026-09-25): 21 passed, 1 skipped, the skip being `tests/unit/integrations/test_web.py`
+  (fastapi not installed in that job; not a sandbox test). No sandbox test was skipped.
 - Every run kind declares `attested_output` (default false); only vulnlab `file_input` is
   attested, so scriptable targets (sqlite, curl, libxml2 cli/file_input) can never yield
   REPRODUCED. The recipe loader refuses a sanitizer build without `abort_on_error=1`.
@@ -377,7 +382,8 @@ The living build log. Milestones follow SPEC §22, plus **M3.5** from ADR 0003.
 - `bench calibrate` writes `calibration-vN.yaml` (never overwriting); `bench run` draws a
   reliability diagram and takes `--repro` (§17.3). No manifest names a PoC yet, so the repro
   subset is empty until PoC fixtures are added.
-- C10 still has a wall-clock budget; a machine too slow to finish the scan changes the result.
+- C10 scans a fixed number of releases (64); the wall clock is only a safety net, and when it
+  fires C10 gives one fixed NEUTRAL `scan_timed_out` regardless of progress.
 
 ## M8: Launch tooling (2026-09-25)
 

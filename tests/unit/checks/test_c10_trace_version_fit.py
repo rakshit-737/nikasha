@@ -14,8 +14,10 @@ from __future__ import annotations
 import json
 import time
 
+import pytest
 from check_helpers import MakeContext, claim
 
+from nikasha.checks import c10_trace_version_fit as c10
 from nikasha.checks.base import run_checks
 from nikasha.checks.c10_trace_version_fit import TraceVersionFit
 from nikasha.model.claims import Frame, TraceClaim
@@ -169,28 +171,55 @@ def test_release_order_survives_a_sorted_key_json_round_trip(make_ctx: MakeConte
 class TestP4Safeguards:
     """Absence of a fit is only a finding when the search was complete."""
 
-    def test_a_truncated_scan_never_says_no_release_fits(self, make_ctx: MakeContext) -> None:
+    def test_a_truncated_scan_never_says_no_release_fits(
+        self, make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(c10, "MAX_RELEASES_SCORED", 1)
         c = trace(FITS_NOWHERE)
-        ctx = make_ctx(claims=[c])
-        ctx.deadline = time.monotonic() - 1.0  # the budget is already spent
-        (evidence,) = TraceVersionFit().run(ctx, [c])
+        (evidence,) = _run(make_ctx, [c])
         assert evidence.outcome == "NEUTRAL"
         assert evidence.strength == 0.0
         assert evidence.details["scan_complete"] is False
         assert evidence.details["releases_scored"] == 1
-        assert "time budget" in evidence.details["uncertain"][0]
+        assert "work cap" in evidence.details["uncertain"][0]
         assert "incomplete" in evidence.summary
 
     def test_a_truncated_scan_still_scores_the_claimed_release_first(
-        self, make_ctx: MakeContext
+        self, make_ctx: MakeContext, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        c = trace(FITS_V120)
-        ctx = make_ctx(claims=[c])
-        ctx.deadline = time.monotonic() - 1.0
-        (evidence,) = TraceVersionFit().run(ctx, [c])
+        monkeypatch.setattr(c10, "MAX_RELEASES_SCORED", 1)
+        (evidence,) = _run(make_ctx, [trace(FITS_V120)])
         assert list(evidence.details["ratios"]) == ["v1.2.0"]
         assert evidence.details["claimed_ratio"] == 1.0
         assert "the scan stopped after 1 release" in evidence.summary
+
+
+class TestTimingIndependence:
+    """P2: an expired wall clock gives one fixed outcome, not a progress-dependent one."""
+
+    def test_an_expired_clock_gives_a_fixed_neutral(self, make_ctx: MakeContext) -> None:
+        results = []
+        for fixture in (FITS_V120, FITS_NOWHERE):
+            c = trace(fixture)
+            ctx = make_ctx(claims=[c])
+            ctx.deadline = time.monotonic() - 1.0
+            (evidence,) = TraceVersionFit().run(ctx, [c])
+            assert evidence.outcome == "NEUTRAL"
+            assert evidence.strength == 0.0
+            assert evidence.details["outcome"] == "scan_timed_out"
+            assert "ratios" not in evidence.details
+            assert not evidence.locations
+            results.append(evidence.summary)
+        assert results[0] == results[1]
+
+    def test_the_reported_result_does_not_depend_on_a_generous_clock(
+        self, make_ctx: MakeContext
+    ) -> None:
+        c = trace(FITS_V121)
+        base = _run(make_ctx, [c])
+        ctx = make_ctx(claims=[c])
+        ctx.deadline = time.monotonic() + 3600.0
+        assert TraceVersionFit().run(ctx, [c]) == base
 
 
 class TestRefutationGate:

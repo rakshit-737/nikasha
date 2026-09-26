@@ -16,11 +16,15 @@ Three rules shape the implementation:
   moves one function and leaves the other, and every release scores the same. Below the
   minimum this check says nothing at all rather than adding a neutral row to the ledger.
 * **Anchor first.** The window is scanned outwards from the claimed release, so a scan that
-  runs out of budget still knows how the claimed release itself did — every outcome here
+  reaches its work cap still knows how the claimed release itself did — every outcome here
   compares something against it.
+* **Timing never shapes the result (P2).** What is reported is bounded by a deterministic work
+  cap (:data:`MAX_RELEASES_SCORED`), so identical inputs give identical evidence on any
+  machine. The wall clock remains only as a safety net: if it expires, the check reports one
+  fixed NEUTRAL ``scan_timed_out`` finding that carries nothing about how far the scan got.
 * **A truncated or uncertain scan never refutes (P4).** "No release fits" is a statement
-  about *every* release; if the budget ran out, or a frame's file did not parse completely,
-  the finding is still reported but carries no strength and says what was missing.
+  about *every* release; if the work cap was reached, or a frame's file did not parse
+  completely, the finding is still reported but carries no strength and says what was missing.
 """
 
 from __future__ import annotations
@@ -48,6 +52,9 @@ WINDOW_RADIUS = 15
 USABLE_FIT = 0.5
 #: r at this is a perfect fit: every checkable frame lands in the function it names.
 PERFECT_FIT = 1.0
+#: Deterministic work cap: at most this many releases are scored (each one is a trace analysis).
+#: The initial window is 2 * WINDOW_RADIUS + 1 = 31 releases; this allows one doubling.
+MAX_RELEASES_SCORED = 64
 #: Locations kept for the best-fitting release (a trace can be forty frames deep).
 MAX_LOCATIONS = 5
 
@@ -67,7 +74,8 @@ class _Fit:
 class _Scan:
     """What one pass over the release window measured.
 
-    ``fits`` is in release order, ``complete`` is false when the budget ran out, and
+    ``fits`` is in release order, ``complete`` is false when the work cap was reached,
+    ``timed_out`` is true when the wall-clock safety net fired (the rest is then discarded), and
     ``partially_parsed`` names ``release:path`` pairs whose parse was incomplete — either
     makes a "no release fits" refutation unsafe (P4).
     """
@@ -76,6 +84,7 @@ class _Scan:
     partially_parsed: tuple[str, ...]
     complete: bool
     radius: int
+    timed_out: bool = False
 
     def best(self) -> _Fit | None:
         """Highest r; ties go to the claimed release, then to the nearest, then the oldest."""
@@ -113,6 +122,23 @@ class TraceVersionFit(BaseCheck):
         if anchor is None:
             return None  # no claimed release to centre a window on; C01 owns the version
         scan = self._scan(ctx, claim, anchor)
+        if scan.timed_out:
+            # P2: a fixed outcome that does not depend on how far the scan got.
+            return self._say(
+                claim,
+                "NEUTRAL",
+                None,
+                f"the release-fit scan around {anchor.name} did not finish within its time"
+                " budget, so no release fit is reported",
+                details={
+                    "claimed_release": anchor.name,
+                    "frames_with_lines": len(frames),
+                    "scan_complete": False,
+                    "uncertain": ["the scan did not finish within its time budget"],
+                },
+                locations=(),
+                label="scan_timed_out",
+            )
         best = scan.best()
         if best is None:
             return None  # no frame was checkable anywhere: nothing to compare between releases
@@ -220,14 +246,15 @@ class TraceVersionFit(BaseCheck):
         while True:
             window = releases.window(anchor, radius)
             for release in _outwards(window, order, home, seen=fits):
-                # Poll *before* scoring: a scan that already scored every release in the
-                # window is complete, whatever the clock says afterwards. Polling after the
-                # last release made identical inputs flip ``scan_complete`` (and so the
-                # summary and the content-derived evidence ID) on timing alone (P2). The
-                # claimed release is always scored, so every outcome has its baseline.
-                if attempted and ctx.expired():
+                # The work cap decides what is reported; it depends only on the inputs (P2).
+                if attempted >= MAX_RELEASES_SCORED:
                     complete = False
                     break
+                # Poll *before* scoring: a scan that already scored every release is
+                # complete whatever the clock says afterwards. An expiry discards everything
+                # so the outcome cannot depend on how far the scan got.
+                if ctx.expired():
+                    return _Scan({}, (), False, radius, timed_out=True)
                 attempted += 1
                 analysis = analyze_trace(
                     ctx.index, release.commit, claim, project=ctx.resolution.project
@@ -301,7 +328,7 @@ def _reasons(scan: _Scan) -> list[str]:
     """Why a "no release fits" refutation would overreach, if it would."""
     reasons: list[str] = []
     if not scan.complete:
-        reasons.append(f"it stopped at its time budget after {_n_releases(len(scan.fits))}")
+        reasons.append(f"it stopped at its work cap after {_n_releases(len(scan.fits))}")
     if scan.partially_parsed:
         shown = ", ".join(scan.partially_parsed[:3])
         reasons.append(f"some files did not parse completely ({shown})")

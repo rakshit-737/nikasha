@@ -122,6 +122,7 @@ def test_each_frame_is_kept_as_a_child_detail(make_ctx: MakeContext) -> None:
     assert frame["mismatched"] == []
     assert "src/util.c exists at this commit" in frame["matched"]
     assert "line 15 is inside util_copy_value" in frame["matched"]
+    assert frame["checks"] == {"file": True, "function": True, "line": True}
 
 
 def test_evidence_locates_frames_at_the_exact_commit(make_ctx: MakeContext) -> None:
@@ -157,6 +158,7 @@ def test_a_fabricated_trace_is_inconsistent(make_ctx: MakeContext) -> None:
     assert evidence.details["checked_frames"] == 3
     mismatched = _by_function(evidence)["hdr_get"]["mismatched"]
     assert "src/hdr.c has 156 lines" in mismatched
+    assert _by_function(evidence)["hdr_get"]["checks"]["line"] is False
 
 
 def test_one_drifted_frame_in_five_is_only_mostly_consistent(make_ctx: MakeContext) -> None:

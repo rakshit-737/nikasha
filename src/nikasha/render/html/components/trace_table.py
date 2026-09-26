@@ -220,9 +220,10 @@ def _state(yes: bool, no: bool) -> str:
 def _marks(detail: Mapping[str, Any]) -> dict[str, str]:
     """A tick, a cross or a question mark per question for one frame.
 
-    C08 records its findings as prose rather than booleans, so its sentences are classified
-    back here against the exact templates it writes (the tests pin every one of them).
-    Wording it does not recognise is *not checked* rather than a guess — the safe direction,
+    C08 records its answers as booleans under ``checks``; those are read directly. Results
+    written before that field existed carry only prose, so their sentences are classified
+    back against the exact templates C08 writes (the tests pin every one of them).
+    Wording that is not recognised is *not checked* rather than a guess — the safe direction,
     because the alternative is drawing a ✗ nobody computed.
 
     A frame C08 left out of its ratio, ``skipped`` or ``uncertain``, is not checked in all
@@ -231,6 +232,13 @@ def _marks(detail: Mapping[str, Any]) -> dict[str, str]:
     """
     if detail.get("status") not in ("consistent", "inconsistent"):
         return {field: "unknown" for field, _ in FIELDS}
+    checks = detail.get("checks")
+    if isinstance(checks, Mapping):
+        # C08's structured answers. Anything but a real boolean is not checked (P4).
+        return {
+            field: _state(checks.get(field) is True, checks.get(field) is False)
+            for field, _ in FIELDS
+        }
     yes = {_matched_kind(note, detail) for note in _strings(detail.get("matched"), MAX_NOTES)}
     no = {_mismatched_kind(note, detail) for note in _strings(detail.get("mismatched"), MAX_NOTES)}
     return {field: _state(field in yes, field in no) for field, _ in FIELDS}
