@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: CC0-1.0
 #
 # Reviewed false positives, pinned by fingerprint (commit:path:rule:line) so the rule stays on.
-# generic-api-key matches `subject_symbol="util_copy_value"`: a C function name in a C19 test.
+# generic-api-key matches `subject_symbol="util_copy_value"` (or `="f"`): C function names in C19 tests.
 c722b4bed95bd637ed47e73d45f9eded7cb3528d:tests/unit/checks/test_c19_dynamic_repro.py:generic-api-key:219
 7021cfdd60d4ff60686b0747c12b1eeb695c61e9:tests/unit/checks/test_c19_dynamic_repro.py:generic-api-key:312
 39760126fdf45322f8d136f49095fc274eda6821:tests/unit/checks/test_c19_dynamic_repro.py:generic-api-key:219
 bae241156925027d3ef2ed1fe03b1e5776d86383:tests/unit/checks/test_c19_dynamic_repro.py:generic-api-key:312
+04cc3a7ae5f6a0b450220d6841600f1272460714:tests/unit/checks/test_c19_dynamic_repro.py:generic-api-key:321
