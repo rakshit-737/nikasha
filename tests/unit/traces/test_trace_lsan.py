@@ -187,9 +187,23 @@ def test_capture_container_argv_is_hardened() -> None:
         assert any(a in ("--network=none", "none") for a in argv)
 
 
-def test_capture_refuses_while_no_fixed_bug_is_catalogued() -> None:
+def test_capture_catalogue_has_three_fixed_bugs_per_format() -> None:
     cap = _capture_module()
-    assert cap.BUGS == ()  # entries need hand verification against upstream (ADR 0009)
+    for fmt in cap.FORMATS:  # SPEC §9.5; entries and their evidence are listed in ADR 0009
+        bugs = [b for b in cap.BUGS if b.fmt == fmt]
+        assert len(bugs) == 3
+        assert len({b.repo + b.vulnerable_tag for b in bugs}) == 3
+    for bug in cap.BUGS:
+        # Triggers go through the project's own programs; the script adds no crash program.
+        assert ".c <<" not in bug.run and "cat >" not in bug.build
+        assert bug.repo.startswith("https://github.com/") and bug.repo.endswith(".git")
+
+
+def test_capture_refuses_when_no_fixed_bug_is_catalogued(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cap = _capture_module()
+    monkeypatch.setattr(cap, "BUGS", ())
     with pytest.raises(SystemExit) as exc:
         cap.main(["capture"])
     assert "nothing was written" in str(exc.value.code)

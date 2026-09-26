@@ -1,0 +1,64 @@
+# SPDX-FileCopyrightText: 2026 The Nikasha Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Captures the LSan, MSan and TSan fixtures (ADR 0009) from the already-fixed public bugs in
+# the BUGS catalogue of scripts/capture_sanitizer_fixtures.py, inside the capture image, and
+# uploads them as an artifact for review. Nothing is committed from here: a maintainer
+# reviews the artifact and commits it. Manual only, because it clones nine repositories and
+# builds each bug twice (vulnerable and fixed tag).
+#
+# Actions are pinned by full commit SHA, resolved with `gh api .../git/ref/tags/<tag>` on
+# 2026-09-26 (all three tags are lightweight, pointing at commits, so there is nothing to peel).
+name: Sanitizer fixtures
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sanitizer-fixtures-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  UV_VERSION: "0.12.18"
+  FORCE_COLOR: "1"
+
+jobs:
+  capture:
+    name: Capture ${{ matrix.fmt }} (docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        fmt: [lsan, msan, tsan]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - run: uv sync --locked --all-groups
+      - run: docker version
+      # TSan and MSan need a fixed shadow-memory layout. Ubuntu runners use 32 bits of mmap
+      # randomisation, which older sanitizer runtimes cannot map around, and the container's
+      # seccomp profile blocks the ADDR_NO_RANDOMIZE re-exec newer runtimes fall back to.
+      - name: Reduce mmap randomisation for the sanitizer runtimes
+        run: sudo sysctl -w vm.mmap_rnd_bits=28
+      # Built as its own step so an image failure is not mistaken for a capture failure.
+      - name: Build the capture image
+        run: docker build -f docker/capture/Containerfile -t localhost/nikasha-capture:latest docker/capture
+      - name: Capture
+        env:
+          FMT: ${{ matrix.fmt }}
+        run: uv run python scripts/capture_sanitizer_fixtures.py --online --engine docker --keep-going --only "$FMT"
+      - name: Upload fixtures
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sanitizer-fixtures-${{ matrix.fmt }}
+          path: tests/fixtures/traces/${{ matrix.fmt }}/
+          if-no-files-found: error
+          retention-days: 30

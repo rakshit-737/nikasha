@@ -5,13 +5,16 @@
 Sources follow the maintainer's M2 decision (PROGRESS.md, ADR 0005): **already-fixed bugs
 in public projects at pinned tags**. No crash program is written for the capture, and no
 compiler-rt regression program is used. Each :class:`Bug` in :data:`BUGS` names the
-project, the vulnerable tag, the fixed tag, the fix commit and the public bug reference,
-and it triggers the bug with an input that already exists in the project's tree (for
-example the regression input the fix added), read out of the *fixed* tag.
+project, the vulnerable tag, the fixed tag, the fix commit and the public bug reference.
+It triggers the bug only through the project's own programs (its CLI, or an example
+program shipped in its tree), fed with the project's own files or a literal input of a few
+bytes written in :attr:`Bug.run`.
 
-:data:`BUGS` is empty on purpose. Its entries must be checked by a person against the
-upstream history before they are added; nothing here is guessed. While it is empty the
-script stops with a message and writes nothing.
+:data:`BUGS` holds three bugs per format (SPEC §9.5). Each entry was checked against the
+upstream history (ADR 0009 lists the evidence): both tags exist, the fix commit exists and
+lies between them, and the vulnerable code is present at the vulnerable tag. Whether each
+trigger really produces a report is known only once the capture has run; a bug that does
+not reproduce is reported, and nothing is written.
 
 Nothing runs on the host (P5):
 
@@ -33,7 +36,10 @@ Nothing runs on the host (P5):
 Usage (``--online`` for the one-time clones and image build; needs a container engine)::
 
     python scripts/capture_sanitizer_fixtures.py --online
-    python scripts/capture_sanitizer_fixtures.py --only tsan
+    python scripts/capture_sanitizer_fixtures.py --only tsan --engine docker --keep-going
+
+``--keep-going`` runs every selected bug and reports each failure, but still writes nothing
+unless all of them passed.
 """
 
 from __future__ import annotations
@@ -138,8 +144,154 @@ class Bug:
         )
 
 
-#: Verified by hand against upstream history before an entry is added (see module docstring).
-BUGS: tuple[Bug, ...] = ()
+def _corpus(globs: str, times: int) -> str:
+    """Repeat the tree's own sources into ``/work/in`` so threaded runs get many jobs."""
+    return f"for i in $(seq 1 {times}); do cat {globs}; done > /work/in"
+
+
+_ZSTD = "https://github.com/facebook/zstd.git"
+_LZ4 = "https://github.com/lz4/lz4.git"
+_XZ = "https://github.com/tukaani-project/xz.git"
+_ZSTD_CLI = "make -C programs zstd HAVE_ZLIB=0 HAVE_LZMA=0 HAVE_LZ4=0"
+_XZ_CMAKE = (
+    "cmake -S . -B build -DBUILD_SHARED_LIBS=OFF -DXZ_NLS=OFF -DXZ_DOC=OFF"
+    " -DXZ_TOOL_XZDEC=OFF -DXZ_TOOL_LZMADEC=OFF -DXZ_TOOL_LZMAINFO=OFF"
+    " -DXZ_TOOL_SCRIPTS=OFF && cmake --build build --target xz -j4"
+)
+#: The zlib MSan bug is a short-circuit branch on an uninitialised pointer. At -O1 clang may
+#: turn it into a select, which MSan does not report, so this one entry builds at -O0.
+_MSAN_O0 = "-fsanitize=memory -g -O0 -fno-omit-frame-pointer"
+
+#: Checked against upstream history on 2026-09-26: both tags and the fix commit exist, the
+#: fix lies between the tags, and the vulnerable code is present at the vulnerable tag (ADR
+#: 0009 has the evidence). Reproduction is established only by a capture run.
+BUGS: tuple[Bug, ...] = (
+    # --- LeakSanitizer ---------------------------------------------------------------
+    Bug(
+        fmt="lsan",
+        name="01-zstd-simple-compression",
+        repo=_ZSTD,
+        vulnerable_tag="v1.1.3",
+        fixed_tag="v1.1.4",
+        fix_commit="2bb6fc2a944d30d0ec3ec18d3db0fc462cf06ccf",
+        reference="https://github.com/facebook/zstd/pull/546",
+        build=(
+            "$CC $CFLAGS -Ilib -Ilib/common examples/simple_compression.c"
+            " lib/common/*.c lib/compress/*.c -o simple_compression $LDFLAGS"
+        ),
+        run="cp README.md /work/r.md && ./simple_compression /work/r.md",
+    ),
+    Bug(
+        fmt="lsan",
+        name="02-lz4-dictionary-file",
+        repo=_LZ4,
+        vulnerable_tag="v1.8.1",
+        fixed_tag="v1.8.1.2",
+        fix_commit="fe66e78b96ff3b8b167f02aacbc7c0721b893611",
+        reference="https://github.com/lz4/lz4/commit/fe66e78b96ff3b8b167f02aacbc7c0721b893611",
+        build="make -C programs lz4",
+        run="./programs/lz4 -q -f -D lib/lz4.h lib/lz4.c /work/out.lz4",
+    ),
+    Bug(
+        fmt="lsan",
+        name="03-zstd-recursive-symlink",
+        repo=_ZSTD,
+        vulnerable_tag="v1.4.1",
+        fixed_tag="v1.4.2",
+        fix_commit="793b94b3541de7535787b5ddebc555bc63d9bef3",
+        reference="https://github.com/facebook/zstd/pull/1701",
+        build=_ZSTD_CLI,
+        run=(
+            "rm -rf /work/d && mkdir /work/d && cp README.md /work/d/r.md"
+            " && ln -s r.md /work/d/link && ./programs/zstd -q -r /work/d"
+        ),
+    ),
+    # --- MemorySanitizer -------------------------------------------------------------
+    Bug(
+        fmt="msan",
+        name="01-jq-check-literal",
+        repo="https://github.com/jqlang/jq.git",
+        vulnerable_tag="jq-1.7.1",
+        fixed_tag="jq-1.8.0",
+        fix_commit="96d19ca2eef4bed201c5b1175ed013bc3122a001",
+        reference="https://github.com/jqlang/jq/issues/3316",
+        # scripts/version needs a .git directory, which an exported tree does not have.
+        build=(
+            "printf '#!/bin/sh\\necho exported\\n' > scripts/version && autoreconf -i"
+            " && ./configure --with-oniguruma=no --disable-docs --disable-shared"
+            " && make -j4 jq"
+        ),
+        run="printf n | ./jq .",
+    ),
+    Bug(
+        fmt="msan",
+        name="02-zlib-gzclose-next-in",
+        repo="https://github.com/madler/zlib.git",
+        vulnerable_tag="v1.2.8",
+        fixed_tag="v1.2.9",
+        fix_commit="c901a34c92c4aa74028f541a9773df726ce2b769",
+        reference="https://github.com/madler/zlib/commit/c901a34c92c4aa74028f541a9773df726ce2b769",
+        build="./configure --static && make minigzip",
+        run="./minigzip < /dev/null",
+        env={"CFLAGS": _MSAN_O0, "CXXFLAGS": _MSAN_O0},
+    ),
+    Bug(
+        fmt="msan",
+        name="03-xz-list-robot-totals",
+        repo=_XZ,
+        vulnerable_tag="v5.2.3",
+        fixed_tag="v5.2.4",
+        fix_commit="eb2ef4c79bf405ea0d215f3b1df3d0eaf5e1d27b",
+        reference=(
+            "https://github.com/tukaani-project/xz/commit/eb2ef4c79bf405ea0d215f3b1df3d0eaf5e1d27b"
+        ),
+        build=(
+            "./autogen.sh && ./configure --disable-shared --disable-nls --disable-scripts"
+            " --disable-doc --disable-xzdec --disable-lzmadec --disable-lzmainfo"
+            " && make -j4"
+        ),
+        run="./src/xz/xz --list --robot /work/missing.xz",
+    ),
+    # --- ThreadSanitizer -------------------------------------------------------------
+    Bug(
+        fmt="tsan",
+        name="01-zstd-mt-job-completion",
+        repo=_ZSTD,
+        vulnerable_tag="v1.3.5",
+        fixed_tag="v1.3.6",
+        fix_commit="7992942d6649df3bed2ce87dfb2d8889b60ce278",
+        reference="https://github.com/facebook/zstd/commit/7992942d6649df3bed2ce87dfb2d8889b60ce278",
+        build=_ZSTD_CLI,
+        run=_corpus("lib/*/*.c", 12) + " && ./programs/zstd -q -1 -T4 -c /work/in",
+    ),
+    Bug(
+        fmt="tsan",
+        name="02-pigz-lock-order",
+        repo="https://github.com/madler/pigz.git",
+        vulnerable_tag="v2.4",
+        fixed_tag="v2.5",
+        fix_commit="1e847e68cc96f311b15bb091ce5b9b20d110e37f",
+        reference="https://github.com/madler/pigz/commit/1e847e68cc96f311b15bb091ce5b9b20d110e37f",
+        # The Makefile assigns CC and CFLAGS itself, so they are passed on the command line.
+        build='make pigz CC="$CC" CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS"',
+        run=_corpus("pigz.c", 40) + " && ./pigz -p 4 -c /work/in",
+    ),
+    Bug(
+        fmt="tsan",
+        name="03-xz-mt-decoder-progress",
+        repo=_XZ,
+        vulnerable_tag="v5.8.3",
+        fixed_tag="v5.8.4",
+        fix_commit="c6e3aadbb510e44cecfe870408ecfea1d1ca792c",
+        reference="https://github.com/tukaani-project/xz/pull/243",
+        build=_XZ_CMAKE,
+        run=(
+            _corpus("src/liblzma/*/*.c", 8)
+            + " && ./build/xz -T2 -0 --block-size=131072 -c /work/in > /work/in.xz"
+            " && ./build/xz -T4 -d -c /work/in.xz"
+        ),
+    ),
+)
 
 
 def check_catalogue(bugs: tuple[Bug, ...]) -> list[str]:
@@ -281,17 +433,21 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     parser.add_argument("--only", choices=FORMATS)
     parser.add_argument("--online", action="store_true", help="allow clones and the image build")
+    parser.add_argument("--engine", choices=("auto", "docker", "podman"), default="auto")
+    parser.add_argument(
+        "--keep-going", action="store_true", help="report every failing bug (still writes nothing)"
+    )
     args = parser.parse_args(argv[1:])
     if problems := check_catalogue(BUGS):
         sys.exit("BUGS is malformed:\n" + "\n".join(problems))
     selected = [b for b in BUGS if args.only in (None, b.fmt)]
     if not selected:
         sys.exit(
-            "no already-fixed bugs are catalogued for this format yet (BUGS is empty; "
-            "ADR 0009). Add hand-verified entries first; nothing was written."
+            "no already-fixed bugs are catalogued for this format (ADR 0009). "
+            "Add hand-verified entries first; nothing was written."
         )
     try:
-        engine = sandbox.select_engine()
+        engine = sandbox.select_engine(args.engine)
     except NikashaError as exc:
         sys.exit(f"{exc} PoCs never run on the host (P5).")
     try:
@@ -302,6 +458,7 @@ def main(argv: list[str]) -> int:
     except NikashaError as exc:
         sys.exit(str(exc))
     commits: dict[str, dict[str, str]] = {}
+    failed: list[str] = []
     with tempfile.TemporaryDirectory(prefix="nikasha-sancap-") as tmp:
         out = Path(tmp) / "out"
         for bug in selected:
@@ -316,11 +473,17 @@ def main(argv: list[str]) -> int:
             if problem is not None:
                 tail = shown.stderr[-2000:].decode("utf-8", "replace")
                 print(f"!! {bug.fmt}/{bug.name}: {problem}; nothing written\n{tail}")
-                return 1
+                if not args.keep_going:
+                    return 1
+                failed.append(f"{bug.fmt}/{bug.name}: {problem}")
+                continue
             staged = out / bug.fmt / f"{bug.name}.txt"
             staged.parent.mkdir(parents=True, exist_ok=True)
             staged.write_bytes(result.stderr)
             print(f"captured {bug.fmt}/{bug.name} ({len(result.stderr)} bytes)")
+        if failed:
+            print("nothing written; failing bugs:\n" + "\n".join(failed))
+            return 1
         meta = {
             "engine": engine.name,
             "base": base_digest(),

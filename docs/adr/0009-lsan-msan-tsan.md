@@ -21,11 +21,13 @@ yet.
 
 - **Fixture source (follows the M2 decision).** `scripts/capture_sanitizer_fixtures.py`
   captures only from entries of its `BUGS` catalogue. Each entry names a public repository,
-  a vulnerable tag, a fixed tag, the full fix commit SHA and a public bug reference, and
-  triggers the bug with an input already in the project's tree. No crash program is written
-  and no compiler-rt regression program is used. `BUGS` is **empty**: entries must be
-  checked by a person against upstream history before they are added, and nothing is
-  guessed. While it is empty, the script stops and writes nothing.
+  a vulnerable tag, a fixed tag, the full fix commit SHA and a public bug reference. It
+  triggers the bug only through the project's own programs (its CLI or an example program
+  in its tree), fed with the project's own files or a literal input of a few bytes. No
+  crash program is written and no compiler-rt regression program is used. *Amended
+  2026-09-26:* `BUGS` now holds three bugs per format, listed with their evidence under
+  "Catalogued bugs" below. If `BUGS` has no entry for a format, the script stops and writes
+  nothing.
 - **Capture mechanics.** Each repository is cloned in full (ADR 0006) through
   `nikasha.resolve.repo`. Both tags and the fix commit are resolved, and the fix commit must
   lie between them. Both trees are written with `GitRepo.export_tree` (never `git archive`
@@ -65,6 +67,59 @@ yet.
     2026-09-25 the image could not be built in the development container, because the
     outbound proxy refuses the Fedora mirrors.
 
+## Catalogued bugs (2026-09-26)
+
+Each row was checked against a full clone of the upstream repository on 2026-09-26. Both
+tags exist, and the fix commit exists and is listed by `git rev-list <vulnerable>..<fixed>`
+(the capture script checks the same thing again before it builds anything). The code the
+fix changes was read at the vulnerable tag, to confirm the bug was in that release and was
+not added and fixed between two releases. Every project's licence allows building and
+running it (BSD/GPLv2 dual, zlib, MIT, 0BSD or public domain).
+
+| Format | Project | Vulnerable → fixed | Fix commit | Public reference | Trigger (project's own program) |
+|---|---|---|---|---|---|
+| LSan | zstd | `v1.1.3` → `v1.1.4` | `2bb6fc2a944d30d0ec3ec18d3db0fc462cf06ccf` | [zstd#546](https://github.com/facebook/zstd/pull/546) | `examples/simple_compression` on a file: the output file name is never freed |
+| LSan | lz4 | `v1.8.1` → `v1.8.1.2` | `fe66e78b96ff3b8b167f02aacbc7c0721b893611` | [commit](https://github.com/lz4/lz4/commit/fe66e78b96ff3b8b167f02aacbc7c0721b893611) | `lz4 -D <dict>`: the dictionary `FILE` is never closed |
+| LSan | zstd | `v1.4.1` → `v1.4.2` | `793b94b3541de7535787b5ddebc555bc63d9bef3` | [zstd#1701](https://github.com/facebook/zstd/pull/1701) | `zstd -r` on a directory holding a symlink: the skipped path is never freed |
+| MSan | jq | `jq-1.7.1` → `jq-1.8.0` | `96d19ca2eef4bed201c5b1175ed013bc3122a001` | [jq#3316](https://github.com/jqlang/jq/issues/3316) (reported with an MSan trace) | `printf n \| jq .`: `check_literal` reads `tokenbuf[1]` |
+| MSan | zlib | `v1.2.8` → `v1.2.9` | `c901a34c92c4aa74028f541a9773df726ce2b769` | [commit](https://github.com/madler/zlib/commit/c901a34c92c4aa74028f541a9773df726ce2b769) | `minigzip < /dev/null`: `deflate()` tests the never-set `next_in` from `gzclose_w()` (built at `-O0`, see below) |
+| MSan | xz | `v5.2.3` → `v5.2.4` | `eb2ef4c79bf405ea0d215f3b1df3d0eaf5e1d27b` (5.2 backport of `a015cd1f`) | [commit](https://github.com/tukaani-project/xz/commit/eb2ef4c79bf405ea0d215f3b1df3d0eaf5e1d27b) | `xz --list --robot <missing file>`: the totals line prints an unwritten check-name buffer |
+| TSan | zstd | `v1.3.5` → `v1.3.6` | `7992942d6649df3bed2ce87dfb2d8889b60ce278` | [commit](https://github.com/facebook/zstd/commit/7992942d6649df3bed2ce87dfb2d8889b60ce278) ("fixed complex tsan issue") | `zstd -T4` on repeated tree sources: a worker reads `job->cSize` after publishing completion |
+| TSan | pigz | `v2.4` → `v2.5` | `1e847e68cc96f311b15bb091ce5b9b20d110e37f` | [commit](https://github.com/madler/pigz/commit/1e847e68cc96f311b15bb091ce5b9b20d110e37f) | `pigz -p 4` on repeated `pigz.c`: `get_space()` and `drop_space()` take the two locks in opposite orders (lock-order inversion) |
+| TSan | xz | `v5.8.3` → `v5.8.4` | `c6e3aadbb510e44cecfe870408ecfea1d1ca792c` | [xz#243](https://github.com/tukaani-project/xz/pull/243) (the commit says TSan reported it) | `xz -T4 -d` on a multi-block file made by `xz -T2`: `progress_in` is written without the mutex |
+
+Candidates that were looked at and rejected, so nobody repeats the work:
+
+- zstd `48bca107`, `6c35fb2e`, `2a907bf4`, `49c6d492`, `d195eec9`, `de5e38a7` and lz4
+  `84f978a2`, `854d13a1`: the bug was added and fixed between two releases, so no release
+  tag is vulnerable.
+- xz `7bd6d63b` and `4b9b8271` (`--files` leaks): at `v5.8.3` the name buffer is still
+  reachable from a static pointer, so LSan reports nothing.
+- lz4 `06a27a66`: the leak needs a file shorter than 19 bytes to reach `LZ4F_readOpen()`,
+  and no in-tree program was confirmed to do that, so it was not pursued.
+- curl `57446b67`: the MSan reports most likely came from missing `__isoc23_strtol`
+  interceptors in an older toolchain, so they may not reproduce with the pinned clang.
+- pigz `b88a0e9`: the `--list` race is on the file offset, not on memory, so TSan does not
+  see it.
+
+**Not yet verified (known only after a capture run):**
+
+- whether each trigger really produces a report at the vulnerable tag and none at the fixed
+  tag. TSan triggers are timing-dependent (10 attempts). The zlib entry depends on the
+  short-circuit branch surviving compilation, which is why it alone builds at `-O0`;
+- whether the older trees still build with the image's clang (C89-era code, autotools
+  macros);
+- whether the Fedora image ships the MSan runtime (see Tests above).
+
+A failing bug is reported by name and nothing is written. It is then replaced, never
+forced. The image gained `cmake`, `autoconf`, `automake`, `libtool`, `gettext-devel` (for
+`autopoint`) and `zlib-ng-compat-devel` (for pigz). The capture runs in
+`.github/workflows/sanitizer-fixtures.yml`, which is manual only. That workflow lowers
+`vm.mmap_rnd_bits` to 28 on the runner (TSan and MSan need a fixed shadow layout) and
+uploads each format's fixtures as an artifact for a maintainer to review and commit. The
+script gained `--engine` (the runner also has rootless podman, which has a separate image
+store) and `--keep-going` (reports every failing bug and still writes nothing).
+
 ## Registering them later
 
 Once hand-verified fixed bugs are catalogued, the capture has run and its fixtures are
@@ -80,5 +135,5 @@ committed, the fixture tests pass, and after any parser fixes the real output ca
 ## Consequences
 
 - There are still 9 of 12 parsed formats in the default pipeline until the steps above land.
-- Until someone catalogues real fixed bugs, these parsers stay unverified; this ADR does not
-  claim otherwise.
+- Until the catalogued bugs have been captured and the fixtures committed, these parsers
+  stay unverified; this ADR does not claim otherwise.
