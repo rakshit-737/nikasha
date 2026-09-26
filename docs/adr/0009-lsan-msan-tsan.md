@@ -85,8 +85,8 @@ running it (BSD/GPLv2 dual, zlib, MIT, 0BSD or public domain).
 | LSan | zstd | `v1.4.1` → `v1.4.2` | `793b94b3541de7535787b5ddebc555bc63d9bef3` | [zstd#1701](https://github.com/facebook/zstd/pull/1701) | `zstd -r` on a directory holding a symlink: the skipped path is never freed |
 | MSan | jq | `jq-1.7.1` → `jq-1.8.0` | `96d19ca2eef4bed201c5b1175ed013bc3122a001` | [jq#3316](https://github.com/jqlang/jq/issues/3316) (reported with an MSan trace) | `printf n \| jq .`: `check_literal` reads `tokenbuf[1]` |
 | MSan | zlib | `v1.2.8` → `v1.2.9` | `c901a34c92c4aa74028f541a9773df726ce2b769` | [commit](https://github.com/madler/zlib/commit/c901a34c92c4aa74028f541a9773df726ce2b769) | `minigzip < /dev/null`: `deflate()` tests the never-set `next_in` from `gzclose_w()` (built at `-O0`, see below) |
-| MSan | xz | `v5.2.3` → `v5.2.4` | `eb2ef4c79bf405ea0d215f3b1df3d0eaf5e1d27b` (5.2 backport of `a015cd1f`) | [commit](https://github.com/tukaani-project/xz/commit/eb2ef4c79bf405ea0d215f3b1df3d0eaf5e1d27b) | `xz --list --robot <missing file>`: the totals line prints an unwritten check-name buffer |
-| TSan | pigz | `v2.1.6` → `v2.1.7` | `336772700edd0fb15322546e4905c913f2a55fd6` | [commit](https://github.com/madler/pigz/commit/336772700edd0fb15322546e4905c913f2a55fd6) ("Fix thread synchronization problem when tracing") | the tree's `pigzt` debug build (`-DDEBUG`), `pigzt -vv -p 4` on repeated `pigz.c`: `compress_thread()` reads `job->seq` after `twist(job->calc)`, while the write thread frees `job` with no further synchronisation |
+| MSan | libjpeg-turbo | `2.0.90` → `2.1.0` | `b1079002ad451aab896617098b6bcbaae1d967e4` | [commit](https://github.com/libjpeg-turbo/libjpeg-turbo/commit/b1079002ad451aab896617098b6bcbaae1d967e4) ("Fix innocuous MSan error") | `cjpeg` on a 1×1 binary PGM (maxval 1, sample 8, written as literal bytes): `rescale[8]` was never written, and the sample reaches the encoder's own branches (pure C build, `-O0`) |
+| TSan | libvpx | `v1.14.0` → `v1.14.1` | `4c80888a71829941c8a4218e61433e8443901dea` (1.14 cherry-pick of `756b29a7`) | [commit](https://github.com/webmproject/libvpx/commit/4c80888a71829941c8a4218e61433e8443901dea) ("Fix to race issue for multi-thread with pnsr_calc") | `vpxenc --codec=vp8 --threads=4 --psnr` on raw 1280×720 frames cut from the tree's sources (pure C `generic-gnu` build): the main thread reads the frame for PSNR while the loop-filter thread is still writing it |
 | TSan | pigz | `v2.4` → `v2.5` | `1e847e68cc96f311b15bb091ce5b9b20d110e37f` | [commit](https://github.com/madler/pigz/commit/1e847e68cc96f311b15bb091ce5b9b20d110e37f) | `pigz -p 4` on repeated `pigz.c`: `get_space()` and `drop_space()` take the two locks in opposite orders (lock-order inversion) |
 | TSan | xz | `v5.8.3` → `v5.8.4` | `c6e3aadbb510e44cecfe870408ecfea1d1ca792c` | [xz#243](https://github.com/tukaani-project/xz/pull/243) (the commit says TSan reported it) | `xz -T4 -d` on a multi-block file made by `xz -T2`: `progress_in` is written without the mutex |
 
@@ -128,6 +128,33 @@ Rejected in this round: xz `be365b70` (`partial_update` race; `v5.8.1` → `v5.8
 `v5.8.2` still has the `progress_in` race, so the fixed tag would not be clean); zstd
 `190a6209` (no release after the fix); lz4 `04374588` (multithreading was added after
 `v1.9.4`); pigz `189866f3` (a same-thread use-after-free, which TSan does not report).
+
+**Second capture run (2026-09-26, CI, docker).** The xz TSan entry captured (five of nine).
+The four failures and what changed:
+
+- LSan and MSan jq: still a build failure. The 4 KB log tail stopped in the middle of a
+  parallel build, so the error itself was not shown. The likely cause: `make jq` does not
+  build `BUILT_SOURCES`, so `src/builtin.inc` (included by `builtin.c`) was never
+  generated. The shared jq build now runs the default target. A failed build now prints
+  the log's error lines first, then its tail, so a third failure will show the error.
+- MSan xz `eb2ef4c7`: still no report with `check_printf=1`. The unwritten buffer is only
+  ever read inside libc's `printf`, never by a branch in xz, so the report depends on the
+  printf interceptor, not on xz. Replaced by libjpeg-turbo `b1079002`, where the
+  uninitialised value is used by branches inside the project.
+- TSan pigz `33677270`: the fixed tag reported the `v2.4`-era lock-order inversion
+  (`1e847e68`, fixed only in `v2.5`), so it was never clean. The race itself also turned
+  out to be timing-dependent: the worker's `Trace()` is ordered before the writer's `free()`
+  whenever the writer logs after it. Replaced by libvpx `4c80888a`. There, nothing orders
+  the main thread's PSNR reads against the loop-filter thread's writes until the next
+  frame's `sem_wait`. The image gains `perl-interpreter` and `diffutils` for libvpx's
+  `configure`.
+
+Checked for the replacements: both tags exist (`git ls-remote`). The fix commit is not
+reachable from the vulnerable tag and is contained in the fixed tag (`gh api compare`, or
+`git merge-base --is-ancestor` on a full clone). The vulnerable code was read at the
+vulnerable tag: `get_scaled_gray_row()` indexes `rescale[]` without bounds checking, and
+`rescale[]` is only filled up to maxval; `generate_psnr_packet()` is called before the
+`h_event_end_lpf` wait.
 
 **Not yet verified (known only after a capture run):**
 

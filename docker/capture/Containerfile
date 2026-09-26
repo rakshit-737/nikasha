@@ -4,14 +4,15 @@
 # Toolchain image for capturing real crash-trace fixtures (tests/fixtures/traces/).
 # Built and driven by scripts/capture_trace_fixtures.py and, for LSan/MSan/TSan,
 # scripts/capture_sanitizer_fixtures.py (whose catalogued projects need cmake, the
-# autotools, autopoint from gettext-devel, and zlib headers for pigz). Network is used only
-# while this image is built; every capture runs with `--network none` as the `capture` user.
+# autotools, autopoint from gettext-devel, zlib headers for pigz, and perl and diff for the
+# libvpx configure script). Network is used only while this image is built; every
+# capture runs with `--network none` as the `capture` user.
 FROM registry.fedoraproject.org/fedora:44@sha256:b4488a77fd2b96513fc8c18b502df7fbf19dad9e77d9a430c0163c574654822c
 
 RUN dnf install -y --setopt=install_weak_deps=False \
         clang compiler-rt llvm libasan libubsan libtsan liblsan \
         gdb valgrind make cmake autoconf automake libtool gettext-devel \
-        zlib-ng-compat-devel \
+        zlib-ng-compat-devel perl-interpreter diffutils \
         python3 java-25-openjdk-devel nodejs24 nodejs24-bin \
         rust cargo golang \
     && dnf install -y --setopt=install_weak_deps=False \

@@ -136,12 +136,20 @@ class Bug:
         return (
             "cp -r /src/tree /work/tree && cd /work/tree && "
             f"{{ ( {self.build} ) >/work/build.log 2>&1 "
-            f"|| {{ tail -c 4000 /work/build.log >&2; exit {BUILD_FAILED}; }}; }}; "
+            f"|| {{ {_BUILD_ERRORS} >&2; exit {BUILD_FAILED}; }}; }}; "
             f"for i in $(seq 1 {attempts}); do "
             f"( {self.run} ) >/dev/null 2>/work/out; rc=$?; "
             f"if grep -qF -- {header} /work/out; then cat /work/out >&2; exit $rc; fi; "
             f"done; cat /work/out >&2; exit {NO_REPORT}"
         )
+
+
+#: What a failed build prints: first the lines that name an error (a parallel build buries
+#: them), then the end of the log.
+_BUILD_ERRORS = (
+    "{ grep -m 40 -E 'error|Error|No such file|not found' /work/build.log | cut -c1-300;"
+    " echo '--- build log tail ---'; tail -c 2500 /work/build.log; }"
+)
 
 
 def _corpus(globs: str, times: int) -> str:
@@ -159,6 +167,18 @@ _XZ_CMAKE = (
     " -DXZ_TOOL_XZDEC=OFF -DXZ_TOOL_LZMADEC=OFF -DXZ_TOOL_LZMAINFO=OFF"
     " -DXZ_TOOL_SCRIPTS=OFF -DXZ_SANDBOX=no && cmake --build build --target xz -j4"
 )
+#: libjpeg-turbo, pure C (the SIMD code is assembly MSan cannot see). CMake 4 refuses the
+#: 2.8.12 minimum without the policy floor, and BUILD_TYPE=None keeps its -O3 out of CFLAGS.
+_LJT_CMAKE = (
+    "cmake -S . -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_BUILD_TYPE=None"
+    " -DENABLE_SHARED=0 -DWITH_SIMD=0 -DWITH_TURBOJPEG=0"
+    " && cmake --build build --target cjpeg-static -j4"
+)
+#: libvpx, pure C (generic-gnu), VP8 encoder only, no C++ (webm, libyuv) and no tests.
+_VPX_CONFIGURE = (
+    "./configure --target=generic-gnu --disable-vp9 --disable-unit-tests --disable-docs"
+    " --disable-install-docs --disable-webm-io --disable-libyuv && make -j4"
+)
 #: The exported tree has no .git (scripts/version needs one) and no submodule checkout, and
 #: automake insists that the conditional SUBDIRS entry modules/oniguruma exists even when
 #: Oniguruma is disabled, so an empty directory stands in for it.
@@ -166,7 +186,8 @@ _JQ_BUILD = (
     "printf '#!/bin/sh\\necho exported\\n' > scripts/version && mkdir -p modules/oniguruma"
     " && autoreconf -i"
     " && ./configure --with-oniguruma=no --disable-docs --disable-shared"
-    " && make -j4 jq"
+    # `make jq` alone skips BUILT_SOURCES (src/builtin.inc), so build the default target.
+    " && make -j4"
 )
 #: The zlib MSan bug is a short-circuit branch on an uninitialised pointer. At -O1 clang may
 #: turn it into a select, which MSan does not report, so this one entry builds at -O0.
@@ -242,37 +263,38 @@ BUGS: tuple[Bug, ...] = (
     ),
     Bug(
         fmt="msan",
-        name="03-xz-list-robot-totals",
-        repo=_XZ,
-        vulnerable_tag="v5.2.3",
-        fixed_tag="v5.2.4",
-        fix_commit="eb2ef4c79bf405ea0d215f3b1df3d0eaf5e1d27b",
+        name="03-libjpeg-turbo-ppm-rescale",
+        repo="https://github.com/libjpeg-turbo/libjpeg-turbo.git",
+        vulnerable_tag="2.0.90",
+        fixed_tag="2.1.0",
+        fix_commit="b1079002ad451aab896617098b6bcbaae1d967e4",
         reference=(
-            "https://github.com/tukaani-project/xz/commit/eb2ef4c79bf405ea0d215f3b1df3d0eaf5e1d27b"
+            "https://github.com/libjpeg-turbo/libjpeg-turbo/commit/"
+            "b1079002ad451aab896617098b6bcbaae1d967e4"
         ),
-        build=(
-            "./autogen.sh && ./configure --disable-shared --disable-nls --disable-scripts"
-            " --disable-doc --disable-xzdec --disable-lzmadec --disable-lzmainfo"
-            " && make -j4"
-        ),
-        run="./src/xz/xz --list --robot /work/missing.xz",
-        # MSan leaves check_printf off by default, so printf("%s") of the unwritten buffer
-        # is only checked with it on (the buffer is read inside the printf interceptor).
-        options="check_printf=1",
+        build=_LJT_CMAKE,
+        # A 1x1 binary PGM with maxval 1 and sample 8: rescale[8] was never written, and the
+        # value reaches the encoder's own branches (quantisation, Huffman coding).
+        run="printf 'P5\\n1 1\\n1\\n\\010' | ./build/cjpeg-static > /work/out.jpg",
+        env={"CFLAGS": _MSAN_O0, "CXXFLAGS": _MSAN_O0},
     ),
     # --- ThreadSanitizer -------------------------------------------------------------
     Bug(
         fmt="tsan",
-        name="01-pigz-trace-after-twist",
-        repo=_PIGZ,
-        vulnerable_tag="v2.1.6",
-        fixed_tag="v2.1.7",
-        fix_commit="336772700edd0fb15322546e4905c913f2a55fd6",
-        reference="https://github.com/madler/pigz/commit/336772700edd0fb15322546e4905c913f2a55fd6",
-        # The tree's own `pigzt` debug target (-DDEBUG turns Trace() on), with the sanitizer
-        # flags; its Makefile rule hardcodes `cc -O3`, so the same command is spelled out.
-        build="$CC $CFLAGS -DDEBUG -o pigzt pigz.c yarn.c $LDFLAGS -lpthread -lz",
-        run=_corpus("pigz.c", 8) + " && ./pigzt -vv -p 4 -c /work/in",
+        name="01-libvpx-vp8-psnr-loopfilter",
+        repo="https://github.com/webmproject/libvpx.git",
+        vulnerable_tag="v1.14.0",
+        fixed_tag="v1.14.1",
+        fix_commit="4c80888a71829941c8a4218e61433e8443901dea",
+        reference="https://github.com/webmproject/libvpx/commit/4c80888a71829941c8a4218e61433e8443901dea",
+        build=_VPX_CONFIGURE,
+        # Raw 1280x720 I420 frames cut from the tree's own sources. With --psnr and threads,
+        # the main thread reads the frame for PSNR while the loop-filter thread writes it.
+        run=(
+            _corpus("vp8/encoder/*.c vp8/common/*.c", 16)
+            + " && ./vpxenc --codec=vp8 --i420 -w 1280 -h 720 --limit=6 --threads=4 --psnr"
+            " --end-usage=cbr --target-bitrate=300 --rt --cpu-used=8 -q -o /work/o.ivf /work/in"
+        ),
     ),
     Bug(
         fmt="tsan",
