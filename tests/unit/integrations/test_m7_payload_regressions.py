@@ -169,7 +169,11 @@ def test_an_unreadable_change_leaves_the_entry_as_written() -> None:
 def test_c15_survives_absurd_nesting_and_accepts_a_bom() -> None:
     url = "https://example.invalid/cve.json"
     deep = c15._read_cve(CVE, url, 200, b"[" * 100_000 + b"]" * 100_000)
-    assert deep.error is not None and "unreadable JSON" in deep.error
+    # Python <= 3.13 raises RecursionError while parsing; 3.14 parses the nesting and the
+    # result is then refused as a non-object. Either way the record is refused, never used.
+    assert deep.error is not None
+    assert "unreadable JSON" in deep.error or deep.error == "not a JSON object"
+    assert deep.state is None
     body = json.dumps(_record([])).encode("utf-8")
     bom = c15._read_cve(CVE, url, 200, b"\xef\xbb\xbf" + body)
     assert bom.error is None and bom.state == "PUBLISHED" and bom.products == ("libhdr",)
