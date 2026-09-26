@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-26
+
 ### Added
 
 - M5 sandbox reproduction: `nikasha repro` builds the project at the named ref in one

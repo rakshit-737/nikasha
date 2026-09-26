@@ -21,7 +21,7 @@ is no "AI detection" anywhere in it.
   <img alt="nikasha check on the fabricated_hdr_overflow demo fixture: verdict UNGROUNDED, grounding 0/100, the evidence table, and six questions for the reporter" src="docs/assets/terminal-check-ungrounded-light.svg" width="100%">
 </picture>
 
-> **Status: pre-release (`0.1.0.dev0`).** Everything shown on this page is a real run against
+> **Status: first release (`0.1.0`).** Everything shown on this page is a real run against
 > the bundled **vulnlab demo** (a fictional C library with a deliberately introduced heap
 > overflow), not against real reports. The early real-world gate (M3.5) has not run yet, so
 > Nikasha has **no accuracy numbers on real reports**, and this page makes no such claim.
