@@ -150,13 +150,23 @@ def _corpus(globs: str, times: int) -> str:
 
 
 _ZSTD = "https://github.com/facebook/zstd.git"
-_LZ4 = "https://github.com/lz4/lz4.git"
 _XZ = "https://github.com/tukaani-project/xz.git"
+_JQ = "https://github.com/jqlang/jq.git"
+_PIGZ = "https://github.com/madler/pigz.git"
 _ZSTD_CLI = "make -C programs zstd HAVE_ZLIB=0 HAVE_LZMA=0 HAVE_LZ4=0"
 _XZ_CMAKE = (
     "cmake -S . -B build -DBUILD_SHARED_LIBS=OFF -DXZ_NLS=OFF -DXZ_DOC=OFF"
     " -DXZ_TOOL_XZDEC=OFF -DXZ_TOOL_LZMADEC=OFF -DXZ_TOOL_LZMAINFO=OFF"
-    " -DXZ_TOOL_SCRIPTS=OFF && cmake --build build --target xz -j4"
+    " -DXZ_TOOL_SCRIPTS=OFF -DXZ_SANDBOX=no && cmake --build build --target xz -j4"
+)
+#: The exported tree has no .git (scripts/version needs one) and no submodule checkout, and
+#: automake insists that the conditional SUBDIRS entry modules/oniguruma exists even when
+#: Oniguruma is disabled, so an empty directory stands in for it.
+_JQ_BUILD = (
+    "printf '#!/bin/sh\\necho exported\\n' > scripts/version && mkdir -p modules/oniguruma"
+    " && autoreconf -i"
+    " && ./configure --with-oniguruma=no --disable-docs --disable-shared"
+    " && make -j4 jq"
 )
 #: The zlib MSan bug is a short-circuit branch on an uninitialised pointer. At -O1 clang may
 #: turn it into a select, which MSan does not report, so this one entry builds at -O0.
@@ -183,14 +193,14 @@ BUGS: tuple[Bug, ...] = (
     ),
     Bug(
         fmt="lsan",
-        name="02-lz4-dictionary-file",
-        repo=_LZ4,
-        vulnerable_tag="v1.8.1",
-        fixed_tag="v1.8.1.2",
-        fix_commit="fe66e78b96ff3b8b167f02aacbc7c0721b893611",
-        reference="https://github.com/lz4/lz4/commit/fe66e78b96ff3b8b167f02aacbc7c0721b893611",
-        build="make -C programs lz4",
-        run="./programs/lz4 -q -f -D lib/lz4.h lib/lz4.c /work/out.lz4",
+        name="02-jq-setpath-array-key",
+        repo=_JQ,
+        vulnerable_tag="jq-1.7.1",
+        fixed_tag="jq-1.8.0",
+        fix_commit="5bbd02f581dff4060815e4291b80a9316841195e",
+        reference="https://bugs.chromium.org/p/oss-fuzz/issues/detail?id=66061",
+        build=_JQ_BUILD,
+        run="./jq -n '[] | setpath([[1]]; 1)'",
     ),
     Bug(
         fmt="lsan",
@@ -210,17 +220,12 @@ BUGS: tuple[Bug, ...] = (
     Bug(
         fmt="msan",
         name="01-jq-check-literal",
-        repo="https://github.com/jqlang/jq.git",
+        repo=_JQ,
         vulnerable_tag="jq-1.7.1",
         fixed_tag="jq-1.8.0",
         fix_commit="96d19ca2eef4bed201c5b1175ed013bc3122a001",
         reference="https://github.com/jqlang/jq/issues/3316",
-        # scripts/version needs a .git directory, which an exported tree does not have.
-        build=(
-            "printf '#!/bin/sh\\necho exported\\n' > scripts/version && autoreconf -i"
-            " && ./configure --with-oniguruma=no --disable-docs --disable-shared"
-            " && make -j4 jq"
-        ),
+        build=_JQ_BUILD,
         run="printf n | ./jq .",
     ),
     Bug(
@@ -251,23 +256,28 @@ BUGS: tuple[Bug, ...] = (
             " && make -j4"
         ),
         run="./src/xz/xz --list --robot /work/missing.xz",
+        # MSan leaves check_printf off by default, so printf("%s") of the unwritten buffer
+        # is only checked with it on (the buffer is read inside the printf interceptor).
+        options="check_printf=1",
     ),
     # --- ThreadSanitizer -------------------------------------------------------------
     Bug(
         fmt="tsan",
-        name="01-zstd-mt-job-completion",
-        repo=_ZSTD,
-        vulnerable_tag="v1.3.5",
-        fixed_tag="v1.3.6",
-        fix_commit="7992942d6649df3bed2ce87dfb2d8889b60ce278",
-        reference="https://github.com/facebook/zstd/commit/7992942d6649df3bed2ce87dfb2d8889b60ce278",
-        build=_ZSTD_CLI,
-        run=_corpus("lib/*/*.c", 12) + " && ./programs/zstd -q -1 -T4 -c /work/in",
+        name="01-pigz-trace-after-twist",
+        repo=_PIGZ,
+        vulnerable_tag="v2.1.6",
+        fixed_tag="v2.1.7",
+        fix_commit="336772700edd0fb15322546e4905c913f2a55fd6",
+        reference="https://github.com/madler/pigz/commit/336772700edd0fb15322546e4905c913f2a55fd6",
+        # The tree's own `pigzt` debug target (-DDEBUG turns Trace() on), with the sanitizer
+        # flags; its Makefile rule hardcodes `cc -O3`, so the same command is spelled out.
+        build="$CC $CFLAGS -DDEBUG -o pigzt pigz.c yarn.c $LDFLAGS -lpthread -lz",
+        run=_corpus("pigz.c", 8) + " && ./pigzt -vv -p 4 -c /work/in",
     ),
     Bug(
         fmt="tsan",
         name="02-pigz-lock-order",
-        repo="https://github.com/madler/pigz.git",
+        repo=_PIGZ,
         vulnerable_tag="v2.4",
         fixed_tag="v2.5",
         fix_commit="1e847e68cc96f311b15bb091ce5b9b20d110e37f",

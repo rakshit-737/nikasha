@@ -72,19 +72,21 @@ yet.
 Each row was checked against a full clone of the upstream repository on 2026-09-26. Both
 tags exist, and the fix commit exists and is listed by `git rev-list <vulnerable>..<fixed>`
 (the capture script checks the same thing again before it builds anything). The code the
-fix changes was read at the vulnerable tag, to confirm the bug was in that release and was
-not added and fixed between two releases. Every project's licence allows building and
+fix changes was meant to be read at the vulnerable tag, to confirm the bug was in that
+release and was not added and fixed between two releases. The first catalogue got this wrong
+for one row (the zstd TSan bug, see "First capture run"); the capture's clean-at-fixed and
+report-at-vulnerable checks are what actually confirm each row. Every project's licence allows building and
 running it (BSD/GPLv2 dual, zlib, MIT, 0BSD or public domain).
 
 | Format | Project | Vulnerable → fixed | Fix commit | Public reference | Trigger (project's own program) |
 |---|---|---|---|---|---|
 | LSan | zstd | `v1.1.3` → `v1.1.4` | `2bb6fc2a944d30d0ec3ec18d3db0fc462cf06ccf` | [zstd#546](https://github.com/facebook/zstd/pull/546) | `examples/simple_compression` on a file: the output file name is never freed |
-| LSan | lz4 | `v1.8.1` → `v1.8.1.2` | `fe66e78b96ff3b8b167f02aacbc7c0721b893611` | [commit](https://github.com/lz4/lz4/commit/fe66e78b96ff3b8b167f02aacbc7c0721b893611) | `lz4 -D <dict>`: the dictionary `FILE` is never closed |
+| LSan | jq | `jq-1.7.1` → `jq-1.8.0` | `5bbd02f581dff4060815e4291b80a9316841195e` | [oss-fuzz 66061](https://bugs.chromium.org/p/oss-fuzz/issues/detail?id=66061) (the commit quotes the LSan report) | `jq -n '[] \| setpath([[1]]; 1)'`: `jv_setpath` never frees `subroot` when the set fails |
 | LSan | zstd | `v1.4.1` → `v1.4.2` | `793b94b3541de7535787b5ddebc555bc63d9bef3` | [zstd#1701](https://github.com/facebook/zstd/pull/1701) | `zstd -r` on a directory holding a symlink: the skipped path is never freed |
 | MSan | jq | `jq-1.7.1` → `jq-1.8.0` | `96d19ca2eef4bed201c5b1175ed013bc3122a001` | [jq#3316](https://github.com/jqlang/jq/issues/3316) (reported with an MSan trace) | `printf n \| jq .`: `check_literal` reads `tokenbuf[1]` |
 | MSan | zlib | `v1.2.8` → `v1.2.9` | `c901a34c92c4aa74028f541a9773df726ce2b769` | [commit](https://github.com/madler/zlib/commit/c901a34c92c4aa74028f541a9773df726ce2b769) | `minigzip < /dev/null`: `deflate()` tests the never-set `next_in` from `gzclose_w()` (built at `-O0`, see below) |
 | MSan | xz | `v5.2.3` → `v5.2.4` | `eb2ef4c79bf405ea0d215f3b1df3d0eaf5e1d27b` (5.2 backport of `a015cd1f`) | [commit](https://github.com/tukaani-project/xz/commit/eb2ef4c79bf405ea0d215f3b1df3d0eaf5e1d27b) | `xz --list --robot <missing file>`: the totals line prints an unwritten check-name buffer |
-| TSan | zstd | `v1.3.5` → `v1.3.6` | `7992942d6649df3bed2ce87dfb2d8889b60ce278` | [commit](https://github.com/facebook/zstd/commit/7992942d6649df3bed2ce87dfb2d8889b60ce278) ("fixed complex tsan issue") | `zstd -T4` on repeated tree sources: a worker reads `job->cSize` after publishing completion |
+| TSan | pigz | `v2.1.6` → `v2.1.7` | `336772700edd0fb15322546e4905c913f2a55fd6` | [commit](https://github.com/madler/pigz/commit/336772700edd0fb15322546e4905c913f2a55fd6) ("Fix thread synchronization problem when tracing") | the tree's `pigzt` debug build (`-DDEBUG`), `pigzt -vv -p 4` on repeated `pigz.c`: `compress_thread()` reads `job->seq` after `twist(job->calc)`, while the write thread frees `job` with no further synchronisation |
 | TSan | pigz | `v2.4` → `v2.5` | `1e847e68cc96f311b15bb091ce5b9b20d110e37f` | [commit](https://github.com/madler/pigz/commit/1e847e68cc96f311b15bb091ce5b9b20d110e37f) | `pigz -p 4` on repeated `pigz.c`: `get_space()` and `drop_space()` take the two locks in opposite orders (lock-order inversion) |
 | TSan | xz | `v5.8.3` → `v5.8.4` | `c6e3aadbb510e44cecfe870408ecfea1d1ca792c` | [xz#243](https://github.com/tukaani-project/xz/pull/243) (the commit says TSan reported it) | `xz -T4 -d` on a multi-block file made by `xz -T2`: `progress_in` is written without the mutex |
 
@@ -101,6 +103,31 @@ Candidates that were looked at and rejected, so nobody repeats the work:
   interceptors in an older toolchain, so they may not reproduce with the pinned clang.
 - pigz `b88a0e9`: the `--list` race is on the file offset, not on memory, so TSan does not
   see it.
+
+**First capture run (2026-09-26, CI, docker).** Four of nine captured. The five failures and
+what changed:
+
+- LSan lz4 `fe66e78b`: no report, and none is possible. The unclosed `FILE` stays reachable
+  from glibc's `_IO_list_all`, so LeakSanitizer does not count it. Replaced by jq `5bbd02f5`.
+- MSan jq: `automake` failed because `Makefile.am` names `modules/oniguruma` (a submodule,
+  absent from an exported tree) in a conditional `SUBDIRS`. The build now creates the empty
+  directory first; Oniguruma stays disabled. The LSan jq entry uses the same build.
+- MSan xz: no report because MSan turns `check_printf` off by default, and the unwritten
+  buffer is only read inside `printf("%s")`. The entry now sets `MSAN_OPTIONS=check_printf=1`.
+- TSan zstd `7992942d`: the vulnerable code is **not** in `v1.3.5`. There the last-block
+  stats do not set `job->consumed`; the fix's pre-image came from a commit made after
+  `v1.3.5`, so the bug was added and fixed between releases (the earlier check was wrong).
+  Replaced by pigz `33677270`, whose race needs no lucky timing: nothing orders the
+  worker's read after `twist()` before the writer's `free(job)`.
+- TSan xz: xz 5.8's CMake refuses `-fsanitize=` with Landlock on; it now passes
+  `-DXZ_SANDBOX=no`, as its error message asks. (The race itself is a main-thread write of
+  `coder->progress_in` without the mutex against the workers' locked writes, so it does
+  not depend on `-v`.)
+
+Rejected in this round: xz `be365b70` (`partial_update` race; `v5.8.1` → `v5.8.2`, but
+`v5.8.2` still has the `progress_in` race, so the fixed tag would not be clean); zstd
+`190a6209` (no release after the fix); lz4 `04374588` (multithreading was added after
+`v1.9.4`); pigz `189866f3` (a same-thread use-after-free, which TSan does not report).
 
 **Not yet verified (known only after a capture run):**
 
