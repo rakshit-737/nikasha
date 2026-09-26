@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - LSan, MSan and TSan traces are parsed (12 of 12 formats). Their parsers are registered
   now that real fixtures from nine already-fixed public bugs are committed (ADR 0009).
 
+### Changed
+
+- C19: a sandbox timeout on a report that claims a hang (a hang CWE such as CWE-835, or a
+  title saying hang, infinite loop, livelock, CPU exhaustion or timeout) is now NEUTRAL
+  `timeout_consistent_with_hang` (strength 0) instead of REFUTES `no_crash`. A timeout has
+  no signature to match, so it is never REPRODUCED. Other timeouts are unchanged.
+
 ### Fixed
 
 - A sanitizer frame with a file but no line (`in func /src/a.c`) no longer puts the path

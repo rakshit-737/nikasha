@@ -17,7 +17,12 @@ from typing import Any, cast
 from check_helpers import claim
 
 from nikasha.checks.base import CheckContext, is_refutable
-from nikasha.checks.c19_dynamic_repro import DynamicRepro, claimed_class, locus_function
+from nikasha.checks.c19_dynamic_repro import (
+    DynamicRepro,
+    claimed_class,
+    claims_hang,
+    locus_function,
+)
 from nikasha.extract.pipeline import extract_claims
 from nikasha.ingest import ingest_string
 from nikasha.model.claims import BehaviorClaim, Claim, ImpactClaim, PocClaim, SymbolClaim
@@ -350,3 +355,52 @@ def test_truncated_run_is_said_in_details() -> None:
     assert ev.details["run"]["truncated"] is True
     assert "truncated" in ev.details["truncated_note"]
     assert "truncated" in ev.summary
+
+
+def _hang_ctx(title: str | None, claims: tuple[Claim, ...], repro: ReproRun) -> CheckContext:
+    return cast(
+        CheckContext,
+        SimpleNamespace(
+            report=SimpleNamespace(title=title), claims=claims, repro=repro, expired=lambda: False
+        ),
+    )
+
+
+def test_timeout_on_a_claimed_hang_is_neutral_never_reproduced() -> None:
+    sym = _sym("parse_chunk")
+    ctx = _hang_ctx("Infinite loop in parse_chunk on a zero-length chunk", (sym,), clean(True))
+    ev = only(DynamicRepro().run(ctx, (sym,)))
+    assert ev.outcome == "NEUTRAL" and ev.strength == 0.0
+    assert ev.details["outcome"] == "timeout_consistent_with_hang"
+    assert "never REPRODUCED" in ev.details["timeout_note"]
+    assert "withheld_strength" not in ev.details
+
+
+def test_timeout_on_a_hang_cwe_is_neutral() -> None:
+    impact = claim(ImpactClaim, "CWE-835", cwe="CWE-835")
+    sym = _sym("parse_chunk")
+    ev = only(DynamicRepro().run(_hang_ctx(None, (impact, sym), clean(True)), (impact, sym)))
+    assert ev.details["outcome"] == "timeout_consistent_with_hang" and ev.strength == 0.0
+
+
+def test_timeout_without_a_hang_claim_stays_no_crash() -> None:
+    sym = _sym("parse_chunk")
+    ctx = _hang_ctx("Heap buffer overflow in parse_chunk", (sym,), clean(True))
+    ev = only(DynamicRepro().run(ctx, (sym,)))
+    assert ev.outcome == "REFUTES" and ev.details["outcome"] == "no_crash"
+    assert ev.strength == -0.5
+
+
+def test_clean_exit_on_a_claimed_hang_stays_no_crash() -> None:
+    sym = _sym("parse_chunk")
+    ev = only(DynamicRepro().run(_hang_ctx("parse_chunk hangs forever", (sym,), clean()), (sym,)))
+    assert ev.details["outcome"] == "no_crash"
+
+
+def test_claims_hang_words_and_negated_cwe() -> None:
+    assert claims_hang((), "CPU exhaustion via crafted header")
+    assert claims_hang((), "livelock in the scheduler")
+    assert not claims_hang((), "use-after-free in the scheduler")
+    assert not claims_hang((), None)
+    negated = claim(ImpactClaim, "not CWE-835", cwe="CWE-835", negated=True)
+    assert not claims_hang((negated,), None)

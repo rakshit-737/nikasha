@@ -414,6 +414,7 @@ Applies to: `behavior`, `impact`, `poc`, `symbol`, `trace`
 | `no_crash` | -0.50 |
 | `signature_match` | +6.00 |
 | `timeout` | — (not scored) |
+| `timeout_consistent_with_hang` | — (not scored) |
 
 ## C20
 

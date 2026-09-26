@@ -7,7 +7,11 @@ attaches its result to the context as ``ctx.repro``; without one, C19 produces n
 ``ctx.repro`` is either a :class:`~nikasha.repro.run.ReproRun` (the PoC ran) or a
 :class:`~nikasha.repro.signature.ReproFailure` (build or infrastructure failure).
 
-A ``ReproRun`` is read as follows. A timeout or exit status 0 is ``no_crash``; exit status
+A ``ReproRun`` is read as follows. Exit status 0 is ``no_crash``. A timeout is ``no_crash``
+too, unless the report claims a hang (:func:`claims_hang`: a hang CWE such as CWE-835, or a
+title saying hang, infinite loop, livelock, CPU exhaustion or timeout); then it is
+``timeout_consistent_with_hang`` (NEUTRAL, no strength). A timeout carries no signature to
+match, so it is never REPRODUCED, and it does not weaken a report that predicts it. Exit status
 125-127 (the engine could not start the command) is an infrastructure ``ERROR``. Any other
 status is a crash, and it is compared only if it can be attributed to the target:
 
@@ -35,6 +39,7 @@ Outcomes and strengths (``lr_defaults.yaml``, row C19):
   refuted), so it cites only the refutable (project-attributed, non-negated) trace and
   core-symbol claims, which are what a non-crash weakens; with none, it is informational
   (NEUTRAL, strength withheld);
+* ``timeout_consistent_with_hang`` (0.0): NEUTRAL, see above;
 * build or infrastructure failure: ``ERROR``, no strength;
 * ``crash_unparsed``, ``crash_uncompared``, ``crash_unattributed``,
   ``crash_not_in_project``, ``harness_unverified``: NEUTRAL, no strength.
@@ -49,6 +54,7 @@ A truncated run (stdout/stderr hit the recipe's output cap) is said so in ``deta
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from typing import Any
 
@@ -99,6 +105,31 @@ _UNATTESTED_KINDS: frozenset[str] = frozenset({"c_harness"})
 #: Outcomes that carry a strength from lr_defaults.yaml; everything else scores 0.
 _SCORED: frozenset[str] = frozenset({"signature_match", "different_signature", "no_crash"})
 
+#: CWEs whose expected symptom is a hang, not a crash (loops, livelock, resource exhaustion).
+_HANG_CWES: frozenset[str] = frozenset(
+    {
+        "CWE-400",
+        "CWE-405",
+        "CWE-407",
+        "CWE-606",
+        "CWE-770",
+        "CWE-833",
+        "CWE-834",
+        "CWE-835",
+        "CWE-1333",
+    }
+)
+#: Title words that claim a hang. Bounded alternation only, so matching is linear (P7).
+_HANG_TITLE_RE = re.compile(
+    r"\b(?:hangs?|hanging|hung|infinite[ -]loop|endless[ -]loop|livelocks?|dead ?locks?"
+    r"|cpu[ -](?:exhaustion|consumption|spin)|100% cpu|time ?outs?|timed[ -]out)\b",
+    re.IGNORECASE,
+)
+_HANG_DETAIL = (
+    "a timeout cannot be matched to a crash signature, so it is never REPRODUCED; it is"
+    " consistent with the claimed hang and does not weaken the report"
+)
+
 _TRUNCATED_NOTE = (
     "output truncated at the recipe's output limit; the crash report may be incomplete"
 )
@@ -124,6 +155,18 @@ def claimed_class(claims: Sequence[Claim], title: str | None) -> str | None:
             if mapped:
                 return mapped
     return bug_class_of_text(title, prose=True)
+
+
+def claims_hang(claims: Sequence[Claim], title: str | None) -> bool:
+    """Whether the report claims a hang: a non-negated hang CWE, or a hang word in the title."""
+    for claim in claims:
+        if (
+            isinstance(claim, ImpactClaim)
+            and not claim.negated
+            and (claim.cwe or "").strip().upper() in _HANG_CWES
+        ):
+            return True
+    return bool(title and _HANG_TITLE_RE.search(title[:1000]))
 
 
 def locus_function(claims: Sequence[Claim]) -> tuple[str | None, list[ClaimBase]]:
@@ -207,6 +250,15 @@ class DynamicRepro(BaseCheck):
             "timed_out": repro.timed_out,
             "truncated": repro.truncated,
         }
+        if repro.timed_out and claims_hang(claims, ctx.report.title):
+            details["timeout_note"] = _HANG_DETAIL
+            return (
+                "NEUTRAL",
+                "timeout_consistent_with_hang",
+                "the PoC ran until the time limit, consistent with the claimed hang; "
+                + _HANG_DETAIL,
+                cited,
+            )
         if repro.timed_out or repro.exit_code == 0:
             return self._no_crash(repro, claims, details)
         if repro.exit_code in _ENGINE_FAILURES:
