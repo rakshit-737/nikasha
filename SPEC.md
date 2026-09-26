@@ -35,8 +35,7 @@ Facts gathered on 2026-09-22 (sources in Appendix A.1):
 - **JFrog (2026-07-30) found 54 of 55 advisories from one GitHub account were fabricated.** They included two SQLite CVEs rated CVSS 9.8 (CVE-2026-51302 and CVE-2026-51303). JFrog checked them *by hand*: the cited functions didn't exist in the claimed versions, and they re-ran the PoCs under ASan.
 - **The Register (2026-08-03)** reported that MITRE rejected the whole set. It quotes JFrog: *"no step in today's system actually requires a proof-of-concept or bug reproduction."*
 - **An academic survey (arXiv 2608.25667, UNSW, 2026-08-26)** on AI slop and hallucinations in vulnerability assessment found that *"not a single study provides execution-level validation of claims in LLM outputs."* It lists no existing tool that detects or verifies slop reports.
-- **Alpha-Omega's guidance for AI-assisted bug finders (2026-04-30)** tells *reporters* to "verify file paths, function names, line numbers and affected versions against the real source". It names no tool that does this.
-- **The Linux Foundation, via Alpha-Omega and OpenSSF (2026-03-17),** put $12.5M toward helping maintainers cope with AI-generated reports.
+- **The Register (2026-03-18)** reported that Anthropic, AWS, GitHub, Google, Microsoft and OpenAI gave $12.5M in grants to a Linux Foundation effort, run by Alpha-Omega alongside OpenSSF, to help open source maintainers cope with AI slop bug reports.
 - **Bug bounty platforms report record volume.** HackerOne says submissions are up more than 100% since February 2026. Bugcrowd says its queues rose 334% in three weeks. (These figures come from vendor marketing pages; treat them as lower confidence.)
 
 ### 0.2 Prior art and positioning (re-verify in M0 and before launch)
@@ -1263,7 +1262,7 @@ The **report author**, who controls the text, attachments and PoC. The **reposit
 10. **PramaanBench results:** a table and chart with the date, commit and dataset sizes, plus a link to the dataset card.
 11. **How it works:** a mermaid diagram, the principles (a condensed P1–P8), and safety and privacy.
 12. **Comparison:** the §0.2 table, re-verified, factual and respectful.
-13. **Closing sections:** Roadmap, Contributing, Security, Citation, License (code Apache-2.0, docs CC-BY-4.0), and Acknowledgements (the curl maintainers' public list, JFrog's research, OpenSSF/Alpha-Omega guidance, tree-sitter, Rich).
+13. **Closing sections:** Roadmap, Contributing, Security, Citation, License (code Apache-2.0, docs CC-BY-4.0), and Acknowledgements (the curl maintainers' public list, JFrog's research, OpenSSF and Alpha-Omega, tree-sitter, Rich).
 
 Use relative links and alt text on every image. After pushing, **check how the README renders on GitHub** by opening the page, and fix anything broken.
 
@@ -1433,7 +1432,7 @@ It must cover:
 - JFrog, "SQLite Critical CVEs or LLM Slop?" (2026-07-30): https://research.jfrog.com/post/sqlite-critical-cves-or-llm-slops/
 - The Register (2026-08-03): https://www.theregister.com/security/2026/08/03/ai-slop-pollutes-the-cve-pipeline-with-fake-vulns/5282462
 - The Register (2026-03-18), LF $12.5M: https://www.theregister.com/software/2026/03/18/linux-foundation-wants-to-shield-foss-devs-from-ai-bug-slop/5229856
-- Alpha-Omega (funding announcement, AI-finder guide, Scrutineer): https://alpha-omega.dev/ and https://github.com/alpha-omega-security/scrutineer
+- Alpha-Omega (project home, Scrutineer): https://alpha-omega.dev/ and https://github.com/alpha-omega-security/scrutineer
 - Survey, "AI Slop and Hallucinations in Vulnerability Assessment" (2026-08-26): https://arxiv.org/abs/2608.25667
 - AnyPoC: https://arxiv.org/abs/2604.11950
 - CVE-Genie: https://arxiv.org/abs/2509.01835
