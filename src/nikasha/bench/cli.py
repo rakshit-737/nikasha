@@ -10,6 +10,7 @@ from typing import Annotated
 
 import typer
 
+from nikasha.bench import cvelist
 from nikasha.bench.calibrate import calibrate, write_calibration
 from nikasha.bench.charts import ChartsUnavailableError, render_charts
 from nikasha.bench.gate import compute as gate_compute
@@ -52,11 +53,15 @@ def run(
         Path | None,
         typer.Option(help="Cache of fetched HackerOne reports (from `bench fetch-h1`)."),
     ] = None,
+    cvelist_cache: Annotated[
+        Path | None,
+        typer.Option(help="Cache of pinned cvelistV5 records (from `bench fetch-cvelist`)."),
+    ] = None,
 ) -> None:
     """Run the static checks over a split and write results, metrics and RESULTS.md."""
     check_date(date)
     selected = for_split(load_manifests(manifests), split)
-    cases, skipped = collect_cases(selected, root, h1_cache=h1_cache)
+    cases, skipped = collect_cases(selected, root, h1_cache=h1_cache, cvelist_cache=cvelist_cache)
     reproducer = None
     if repro:  # the only path to a container; a static run never probes for an engine
         from nikasha.bench.repro import Reproducer, select_engine  # noqa: PLC0415
@@ -154,6 +159,34 @@ def fetch_h1_command(
     )
     for rid, reason in sorted(summary.dropped.items(), key=lambda kv: int(kv[0])):
         typer.echo(f"dropped {rid}: {reason}", err=True)
+
+
+@bench_app.command("fetch-cvelist")
+def fetch_cvelist_command(
+    *,
+    online: Annotated[bool, typer.Option("--online", help="Allow network access.")] = False,
+    split: Annotated[str, typer.Option(help="real, synthetic or all.")] = "real",
+    manifests: Annotated[Path, typer.Option(help="Manifest directory.")] = MANIFEST_DIR,
+    cache: Annotated[Path, typer.Option(help="Gitignored record cache.")] = cvelist.DEFAULT_CACHE,
+) -> None:
+    """Fetch the cvelistV5 records the manifests pin to a commit (ADR 0011 addendum)."""
+    pins = [
+        (e.cve_id, e.cvelist_commit)
+        for m in for_split(load_manifests(manifests), split)
+        for e in m.entries
+        if e.cve_id is not None and e.cvelist_commit is not None
+    ]
+    try:
+        summary = cvelist.fetch_records(pins, cache, online=online)
+    except NikashaError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(1) from None
+    typer.echo(
+        f"{len(summary.fetched)} fetched, {len(summary.cached)} already cached, "
+        f"{len(summary.dropped)} dropped; cache {cache}."
+    )
+    for key, reason in sorted(summary.dropped.items()):
+        typer.echo(f"dropped {key}: {reason}", err=True)
 
 
 @bench_app.command("gate")

@@ -41,6 +41,8 @@ _ID = re.compile(r"[a-z0-9][a-z0-9._-]{0,79}")
 _URL = re.compile(r"https://[A-Za-z0-9.-]{1,253}(?:/[^\s]{0,2000})?")
 NOTES_MAX = 200
 _MUTATION = re.compile(r"M[1-7]")
+_CVE_ID = re.compile(r"CVE-[0-9]{4}-[0-9]{4,7}")
+_COMMIT = re.compile(r"[0-9a-f]{40}")
 
 
 class ManifestError(NikashaError):
@@ -52,13 +54,21 @@ class _Frozen(BaseModel):
 
 
 class Entry(_Frozen):
-    """One labelled report. Exactly one of ``path`` (local fixture) or ``url`` is set."""
+    """One labelled report, with exactly one locator.
+
+    The locator is a ``path`` (local fixture), a ``url``, or a cvelistV5 record pinned to a
+    commit: ``cve_id`` plus ``cvelist_commit`` (both or neither). The pinned form names a
+    record as it stood at that commit, for example before it was rejected (ADR 0011
+    addendum); only the ID and the SHA are committed, the JSON is fetched into the cache.
+    """
 
     id: str
     label: Label
     expected: Expected | None = None
     path: str | None = None
     url: str | None = None
+    cve_id: str | None = None
+    cvelist_commit: str | None = None
     repo: str | None = None
     version: str | None = None
     #: Optional ``bench run --repro`` inputs: a repository-relative PoC file or directory and
@@ -102,6 +112,20 @@ class Entry(_Frozen):
             raise ValueError(f"url must be https: {value!r}")
         return value
 
+    @field_validator("cve_id")
+    @classmethod
+    def _check_cve_id(cls, value: str | None) -> str | None:
+        if value is not None and not _CVE_ID.fullmatch(value):
+            raise ValueError(f"cve_id must look like CVE-YYYY-NNNN: {value!r}")
+        return value
+
+    @field_validator("cvelist_commit")
+    @classmethod
+    def _check_commit(cls, value: str | None) -> str | None:
+        if value is not None and not _COMMIT.fullmatch(value):
+            raise ValueError(f"cvelist_commit must be a full lowercase SHA-1: {value!r}")
+        return value
+
     @field_validator("recipe")
     @classmethod
     def _check_recipe(cls, value: str | None) -> str | None:
@@ -111,8 +135,11 @@ class Entry(_Frozen):
 
     @model_validator(mode="after")
     def _one_locator(self) -> Entry:
-        if (self.path is None) == (self.url is None):
-            raise ValueError(f"{self.id}: set exactly one of 'path' or 'url'")
+        if (self.cve_id is None) != (self.cvelist_commit is None):
+            raise ValueError(f"{self.id}: 'cve_id' and 'cvelist_commit' go together")
+        locators = [self.path, self.url, self.cve_id]
+        if sum(x is not None for x in locators) != 1:
+            raise ValueError(f"{self.id}: set exactly one of 'path', 'url' or 'cve_id'")
         if (self.poc is None) != (self.recipe is None):
             raise ValueError(f"{self.id}: 'poc' and 'recipe' go together")
         if self.poc is not None and self.version is None:
@@ -184,7 +211,7 @@ class Manifest(_Frozen):
         ids = [e.id for e in self.entries] + [x.id for x in self.excluded]
         if len(ids) != len(set(ids)):
             raise ValueError(f"{self.source}: duplicate entry or excluded ids")
-        remote = [e.id for e in self.entries if e.url is not None]
+        remote = [e.id for e in self.entries if e.path is None]
         if remote and not self.terms_checked:
             raise ValueError(
                 f"{self.source}: remote entries {remote[:3]} need terms_checked: true first"

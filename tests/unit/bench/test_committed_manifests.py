@@ -18,12 +18,17 @@ def _by_source() -> dict[str, Manifest]:
     return {m.source: m for m in load_manifests(ROOT / MANIFEST_DIR)}
 
 
-def test_s3_records_every_blanked_rejected_cve_as_an_exclusion() -> None:
+def test_s3_pins_every_rejected_cve_to_its_pre_rejection_commit() -> None:
     s3 = _by_source()["S3"]
-    assert s3.entries == ()
-    ids = {x.id for x in s3.excluded}
+    assert s3.excluded == ()
+    ids = {e.id for e in s3.entries}
     assert ids == {f"cve-2026-{n}" for n in (51296, 51297, 51300, 51302, 51303, 51304)}
-    assert all("REJECTED" in x.reason for x in s3.excluded)
+    for entry in s3.entries:
+        assert entry.label == "fabricated"
+        assert entry.cve_id == entry.id.upper()
+        assert entry.cvelist_commit is not None
+        # Never the rejection commit itself (ADR 0011 addendum).
+        assert not entry.cvelist_commit.startswith("6a1b7cf5")
 
 
 def test_s4_is_empty_because_the_dataset_has_no_license() -> None:

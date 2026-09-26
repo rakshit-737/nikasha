@@ -28,16 +28,20 @@ def test_committed_manifests_load_and_split() -> None:
     assert len(for_split(manifests, "all")) == 6
 
 
-def test_real_sources_hold_only_hackerone_ids_after_terms_check() -> None:
-    # ADR 0011: S1/S2 carry the slopcheck curl index (IDs, URLs, labels); S3/S4 stay empty.
+def test_real_sources_hold_only_ids_after_terms_check() -> None:
+    # ADR 0011: S1/S2 carry the slopcheck curl index (IDs, URLs, labels); S3 pins six
+    # cvelistV5 records by commit (addendum); S4 stays empty.
     counts = {}
     for manifest in for_split(load_manifests(MANIFESTS), "real"):
         counts[manifest.source] = len(manifest.entries)
         for entry in manifest.entries:
             assert manifest.terms_checked is True
             assert entry.path is None
-            assert entry.url == "https://hackerone.com/reports/" + entry.id.removeprefix("h1-")
-    assert counts == {"S1": 49, "S2": 126, "S3": 0, "S4": 0}
+            if manifest.source == "S3":
+                assert entry.url is None and entry.cvelist_commit is not None
+            else:
+                assert entry.url == "https://hackerone.com/reports/" + entry.id.removeprefix("h1-")
+    assert counts == {"S1": 49, "S2": 126, "S3": 6, "S4": 0}
     s1 = next(m for m in load_manifests(MANIFESTS) if m.source == "S1")
     assert {e.label for e in s1.entries} == {"fabricated"}
 

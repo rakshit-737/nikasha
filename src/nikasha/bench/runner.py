@@ -5,7 +5,11 @@
 Outputs, under ``<out>/<date>/``:
 
 * ``results.jsonl``: one record per case, sorted by id, keys sorted, evidence sorted by
-  (check, outcome, group, strength). Everything except ``timing`` is meant to be a pure
+  (check, outcome, group, strength). Each evidence item also names its claim
+  (``kind:label``), a capped summary and its first code location (``path:start-end@commit``)
+  so a hand-check worksheet can be filled without re-running the case. These fields can
+  echo report-derived tokens (a symbol or path the report named), so results stay in the
+  gitignored ``bench/results/`` directory. Everything except ``timing`` is meant to be a pure
   function of the inputs, with one known limit: C10 stops at a wall-clock scan budget, so
   a machine too slow to score every release in time gets different C10 evidence (and in
   principle a verdict). A finished scan no longer flips on timing (fixed in C10).
@@ -23,11 +27,12 @@ import json
 import re
 import tempfile
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from nikasha.bench import cvelist
 from nikasha.bench import metrics as bench_metrics
 from nikasha.bench.h1corpus import load_cached, report_id_from_url
 from nikasha.bench.manifests import Manifest
@@ -36,6 +41,7 @@ from nikasha.bench.repro import Reproducer
 from nikasha.errors import NikashaError
 from nikasha.fuse.scoring import fuse
 from nikasha.fuse.verdict import decide
+from nikasha.model.evidence import Evidence
 
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
@@ -61,13 +67,18 @@ class Case:
 
 
 def collect_cases(
-    manifests: Sequence[Manifest], root: Path, *, h1_cache: Path | None = None
+    manifests: Sequence[Manifest],
+    root: Path,
+    *,
+    h1_cache: Path | None = None,
+    cvelist_cache: Path | None = None,
 ) -> tuple[tuple[Case, ...], tuple[str, ...]]:
     """Cases for every local entry and generator; the ids of skipped remote entries.
 
     A remote HackerOne entry becomes a case only when ``h1_cache`` is given and holds its
     text (fetched earlier by ``nikasha bench fetch-h1 --online``, ADR 0011); otherwise it
-    is skipped. Nothing is fetched here.
+    is skipped. A pinned cvelistV5 entry (``cve_id`` + ``cvelist_commit``) likewise needs
+    ``cvelist_cache`` (``nikasha bench fetch-cvelist --online``). Nothing is fetched here.
     """
     cases: list[Case] = []
     skipped: list[str] = []
@@ -79,6 +90,12 @@ def collect_cases(
                 cached = None
                 if h1_cache is not None and rid is not None:
                     cached = load_cached(h1_cache, rid)
+                if (
+                    cvelist_cache is not None
+                    and entry.cve_id is not None
+                    and entry.cvelist_commit is not None
+                ):
+                    cached = cvelist.load_cached(cvelist_cache, entry.cve_id, entry.cvelist_commit)
                 if cached is None:
                     skipped.append(entry.id)
                     continue
@@ -179,6 +196,7 @@ def run_case(
     else:
         verdict = checked.verdict
         evidence = list(checked.evidence)
+        claims_by_id = {c.id: c for c in checked.claims}
         ablated: dict[str, str] = {}
         for check in sorted({e.check_id for e in evidence}):
             kept = [e for e in evidence if e.check_id != check]
@@ -189,15 +207,7 @@ def run_case(
             rule=verdict.rule,
             error=None,
             evidence=sorted(
-                (
-                    {
-                        "check": e.check_id,
-                        "outcome": e.outcome,
-                        "strength": e.strength,
-                        "group": e.group,
-                    }
-                    for e in evidence
-                ),
+                (evidence_record(e, claims_by_id) for e in evidence),
                 key=_evidence_key,
             ),
             ablation=ablated,
@@ -206,6 +216,51 @@ def run_case(
         report_path.unlink(missing_ok=True)
     record["timing"] = {"seconds": round(time.perf_counter() - started, 4)}
     return record
+
+
+#: Cap on the claim label and summary stored per evidence item.
+MAX_FIELD_CHARS = 200
+_LABEL_FIELDS = ("name", "path", "token", "raw", "url")
+
+
+def _cap(text: str) -> str:
+    one_line = " ".join(text.split())
+    if len(one_line) <= MAX_FIELD_CHARS:
+        return one_line
+    return one_line[: MAX_FIELD_CHARS - 3] + "..."
+
+
+def claim_label(claim: object) -> str:
+    """``kind:label`` for a claim (``symbol:Curl_foo``), or just ``kind`` with no label field."""
+    kind = str(getattr(claim, "kind", "claim"))
+    for name in _LABEL_FIELDS:
+        value = getattr(claim, name, None)
+        if isinstance(value, str) and value:
+            return _cap(f"{kind}:{value}")
+    return kind
+
+
+def evidence_record(e: Evidence, claims_by_id: Mapping[str, object]) -> dict[str, Any]:
+    """One evidence item as stored in ``results.jsonl``."""
+    claims = [claim_label(claims_by_id[c]) for c in e.claim_ids if c in claims_by_id]
+    location = None
+    if e.locations:
+        loc = e.locations[0]
+        lines = (
+            f"{loc.start_line}"
+            if loc.start_line == loc.end_line
+            else (f"{loc.start_line}-{loc.end_line}")
+        )
+        location = f"{loc.path}:{lines}@{loc.commit[:12]}"
+    return {
+        "check": e.check_id,
+        "outcome": e.outcome,
+        "strength": e.strength,
+        "group": e.group,
+        "claim": "; ".join(claims) or None,
+        "summary": _cap(e.summary) or None,
+        "location": location,
+    }
 
 
 def _evidence_key(item: dict[str, Any]) -> tuple[str, str, str, float]:

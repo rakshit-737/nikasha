@@ -31,9 +31,10 @@ MANIFESTS = ROOT / "bench" / "manifests"
 
 def test_committed_manifests_give_47_offline_cases() -> None:
     cases, skipped = collect_cases(load_manifests(MANIFESTS), ROOT)
-    # The 175 remote HackerOne entries (ADR 0011) are skipped without a cache.
-    assert len(skipped) == 49 + 126
-    assert all(s.startswith("h1-") for s in skipped)
+    # The 175 remote HackerOne entries (ADR 0011) and the six pinned cvelistV5 records
+    # (addendum) are skipped without a cache.
+    assert len(skipped) == 49 + 126 + 6
+    assert all(s.startswith(("h1-", "cve-")) for s in skipped)
     assert len(cases) == 5 + 2 * 7 * 3
     ids = [c.id for c in cases]
     assert ids == sorted(ids)
@@ -222,3 +223,60 @@ def test_c10_budget_expiring_after_the_last_release_keeps_the_scan_complete(
     monkeypatch.setattr(c10, "analyze_trace", counting)
     monkeypatch.setattr(CheckContext, "expired", lambda self: scored["n"] >= 5)
     assert c10_evidence("clock-late") == baseline
+
+
+def test_evidence_record_names_claim_summary_and_location() -> None:
+    from nikasha.bench.runner import MAX_FIELD_CHARS, claim_label, evidence_record  # noqa: PLC0415
+    from nikasha.model.evidence import CodeLocation, Evidence  # noqa: PLC0415
+
+    class _Sym:
+        kind = "symbol"
+        name = "Curl_parse"
+
+    class _Bare:
+        kind = "impact"
+
+    loc = CodeLocation(repo="r", commit="a" * 40, path="lib/url.c", start_line=5, end_line=9)
+    ev = Evidence(
+        id="e1",
+        check_id="C02",
+        claim_ids=("c1", "c2", "gone"),
+        outcome="REFUTES",
+        strength=-2.0,
+        group="locus",
+        summary="x " * 300,
+        locations=(loc,),
+    )
+    rec = evidence_record(ev, {"c1": _Sym(), "c2": _Bare()})
+    assert rec["claim"] == "symbol:Curl_parse; impact"
+    assert rec["location"] == "lib/url.c:5-9@aaaaaaaaaaaa"
+    assert len(rec["summary"]) == MAX_FIELD_CHARS and rec["summary"].endswith("...")
+    assert (rec["check"], rec["outcome"], rec["strength"], rec["group"]) == (
+        "C02",
+        "REFUTES",
+        -2.0,
+        "locus",
+    )
+    bare = evidence_record(ev.model_copy(update={"locations": (), "claim_ids": ()}), {})
+    assert bare["claim"] is None and bare["location"] is None
+    assert claim_label(_Bare()) == "impact"
+
+
+def test_handcheck_worksheet_reads_the_new_fields() -> None:
+    import importlib.util  # noqa: PLC0415
+    import sys  # noqa: PLC0415
+
+    path = ROOT / "scripts" / "handcheck_sample.py"
+    spec = importlib.util.spec_from_file_location("handcheck_sample_rt", path)
+    assert spec is not None and spec.loader is not None
+    hs = importlib.util.module_from_spec(spec)
+    sys.modules["handcheck_sample_rt"] = hs
+    spec.loader.exec_module(hs)
+    ev = {"check": "C02", "outcome": "REFUTES", "strength": -2.0, "group": "locus"}
+    ev |= {"claim": "symbol:f", "summary": "f is absent", "location": "a.c:1@abc"}
+    got = hs.load_refutes([json.dumps({"id": "h1-1", "evidence": [ev]})])
+    assert (got[0].claim, got[0].summary, got[0].location) == (
+        "symbol:f",
+        "f is absent",
+        "a.c:1@abc",
+    )

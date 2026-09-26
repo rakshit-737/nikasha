@@ -3,30 +3,58 @@
 #
 # S3 (SPEC 17.2): the CVE IDs from JFrog Security Research, "SQLite Critical CVEs or LLM
 # Slop?" (https://research.jfrog.com/post/sqlite-critical-cves-or-llm-slops/, published
-# 2026-07-30), with content to come from cvelistV5. IDs and reasons only; never record text.
+# 2026-07-30), with content to come from cvelistV5. IDs, commits and labels only; never record text.
 #
-# Checked 2026-09-26: the post names six SQLite CVEs. All six are REJECTED in cvelistV5
-# (https://github.com/CVEProject/cvelistV5, cves/2026/51xxx/, rejected 2026-07-31) and their
-# records hold only the standard "DO NOT USE THIS CVE RECORD" rejection text: no affected
-# versions, no description, no references. SPEC 17.2 says to exclude such blanked records
-# and document the exclusion, so this split has no checkable entries today. The post also
-# mentions a wider batch of about 55 advisories from the same account, but names no other
-# IDs, so nothing else is listed here. The pre-rejection text still exists in cvelistV5's
-# git history; using it would need a maintainer decision (it is not the current record).
+# The post names six SQLite CVEs. All six were REJECTED in cvelistV5 on 2026-07-31 (commit
+# 6a1b7cf5), and the current records hold only the "DO NOT USE THIS CVE RECORD" text. Their
+# pre-rejection records still exist in cvelistV5's git history, and the maintainer decided
+# (2026-09-26, ADR 0011 addendum) that S3 uses them: each entry is pinned to the last commit
+# that touched its file before the rejection. The post mentions about 55 more advisories from
+# the same account but names no other IDs. Only the ID and commit SHA are committed; the JSON
+# is fetched by `nikasha bench fetch-cvelist --online` into the gitignored bench/cache/.
 source: S3
-title: "Fabricated CVE records (JFrog analysis; content from cvelistV5)"
+title: "Fabricated CVE records (JFrog analysis; pre-rejection content from cvelistV5)"
 terms_checked: true
-entries: []
-excluded:
+entries:
   - id: cve-2026-51296
-    reason: "REJECTED 2026-07-31 in cvelistV5; record content blanked (SPEC 17.2 exclusion)"
+    label: fabricated
+    cve_id: CVE-2026-51296
+    cvelist_commit: f135a3eefb271ec646bff9a246bc5fe22f8d215d
+    repo: https://github.com/sqlite/sqlite
+    version: "3.41.0"
+    notes: "pre-rejection record; rejected 2026-07-31 in cvelistV5 commit 6a1b7cf5"
   - id: cve-2026-51297
-    reason: "REJECTED 2026-07-31 in cvelistV5; record content blanked (SPEC 17.2 exclusion)"
+    label: fabricated
+    cve_id: CVE-2026-51297
+    cvelist_commit: 1930d8e9c9119e24dda550971a0deb081f5af159
+    repo: https://github.com/sqlite/sqlite
+    version: "3.41.0"
+    notes: "pre-rejection record; rejected 2026-07-31 in cvelistV5 commit 6a1b7cf5"
   - id: cve-2026-51300
-    reason: "REJECTED 2026-07-31 in cvelistV5; record content blanked (SPEC 17.2 exclusion)"
+    label: fabricated
+    cve_id: CVE-2026-51300
+    cvelist_commit: 23afcbea3d0296d86b6534c38bdebd885fda64fc
+    repo: https://github.com/sqlite/sqlite
+    version: "3.41.0"
+    notes: "pre-rejection record; rejected 2026-07-31 in cvelistV5 commit 6a1b7cf5"
   - id: cve-2026-51302
-    reason: "REJECTED 2026-07-31 in cvelistV5; record content blanked (SPEC 17.2 exclusion)"
+    label: fabricated
+    cve_id: CVE-2026-51302
+    cvelist_commit: 0f45b1e19c9c8b07565434aa7b182c035776032c
+    repo: https://github.com/sqlite/sqlite
+    version: "3.41.0"
+    notes: "pre-rejection record; rejected 2026-07-31 in cvelistV5 commit 6a1b7cf5"
   - id: cve-2026-51303
-    reason: "REJECTED 2026-07-31 in cvelistV5; record content blanked (SPEC 17.2 exclusion)"
+    label: fabricated
+    cve_id: CVE-2026-51303
+    cvelist_commit: 1930d8e9c9119e24dda550971a0deb081f5af159
+    repo: https://github.com/sqlite/sqlite
+    version: "3.41.0"
+    notes: "pre-rejection record; rejected 2026-07-31 in cvelistV5 commit 6a1b7cf5"
   - id: cve-2026-51304
-    reason: "REJECTED 2026-07-31 in cvelistV5; record content blanked (SPEC 17.2 exclusion)"
+    label: fabricated
+    cve_id: CVE-2026-51304
+    cvelist_commit: cc838d0e5ff34a3026c5292897b23b79aee8bacf
+    repo: https://github.com/sqlite/sqlite
+    version: "3.41.0"
+    notes: "pre-rejection record; rejected 2026-07-31 in cvelistV5 commit 6a1b7cf5"

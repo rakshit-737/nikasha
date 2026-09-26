@@ -53,3 +53,29 @@ manifest headers.
   remote entries are skipped, as before.
 - `nikasha bench gate results.jsonl` computes the ADR 0003 gate numbers.
 - If HackerOne's terms change to forbid this, this ADR is superseded and the cache purged.
+
+## Addendum (2026-09-26): pre-rejection cvelistV5 records for S3
+
+**Context.** The six SQLite CVEs named by JFrog's analysis (CVE-2026-51296, 51297, 51300,
+51302, 51303 and 51304) were REJECTED in cvelistV5 on 2026-07-31 (commit `6a1b7cf5`). The
+current records hold only the rejection notice, so SPEC §17.2 excluded them and S3 had no
+checkable entries.
+
+**Decision.** The maintainer allows S3 to use the pre-rejection text of these six records
+from cvelistV5's public git history, on the same terms as the HackerOne corpus above:
+
+1. Each entry names `{cve_id, cvelist_commit}`: the last cvelistV5 commit that touched the
+   record before the rejection commit (found with `gh api
+   repos/CVEProject/cvelistV5/commits?path=...`). The full 40-hex SHA pins the content.
+2. `nikasha bench fetch-cvelist --online` fetches the JSON from
+   `raw.githubusercontent.com/CVEProject/cvelistV5/<sha>/...` into the gitignored
+   `bench/cache/cvelist/` (0600 files, 0700 directory), one request at a time, capped, and
+   only if the payload's `cveId` matches (`src/nikasha/bench/cvelist.py`).
+3. Manifests hold IDs, commit SHAs and labels only. No record text is committed.
+4. The entries are labelled `fabricated` on the strength of the public rejection and
+   JFrog's analysis. The bench reports whatever verdict Nikasha reaches; a non-UNGROUNDED
+   verdict is recorded honestly, never tuned away (P4).
+
+**Consequences.** `nikasha bench run --split real --cvelist-cache bench/cache/cvelist
+--repo <sqlite clone>` checks the S3 entries. If the CVE Program objects, the cache is
+deleted and this addendum is superseded.
