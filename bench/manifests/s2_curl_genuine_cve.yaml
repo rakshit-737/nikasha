@@ -1,10 +1,517 @@
 # SPDX-FileCopyrightText: 2026 The Nikasha Authors
 # SPDX-License-Identifier: Apache-2.0
 #
-# EMPTY STUB. This manifest is populated only after the source's terms have been checked
-# and accepted by the maintainer (SPEC 17.2, ADR 0003). Until then it holds no entries and
-# nothing is fetched. Entries will carry IDs, URLs and labels only, never report text.
+# M3.5 gate corpus (ADR 0003, ADR 0011). IDs, URLs and labels only; never report text.
+# Index and labels reused from slopcheck (MIT, (c) Gagan Ganesh,
+# https://github.com/GaganGanesh98/SlopCheck at d5b6965, data/curl/index.json):
+# label 'vuln' = HackerOne substate resolved (curl confirmed and fixed it).
+# Report text is fetched at runtime by `nikasha bench fetch-h1 --online` into the
+# gitignored bench/cache/h1/.
 source: S2
-title: "curl genuine CVE reports (curl.se/docs/vuln.json, HackerOne issue URLs)"
-terms_checked: false
-entries: []
+title: "curl confirmed reports (slopcheck curl index, HackerOne substate resolved)"
+terms_checked: true
+entries:
+  - id: h1-547630
+    label: genuine
+    url: https://hackerone.com/reports/547630
+    notes: "slopcheck label vuln"
+  - id: h1-550696
+    label: genuine
+    url: https://hackerone.com/reports/550696
+    notes: "slopcheck label vuln"
+  - id: h1-608577
+    label: genuine
+    url: https://hackerone.com/reports/608577
+    notes: "slopcheck label vuln"
+  - id: h1-684603
+    label: genuine
+    url: https://hackerone.com/reports/684603
+    notes: "slopcheck label vuln"
+  - id: h1-686823
+    label: genuine
+    url: https://hackerone.com/reports/686823
+    notes: "slopcheck label vuln"
+  - id: h1-874778
+    label: genuine
+    url: https://hackerone.com/reports/874778
+    notes: "slopcheck label vuln"
+  - id: h1-887462
+    label: genuine
+    url: https://hackerone.com/reports/887462
+    notes: "slopcheck label vuln"
+  - id: h1-948876
+    label: genuine
+    url: https://hackerone.com/reports/948876
+    notes: "slopcheck label vuln"
+  - id: h1-1040166
+    label: genuine
+    url: https://hackerone.com/reports/1040166
+    notes: "slopcheck label vuln"
+  - id: h1-1045844
+    label: genuine
+    url: https://hackerone.com/reports/1045844
+    notes: "slopcheck label vuln"
+  - id: h1-1048457
+    label: genuine
+    url: https://hackerone.com/reports/1048457
+    notes: "slopcheck label vuln"
+  - id: h1-1101882
+    label: genuine
+    url: https://hackerone.com/reports/1101882
+    notes: "slopcheck label vuln"
+  - id: h1-1129529
+    label: genuine
+    url: https://hackerone.com/reports/1129529
+    notes: "slopcheck label vuln"
+  - id: h1-1172857
+    label: genuine
+    url: https://hackerone.com/reports/1172857
+    notes: "slopcheck label vuln"
+  - id: h1-1176461
+    label: genuine
+    url: https://hackerone.com/reports/1176461
+    notes: "slopcheck label vuln"
+  - id: h1-1180380
+    label: genuine
+    url: https://hackerone.com/reports/1180380
+    notes: "slopcheck label vuln"
+  - id: h1-1213175
+    label: genuine
+    url: https://hackerone.com/reports/1213175
+    notes: "slopcheck label vuln"
+  - id: h1-1213181
+    label: genuine
+    url: https://hackerone.com/reports/1213181
+    notes: "slopcheck label vuln"
+  - id: h1-1223565
+    label: genuine
+    url: https://hackerone.com/reports/1223565
+    notes: "slopcheck label vuln"
+  - id: h1-1223882
+    label: genuine
+    url: https://hackerone.com/reports/1223882
+    notes: "slopcheck label vuln"
+  - id: h1-1234760
+    label: genuine
+    url: https://hackerone.com/reports/1234760
+    notes: "slopcheck label vuln"
+  - id: h1-1269242
+    label: genuine
+    url: https://hackerone.com/reports/1269242
+    notes: "slopcheck label vuln"
+  - id: h1-1334111
+    label: genuine
+    url: https://hackerone.com/reports/1334111
+    notes: "slopcheck label vuln"
+  - id: h1-1334763
+    label: genuine
+    url: https://hackerone.com/reports/1334763
+    notes: "slopcheck label vuln"
+  - id: h1-1526328
+    label: genuine
+    url: https://hackerone.com/reports/1526328
+    notes: "slopcheck label vuln"
+  - id: h1-1543773
+    label: genuine
+    url: https://hackerone.com/reports/1543773
+    notes: "slopcheck label vuln"
+  - id: h1-1546268
+    label: genuine
+    url: https://hackerone.com/reports/1546268
+    notes: "slopcheck label vuln"
+  - id: h1-1547048
+    label: genuine
+    url: https://hackerone.com/reports/1547048
+    notes: "slopcheck label vuln"
+  - id: h1-1553301
+    label: genuine
+    url: https://hackerone.com/reports/1553301
+    notes: "slopcheck label vuln"
+  - id: h1-1553598
+    label: genuine
+    url: https://hackerone.com/reports/1553598
+    notes: "slopcheck label vuln"
+  - id: h1-1553841
+    label: genuine
+    url: https://hackerone.com/reports/1553841
+    notes: "slopcheck label vuln"
+  - id: h1-1555441
+    label: genuine
+    url: https://hackerone.com/reports/1555441
+    notes: "slopcheck label vuln"
+  - id: h1-1555796
+    label: genuine
+    url: https://hackerone.com/reports/1555796
+    notes: "slopcheck label vuln"
+  - id: h1-1557449
+    label: genuine
+    url: https://hackerone.com/reports/1557449
+    notes: "slopcheck label vuln"
+  - id: h1-1569946
+    label: genuine
+    url: https://hackerone.com/reports/1569946
+    notes: "slopcheck label vuln"
+  - id: h1-1570651
+    label: genuine
+    url: https://hackerone.com/reports/1570651
+    notes: "slopcheck label vuln"
+  - id: h1-1573634
+    label: genuine
+    url: https://hackerone.com/reports/1573634
+    notes: "slopcheck label vuln"
+  - id: h1-1590071
+    label: genuine
+    url: https://hackerone.com/reports/1590071
+    notes: "slopcheck label vuln"
+  - id: h1-1613943
+    label: genuine
+    url: https://hackerone.com/reports/1613943
+    notes: "slopcheck label vuln"
+  - id: h1-1704017
+    label: genuine
+    url: https://hackerone.com/reports/1704017
+    notes: "slopcheck label vuln"
+  - id: h1-1721098
+    label: genuine
+    url: https://hackerone.com/reports/1721098
+    notes: "slopcheck label vuln"
+  - id: h1-1722065
+    label: genuine
+    url: https://hackerone.com/reports/1722065
+    notes: "slopcheck label vuln"
+  - id: h1-1730660
+    label: genuine
+    url: https://hackerone.com/reports/1730660
+    notes: "slopcheck label vuln"
+  - id: h1-1755083
+    label: genuine
+    url: https://hackerone.com/reports/1755083
+    notes: "slopcheck label vuln"
+  - id: h1-1764858
+    label: genuine
+    url: https://hackerone.com/reports/1764858
+    notes: "slopcheck label vuln"
+  - id: h1-1813864
+    label: genuine
+    url: https://hackerone.com/reports/1813864
+    notes: "slopcheck label vuln"
+  - id: h1-1814333
+    label: genuine
+    url: https://hackerone.com/reports/1814333
+    notes: "slopcheck label vuln"
+  - id: h1-1826048
+    label: genuine
+    url: https://hackerone.com/reports/1826048
+    notes: "slopcheck label vuln"
+  - id: h1-1891474
+    label: genuine
+    url: https://hackerone.com/reports/1891474
+    notes: "slopcheck label vuln"
+  - id: h1-1892351
+    label: genuine
+    url: https://hackerone.com/reports/1892351
+    notes: "slopcheck label vuln"
+  - id: h1-1892780
+    label: genuine
+    url: https://hackerone.com/reports/1892780
+    notes: "slopcheck label vuln"
+  - id: h1-1895135
+    label: genuine
+    url: https://hackerone.com/reports/1895135
+    notes: "slopcheck label vuln"
+  - id: h1-1897203
+    label: genuine
+    url: https://hackerone.com/reports/1897203
+    notes: "slopcheck label vuln"
+  - id: h1-1898475
+    label: genuine
+    url: https://hackerone.com/reports/1898475
+    notes: "slopcheck label vuln"
+  - id: h1-1913733
+    label: genuine
+    url: https://hackerone.com/reports/1913733
+    notes: "slopcheck label vuln"
+  - id: h1-1929597
+    label: genuine
+    url: https://hackerone.com/reports/1929597
+    notes: "slopcheck label vuln"
+  - id: h1-1950627
+    label: genuine
+    url: https://hackerone.com/reports/1950627
+    notes: "slopcheck label vuln"
+  - id: h1-1954658
+    label: genuine
+    url: https://hackerone.com/reports/1954658
+    notes: "slopcheck label vuln"
+  - id: h1-2039870
+    label: genuine
+    url: https://hackerone.com/reports/2039870
+    notes: "slopcheck label vuln"
+  - id: h1-2072338
+    label: genuine
+    url: https://hackerone.com/reports/2072338
+    notes: "slopcheck label vuln"
+  - id: h1-2148242
+    label: genuine
+    url: https://hackerone.com/reports/2148242
+    notes: "slopcheck label vuln"
+  - id: h1-2187833
+    label: genuine
+    url: https://hackerone.com/reports/2187833
+    notes: "slopcheck label vuln"
+  - id: h1-2212193
+    label: genuine
+    url: https://hackerone.com/reports/2212193
+    notes: "slopcheck label vuln"
+  - id: h1-2236133
+    label: genuine
+    url: https://hackerone.com/reports/2236133
+    notes: "slopcheck label vuln"
+  - id: h1-2298922
+    label: genuine
+    url: https://hackerone.com/reports/2298922
+    notes: "slopcheck label vuln"
+  - id: h1-2384833
+    label: genuine
+    url: https://hackerone.com/reports/2384833
+    notes: "slopcheck label vuln"
+  - id: h1-2402845
+    label: genuine
+    url: https://hackerone.com/reports/2402845
+    notes: "slopcheck label vuln"
+  - id: h1-2410774
+    label: genuine
+    url: https://hackerone.com/reports/2410774
+    notes: "slopcheck label vuln"
+  - id: h1-2416725
+    label: genuine
+    url: https://hackerone.com/reports/2416725
+    notes: "slopcheck label vuln"
+  - id: h1-2559516
+    label: genuine
+    url: https://hackerone.com/reports/2559516
+    notes: "slopcheck label vuln"
+  - id: h1-2604391
+    label: genuine
+    url: https://hackerone.com/reports/2604391
+    notes: "slopcheck label vuln"
+  - id: h1-2629968
+    label: genuine
+    url: https://hackerone.com/reports/2629968
+    notes: "slopcheck label vuln"
+  - id: h1-2669852
+    label: genuine
+    url: https://hackerone.com/reports/2669852
+    notes: "slopcheck label vuln"
+  - id: h1-2764830
+    label: genuine
+    url: https://hackerone.com/reports/2764830
+    notes: "slopcheck label vuln"
+  - id: h1-2829063
+    label: genuine
+    url: https://hackerone.com/reports/2829063
+    notes: "slopcheck label vuln"
+  - id: h1-2917232
+    label: genuine
+    url: https://hackerone.com/reports/2917232
+    notes: "slopcheck label vuln"
+  - id: h1-2954286
+    label: genuine
+    url: https://hackerone.com/reports/2954286
+    notes: "slopcheck label vuln"
+  - id: h1-2956023
+    label: genuine
+    url: https://hackerone.com/reports/2956023
+    notes: "slopcheck label vuln"
+  - id: h1-3150884
+    label: genuine
+    url: https://hackerone.com/reports/3150884
+    notes: "slopcheck label vuln"
+  - id: h1-3153497
+    label: genuine
+    url: https://hackerone.com/reports/3153497
+    notes: "slopcheck label vuln"
+  - id: h1-3168039
+    label: genuine
+    url: https://hackerone.com/reports/3168039
+    notes: "slopcheck label vuln"
+  - id: h1-3294999
+    label: genuine
+    url: https://hackerone.com/reports/3294999
+    notes: "slopcheck label vuln"
+  - id: h1-3330839
+    label: genuine
+    url: https://hackerone.com/reports/3330839
+    notes: "slopcheck label vuln"
+  - id: h1-3355218
+    label: genuine
+    url: https://hackerone.com/reports/3355218
+    notes: "slopcheck label vuln"
+  - id: h1-3459417
+    label: genuine
+    url: https://hackerone.com/reports/3459417
+    notes: "slopcheck label vuln"
+  - id: h1-3477116
+    label: genuine
+    url: https://hackerone.com/reports/3477116
+    notes: "slopcheck label vuln"
+  - id: h1-3480925
+    label: genuine
+    url: https://hackerone.com/reports/3480925
+    notes: "slopcheck label vuln"
+  - id: h1-3583983
+    label: genuine
+    url: https://hackerone.com/reports/3583983
+    notes: "slopcheck label vuln"
+  - id: h1-3584903
+    label: genuine
+    url: https://hackerone.com/reports/3584903
+    notes: "slopcheck label vuln"
+  - id: h1-3591944
+    label: genuine
+    url: https://hackerone.com/reports/3591944
+    notes: "slopcheck label vuln"
+  - id: h1-3621851
+    label: genuine
+    url: https://hackerone.com/reports/3621851
+    notes: "slopcheck label vuln"
+  - id: h1-3642555
+    label: genuine
+    url: https://hackerone.com/reports/3642555
+    notes: "slopcheck label vuln"
+  - id: h1-3650689
+    label: genuine
+    url: https://hackerone.com/reports/3650689
+    notes: "slopcheck label vuln"
+  - id: h1-3669637
+    label: genuine
+    url: https://hackerone.com/reports/3669637
+    notes: "slopcheck label vuln"
+  - id: h1-3671818
+    label: genuine
+    url: https://hackerone.com/reports/3671818
+    notes: "slopcheck label vuln"
+  - id: h1-3677759
+    label: genuine
+    url: https://hackerone.com/reports/3677759
+    notes: "slopcheck label vuln"
+  - id: h1-3694390
+    label: genuine
+    url: https://hackerone.com/reports/3694390
+    notes: "slopcheck label vuln"
+  - id: h1-3697719
+    label: genuine
+    url: https://hackerone.com/reports/3697719
+    notes: "slopcheck label vuln"
+  - id: h1-3718195
+    label: genuine
+    url: https://hackerone.com/reports/3718195
+    notes: "slopcheck label vuln"
+  - id: h1-3721183
+    label: genuine
+    url: https://hackerone.com/reports/3721183
+    notes: "slopcheck label vuln"
+  - id: h1-3733905
+    label: genuine
+    url: https://hackerone.com/reports/3733905
+    notes: "slopcheck label vuln"
+  - id: h1-3733910
+    label: genuine
+    url: https://hackerone.com/reports/3733910
+    notes: "slopcheck label vuln"
+  - id: h1-3735184
+    label: genuine
+    url: https://hackerone.com/reports/3735184
+    notes: "slopcheck label vuln"
+  - id: h1-3735193
+    label: genuine
+    url: https://hackerone.com/reports/3735193
+    notes: "slopcheck label vuln"
+  - id: h1-3744543
+    label: genuine
+    url: https://hackerone.com/reports/3744543
+    notes: "slopcheck label vuln"
+  - id: h1-3749204
+    label: genuine
+    url: https://hackerone.com/reports/3749204
+    notes: "slopcheck label vuln"
+  - id: h1-3750295
+    label: genuine
+    url: https://hackerone.com/reports/3750295
+    notes: "slopcheck label vuln"
+  - id: h1-3751697
+    label: genuine
+    url: https://hackerone.com/reports/3751697
+    notes: "slopcheck label vuln"
+  - id: h1-3751712
+    label: genuine
+    url: https://hackerone.com/reports/3751712
+    notes: "slopcheck label vuln"
+  - id: h1-3752888
+    label: genuine
+    url: https://hackerone.com/reports/3752888
+    notes: "slopcheck label vuln"
+  - id: h1-3754343
+    label: genuine
+    url: https://hackerone.com/reports/3754343
+    notes: "slopcheck label vuln"
+  - id: h1-3783438
+    label: genuine
+    url: https://hackerone.com/reports/3783438
+    notes: "slopcheck label vuln"
+  - id: h1-3788931
+    label: genuine
+    url: https://hackerone.com/reports/3788931
+    notes: "slopcheck label vuln"
+  - id: h1-3788984
+    label: genuine
+    url: https://hackerone.com/reports/3788984
+    notes: "slopcheck label vuln"
+  - id: h1-3793260
+    label: genuine
+    url: https://hackerone.com/reports/3793260
+    notes: "slopcheck label vuln"
+  - id: h1-3797526
+    label: genuine
+    url: https://hackerone.com/reports/3797526
+    notes: "slopcheck label vuln"
+  - id: h1-3822248
+    label: genuine
+    url: https://hackerone.com/reports/3822248
+    notes: "slopcheck label vuln"
+  - id: h1-3916059
+    label: genuine
+    url: https://hackerone.com/reports/3916059
+    notes: "slopcheck label vuln"
+  - id: h1-3923520
+    label: genuine
+    url: https://hackerone.com/reports/3923520
+    notes: "slopcheck label vuln"
+  - id: h1-3969255
+    label: genuine
+    url: https://hackerone.com/reports/3969255
+    notes: "slopcheck label vuln"
+  - id: h1-3969300
+    label: genuine
+    url: https://hackerone.com/reports/3969300
+    notes: "slopcheck label vuln"
+  - id: h1-3969368
+    label: genuine
+    url: https://hackerone.com/reports/3969368
+    notes: "slopcheck label vuln"
+  - id: h1-3969820
+    label: genuine
+    url: https://hackerone.com/reports/3969820
+    notes: "slopcheck label vuln"
+  - id: h1-3972385
+    label: genuine
+    url: https://hackerone.com/reports/3972385
+    notes: "slopcheck label vuln"
+  - id: h1-3972395
+    label: genuine
+    url: https://hackerone.com/reports/3972395
+    notes: "slopcheck label vuln"
+  - id: h1-3973090
+    label: genuine
+    url: https://hackerone.com/reports/3973090
+    notes: "slopcheck label vuln"

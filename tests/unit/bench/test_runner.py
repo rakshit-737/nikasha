@@ -31,7 +31,9 @@ MANIFESTS = ROOT / "bench" / "manifests"
 
 def test_committed_manifests_give_47_offline_cases() -> None:
     cases, skipped = collect_cases(load_manifests(MANIFESTS), ROOT)
-    assert skipped == ()
+    # The 175 remote HackerOne entries (ADR 0011) are skipped without a cache.
+    assert len(skipped) == 49 + 126
+    assert all(s.startswith("h1-") for s in skipped)
     assert len(cases) == 5 + 2 * 7 * 3
     ids = [c.id for c in cases]
     assert ids == sorted(ids)

@@ -1,10 +1,209 @@
 # SPDX-FileCopyrightText: 2026 The Nikasha Authors
 # SPDX-License-Identifier: Apache-2.0
 #
-# EMPTY STUB. This manifest is populated only after the source's terms have been checked
-# and accepted by the maintainer (SPEC 17.2, ADR 0003). Until then it holds no entries and
-# nothing is fetched. Entries will carry IDs, URLs and labels only, never report text.
+# M3.5 gate corpus (ADR 0003, ADR 0011). IDs, URLs and labels only; never report text.
+# Index and labels reused from slopcheck (MIT, (c) Gagan Ganesh,
+# https://github.com/GaganGanesh98/SlopCheck at d5b6965, data/curl/index.json):
+# label 'slop' = listed in curl's published AI-slop archive.
+# Report text is fetched at runtime by `nikasha bench fetch-h1 --online` into the
+# gitignored bench/cache/h1/.
 source: S1
-title: "curl AI-slop list (Daniel Stenberg's public gist)"
-terms_checked: false
-entries: []
+title: "curl AI-slop list (via the slopcheck curl index)"
+terms_checked: true
+entries:
+  - id: h1-2199174
+    label: fabricated
+    url: https://hackerone.com/reports/2199174
+    notes: "slopcheck label slop"
+  - id: h1-2298307
+    label: fabricated
+    url: https://hackerone.com/reports/2298307
+    notes: "slopcheck label slop"
+  - id: h1-2819666
+    label: fabricated
+    url: https://hackerone.com/reports/2819666
+    notes: "slopcheck label slop"
+  - id: h1-2823554
+    label: fabricated
+    url: https://hackerone.com/reports/2823554
+    notes: "slopcheck label slop"
+  - id: h1-2871792
+    label: fabricated
+    url: https://hackerone.com/reports/2871792
+    notes: "slopcheck label slop"
+  - id: h1-2887487
+    label: fabricated
+    url: https://hackerone.com/reports/2887487
+    notes: "slopcheck label slop"
+  - id: h1-2905552
+    label: fabricated
+    url: https://hackerone.com/reports/2905552
+    notes: "slopcheck label slop"
+  - id: h1-2912277
+    label: fabricated
+    url: https://hackerone.com/reports/2912277
+    notes: "slopcheck label slop"
+  - id: h1-2981245
+    label: fabricated
+    url: https://hackerone.com/reports/2981245
+    notes: "slopcheck label slop"
+  - id: h1-3100073
+    label: fabricated
+    url: https://hackerone.com/reports/3100073
+    notes: "slopcheck label slop"
+  - id: h1-3101127
+    label: fabricated
+    url: https://hackerone.com/reports/3101127
+    notes: "slopcheck label slop"
+  - id: h1-3116935
+    label: fabricated
+    url: https://hackerone.com/reports/3116935
+    notes: "slopcheck label slop"
+  - id: h1-3117697
+    label: fabricated
+    url: https://hackerone.com/reports/3117697
+    notes: "slopcheck label slop"
+  - id: h1-3125820
+    label: fabricated
+    url: https://hackerone.com/reports/3125820
+    notes: "slopcheck label slop"
+  - id: h1-3125832
+    label: fabricated
+    url: https://hackerone.com/reports/3125832
+    notes: "slopcheck label slop"
+  - id: h1-3137657
+    label: fabricated
+    url: https://hackerone.com/reports/3137657
+    notes: "slopcheck label slop"
+  - id: h1-3158093
+    label: fabricated
+    url: https://hackerone.com/reports/3158093
+    notes: "slopcheck label slop"
+  - id: h1-3230082
+    label: fabricated
+    url: https://hackerone.com/reports/3230082
+    notes: "slopcheck label slop"
+  - id: h1-3231321
+    label: fabricated
+    url: https://hackerone.com/reports/3231321
+    notes: "slopcheck label slop"
+  - id: h1-3242005
+    label: fabricated
+    url: https://hackerone.com/reports/3242005
+    notes: "slopcheck label slop"
+  - id: h1-3249936
+    label: fabricated
+    url: https://hackerone.com/reports/3249936
+    notes: "slopcheck label slop"
+  - id: h1-3250490
+    label: fabricated
+    url: https://hackerone.com/reports/3250490
+    notes: "slopcheck label slop"
+  - id: h1-3272982
+    label: fabricated
+    url: https://hackerone.com/reports/3272982
+    notes: "slopcheck label slop"
+  - id: h1-3293884
+    label: fabricated
+    url: https://hackerone.com/reports/3293884
+    notes: "slopcheck label slop"
+  - id: h1-3295650
+    label: fabricated
+    url: https://hackerone.com/reports/3295650
+    notes: "slopcheck label slop"
+  - id: h1-3335085
+    label: fabricated
+    url: https://hackerone.com/reports/3335085
+    notes: "slopcheck label slop"
+  - id: h1-3340109
+    label: fabricated
+    url: https://hackerone.com/reports/3340109
+    notes: "slopcheck label slop"
+  - id: h1-3346118
+    label: fabricated
+    url: https://hackerone.com/reports/3346118
+    notes: "slopcheck label slop"
+  - id: h1-3392174
+    label: fabricated
+    url: https://hackerone.com/reports/3392174
+    notes: "slopcheck label slop"
+  - id: h1-3395218
+    label: fabricated
+    url: https://hackerone.com/reports/3395218
+    notes: "slopcheck label slop"
+  - id: h1-3395227
+    label: fabricated
+    url: https://hackerone.com/reports/3395227
+    notes: "slopcheck label slop"
+  - id: h1-3399774
+    label: fabricated
+    url: https://hackerone.com/reports/3399774
+    notes: "slopcheck label slop"
+  - id: h1-3400831
+    label: fabricated
+    url: https://hackerone.com/reports/3400831
+    notes: "slopcheck label slop"
+  - id: h1-3403880
+    label: fabricated
+    url: https://hackerone.com/reports/3403880
+    notes: "slopcheck label slop"
+  - id: h1-3418528
+    label: fabricated
+    url: https://hackerone.com/reports/3418528
+    notes: "slopcheck label slop"
+  - id: h1-3418646
+    label: fabricated
+    url: https://hackerone.com/reports/3418646
+    notes: "slopcheck label slop"
+  - id: h1-3452725
+    label: fabricated
+    url: https://hackerone.com/reports/3452725
+    notes: "slopcheck label slop"
+  - id: h1-3459636
+    label: fabricated
+    url: https://hackerone.com/reports/3459636
+    notes: "slopcheck label slop"
+  - id: h1-3462525
+    label: fabricated
+    url: https://hackerone.com/reports/3462525
+    notes: "slopcheck label slop"
+  - id: h1-3465094
+    label: fabricated
+    url: https://hackerone.com/reports/3465094
+    notes: "slopcheck label slop"
+  - id: h1-3466883
+    label: fabricated
+    url: https://hackerone.com/reports/3466883
+    notes: "slopcheck label slop"
+  - id: h1-3466896
+    label: fabricated
+    url: https://hackerone.com/reports/3466896
+    notes: "slopcheck label slop"
+  - id: h1-3468410
+    label: fabricated
+    url: https://hackerone.com/reports/3468410
+    notes: "slopcheck label slop"
+  - id: h1-3470095
+    label: fabricated
+    url: https://hackerone.com/reports/3470095
+    notes: "slopcheck label slop"
+  - id: h1-3473182
+    label: fabricated
+    url: https://hackerone.com/reports/3473182
+    notes: "slopcheck label slop"
+  - id: h1-3506159
+    label: fabricated
+    url: https://hackerone.com/reports/3506159
+    notes: "slopcheck label slop"
+  - id: h1-3514263
+    label: fabricated
+    url: https://hackerone.com/reports/3514263
+    notes: "slopcheck label slop"
+  - id: h1-3516186
+    label: fabricated
+    url: https://hackerone.com/reports/3516186
+    notes: "slopcheck label slop"
+  - id: h1-3516202
+    label: fabricated
+    url: https://hackerone.com/reports/3516202
+    notes: "slopcheck label slop"

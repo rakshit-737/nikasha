@@ -13,7 +13,7 @@ The living build log. Milestones follow SPEC §22, plus **M3.5** from ADR 0003.
 | M1 Models, intake, extraction (+ claim scoping, polarity) | **done** (LSan/MSan/TSan parsers deferred, ADR 0005) |
 | M2 Resolution and code intelligence | **done** (numbers in ADR 0004) |
 | M3 Checks, fusion, CLI outputs | **done** (numbers below) |
-| M3.5 Early real-world gate (curl corpus vs. slopcheck) | not started |
+| M3.5 Early real-world gate (curl corpus vs. slopcheck) | **measured 2026-09-26: no separation; P4 held (0/126)**; 40-refutation hand-check and maintainer decision pending |
 | M4 HTML report and media v1 | **done** (PNG captures need Playwright; CI is the source of truth) |
 | M5 Sandbox reproduction | **sandbox CI green with the real recipe image** (run 36129155719: Fedora `c-toolchain.Dockerfile` built, 21 passed); curl/sqlite/libxml2 recipes still unverified end to end |
 | M6 NikashaBench | **machinery done** (S5/S6 offline); real splits wait on M3.5 corpus access |
@@ -252,6 +252,64 @@ The living build log. Milestones follow SPEC §22, plus **M3.5** from ADR 0003.
    paths (a P3 leak into rendered reports) and `duration_ms` would break byte-identical
    JSON. It needs one shared helper with a redacted argv and the duration kept out of the
    identity payload.
+
+## M3.5: Early real-world gate (2026-09-26)
+
+### Done
+
+- ADR 0011: public HackerOne report access allowed under conditions (disclosed reports
+  only, >=2 s between requests, one connection, honest User-Agent, cache only in the
+  gitignored `bench/cache/`, purge on objection, re-check terms per refresh). Terms page
+  and robots.txt (sitemap only, no `Disallow`) re-checked 2026-09-26.
+- `nikasha.bench.h1corpus` (online-only, rate-limited, capped, resumable, stores title and
+  body only), `nikasha bench fetch-h1`, `bench run --h1-cache`, `nikasha bench gate`
+  (`nikasha.bench.gate`). Tests use a stubbed transport and clock.
+- Manifests S1 (49 slop) and S2 (126 resolved) from slopcheck's curl index (MIT,
+  commit d5b6965), IDs, URLs and labels only. The 382 unlabelled reports are left out,
+  as slopcheck's corpus card says they are not negatives.
+- Full corpus run, no subset: 175/175 fetched, 0 dropped; 175 cases, 0 errors, 96 min
+  on this laptop, against a full curl clone. Each report is checked at the version it
+  names (Nikasha's own resolution; no `--ref` forced).
+
+### Numbers (`bench/results/2026-09-26/gate.json`, not committed)
+
+| metric | Nikasha | slopcheck |
+|---|--:|--:|
+| flag rate (>=1 REFUTES) genuine / slop | 20.6% / 20.4% | 29.4% / 28.6% |
+| J of that flag | -0.002 | about -0.008 |
+| false UNGROUNDED on genuine | **0/126** (Wilson 95% upper 2.96%) | n/a |
+| recall UNGROUNDED on slop | 0/49 | n/a |
+| recall UNGROUNDED or MIXED on slop | 20.4% (10/49) | n/a |
+| MIXED or UNGROUNDED on genuine | 22.2% (28/126) | n/a |
+| J (UNGROUNDED or MIXED) | -0.018 | n/a |
+| best J, score threshold sweep | 0.249 | 0.083 |
+| median best J, seeded random score | 0.103 | 0.092 |
+
+Verdicts: genuine GROUNDED 32, MIXED 28, INSUFFICIENT 66; slop GROUNDED 5, MIXED 10,
+INSUFFICIENT 34.
+
+### Reading
+
+- **P4 held:** no genuine report was called UNGROUNDED. With n=126 the Wilson upper
+  bound (2.96%) cannot yet show the rate is under 1%.
+- **The verdict layer does not separate slop from genuine.** Nikasha never says
+  UNGROUNDED on this corpus, and MIXED is as common on genuine reports as on slop. The
+  refutation flag is no better than slopcheck's (J about 0).
+- The only signal is the fused score: the best threshold J (0.249) is above the random
+  control (0.103). It comes mostly from GROUNDED being more common on genuine reports
+  (25%) than on slop (10%), i.e. *support* separates, refutation does not. The sweep
+  picks its threshold after the fact, like slopcheck's, so it is optimistic.
+- Ablation: no single check changes false UNGROUNDED (all 0). Removing C02 lowers slop
+  UNGROUNDED-or-MIXED recall to 14.3%; C03 and C04 to 18.4%.
+- Not done: the hand-checked precision of 40 random REFUTES findings (ADR 0003) needs a
+  human reviewer. No threshold was changed.
+
+### Next / questions for the maintainer
+
+- Decide per ADR 0003: continue, reposition around support evidence, reproduction and
+  dossiers, or stop. The data favour repositioning: the static layer is safe (P4) but not
+  a slop detector.
+- Hand-check 40 random REFUTES findings for per-finding precision.
 
 ## M4: HTML report and media (2026-09-24)
 

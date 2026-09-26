@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from nikasha.bench import metrics as bench_metrics
+from nikasha.bench.h1corpus import load_cached, report_id_from_url
 from nikasha.bench.manifests import Manifest
 from nikasha.bench.mutations import generate
 from nikasha.bench.repro import Reproducer
@@ -60,23 +61,36 @@ class Case:
 
 
 def collect_cases(
-    manifests: Sequence[Manifest], root: Path
+    manifests: Sequence[Manifest], root: Path, *, h1_cache: Path | None = None
 ) -> tuple[tuple[Case, ...], tuple[str, ...]]:
-    """Cases for every local entry and generator; the ids of skipped remote entries."""
+    """Cases for every local entry and generator; the ids of skipped remote entries.
+
+    A remote HackerOne entry becomes a case only when ``h1_cache`` is given and holds its
+    text (fetched earlier by ``nikasha bench fetch-h1 --online``, ADR 0011); otherwise it
+    is skipped. Nothing is fetched here.
+    """
     cases: list[Case] = []
     skipped: list[str] = []
     local: dict[str, str] = {}
     for manifest in manifests:
         for entry in manifest.entries:
             if entry.path is None:
-                skipped.append(entry.id)
-                continue
-            try:
-                text = (root / entry.path).read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError) as exc:
-                raise BenchError(
-                    f"{manifest.source}/{entry.id}: cannot read {entry.path} ({type(exc).__name__})"
-                ) from exc
+                rid = None if entry.url is None else report_id_from_url(entry.url)
+                cached = None
+                if h1_cache is not None and rid is not None:
+                    cached = load_cached(h1_cache, rid)
+                if cached is None:
+                    skipped.append(entry.id)
+                    continue
+                text = cached
+            else:
+                try:
+                    text = (root / entry.path).read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError) as exc:
+                    raise BenchError(
+                        f"{manifest.source}/{entry.id}: cannot read {entry.path} "
+                        f"({type(exc).__name__})"
+                    ) from exc
             local[entry.id] = text
             cases.append(
                 Case(
