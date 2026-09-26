@@ -324,9 +324,53 @@ def _name(value: object, placeholders: frozenset[str]) -> str | None:
     return cleaned if cleaned and cleaned.lower() not in placeholders else None
 
 
+def _empty(entry: AffectedVersion) -> bool:
+    """A range whose exclusive upper bound is its own start (``8.4.0``, ``lessThan: 8.4.0``)
+    holds no version at all. Real records carry this shape by mistake; it says nothing."""
+    return entry.version not in _UNBOUNDED and entry.less_than == entry.version
+
+
+def _changes(
+    item: dict[str, Any], start: AffectedVersion, notes: list[str]
+) -> list[AffectedVersion] | None:
+    """Split a range with ``changes`` into plain ranges, or ``None`` when it has none.
+
+    Each change switches the status from its ``at`` version on, in the order the record lists
+    them (the schema requires that order; nothing is re-sorted here). The last segment runs to
+    the entry's own upper bound; when that bound is unreadable, the last segment is dropped
+    with a note rather than guessed (P4). Any unreadable change drops all of them, and the
+    entry is then read as its start version alone.
+    """
+    raw = _list(item.get("changes"))
+    if not raw:
+        return None
+    points: list[tuple[str, str]] = []
+    for change in raw[:MAX_VERSIONS]:
+        entry = _dict(change)
+        at, status = _version(entry.get("at")), _status(entry.get("status"))
+        if at is None or at in _UNBOUNDED or status is None:
+            notes.append(f"version {start.version}: unreadable 'changes' entry; changes ignored")
+            return None
+        points.append((at, status))
+    out: list[AffectedVersion] = []
+    current, status = start.version, start.status
+    for at, next_status in points:
+        out.append(replace(start, version=current, status=status, less_than=at))
+        current, status = at, next_status
+    if start.less_than is None and start.less_than_or_equal is None:
+        notes.append(
+            f"version {start.version}: the last change (from {current}) has no readable upper "
+            "bound; that segment was not read"
+        )
+    else:
+        out.append(replace(start, version=current, status=status))
+    return out
+
+
 def _versions(raw: object, notes: list[str]) -> tuple[AffectedVersion, ...]:
     out: list[AffectedVersion] = []
     skipped = 0
+    empty = 0
     for entry in _list(raw):
         item = _dict(entry)
         version = _version(item.get("version"))
@@ -334,16 +378,28 @@ def _versions(raw: object, notes: list[str]) -> tuple[AffectedVersion, ...]:
             skipped += 1
             continue
         kind = _text(item.get("versionType"))
-        out.append(
-            AffectedVersion(
-                version=version,
-                status=_status(item.get("status")) or "unknown",
-                less_than=_version(item.get("lessThan")),
-                less_than_or_equal=_version(item.get("lessThanOrEqual")),
-                version_type=_one_line(kind, 32) if kind else None,
-            )
+        parsed = AffectedVersion(
+            version=version,
+            status=_status(item.get("status")) or "unknown",
+            less_than=_version(item.get("lessThan")),
+            less_than_or_equal=_version(item.get("lessThanOrEqual")),
+            version_type=_one_line(kind, 32) if kind else None,
         )
+        for key in ("lessThan", "lessThanOrEqual"):
+            if item.get(key) is not None and _version(item.get(key)) is None:
+                notes.append(f"version {version}: unreadable {key} bound; the bound was not read")
+        split = _changes(item, parsed, notes)
+        for piece in split if split is not None else [parsed]:
+            if _empty(piece):
+                empty += 1
+            else:
+                out.append(piece)
     _skipped(skipped, "version", notes)
+    if empty:
+        notes.append(
+            f"skipped {empty} empty version range(s) (start equals the exclusive end); "
+            "the record's version data may be malformed"
+        )
     return tuple(_capped(out, MAX_VERSIONS, "versions of one product", notes))
 
 

@@ -117,6 +117,25 @@ def redact_url(url: str) -> str:
     return base
 
 
+#: A Unix timestamp longer than this is not one; it is not echoed back.
+_MAX_RESET_DIGITS = 15
+
+
+def _rate_limit_hint(exc: urllib.error.HTTPError) -> str | None:
+    """A clear message when the answer says the rate limit is used up, else ``None``.
+
+    GitHub answers an exhausted limit with 403 (or 429) and ``x-ratelimit-remaining: 0``;
+    the reset time is a Unix timestamp. Only digits are echoed back (P7).
+    """
+    found = _headers_of(exc)
+    if found.get("x-ratelimit-remaining", "").strip() != "0":
+        return None
+    reset = found.get("x-ratelimit-reset", "").strip()
+    readable = reset.isdigit() and len(reset) <= _MAX_RESET_DIGITS
+    when = f" (the limit resets at Unix time {reset})" if readable else ""
+    return f"rate limit exhausted{when}; try again later, or authenticate to raise the limit"
+
+
 def fetch_bytes(
     url: str,
     *,
@@ -149,7 +168,7 @@ def fetch_bytes(
             final_url = str(getattr(response, "url", None) or url)
             response_headers = _headers_of(response)
     except urllib.error.HTTPError as exc:
-        hint = (hints or HTTP_HINTS).get(int(exc.code))
+        hint = _rate_limit_hint(exc) or (hints or HTTP_HINTS).get(int(exc.code))
         detail = f": {hint}" if hint else ""
         raise NikashaError(f"{service} answered HTTP {exc.code} for {shown}{detail}") from None
     except (urllib.error.URLError, OSError, ValueError) as exc:

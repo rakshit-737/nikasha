@@ -293,8 +293,10 @@ def fetch_cve(cve_id: str, *, timeout: float = CVE_TIMEOUT_S) -> CveLookup:
     request = urllib.request.Request(  # noqa: S310 - built from CVE_LIST_BASE, https-only
         url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"}
     )
+    from nikasha.integrations.cve import _open  # noqa: PLC0415 - cve imports this module
+
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+        with _open(request, timeout) as response:  # redirects must stay on HTTPS
             body: bytes = response.read(MAX_CVE_BYTES + 1)
             status = int(response.status or HTTP_OK)
     except urllib.error.HTTPError as exc:
@@ -310,9 +312,11 @@ def _read_cve(cve_id: str, url: str, status: int, body: bytes) -> CveLookup:
         return CveLookup(cve_id=cve_id, url=url, status=status, error="record exceeds the size cap")
     digest = sha256(body).hexdigest()
     try:
-        data = json.loads(body.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        return CveLookup(cve_id, url, status, body_sha256=digest, error=f"unreadable JSON: {exc}")
+        data = json.loads(body.decode("utf-8-sig"))
+    except (ValueError, RecursionError) as exc:  # decode errors, bad JSON, absurd nesting
+        return CveLookup(
+            cve_id, url, status, body_sha256=digest, error=f"unreadable JSON: {type(exc).__name__}"
+        )
     if not isinstance(data, dict):
         return CveLookup(cve_id, url, status, body_sha256=digest, error="not a JSON object")
     return CveLookup(

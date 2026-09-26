@@ -51,12 +51,18 @@ API_BASE = "https://api.github.com/repos/"
 ENV_TOKENS = ("GITHUB_TOKEN", "GH_TOKEN")
 API_VERSION = "2022-11-28"
 STATES = ("triage", "draft", "published", "closed")
+#: The one state GitHub serves anonymously.
+PUBLIC_STATE = "published"
 PER_PAGE = 100
 #: Pages beyond this are not fetched (a warning says so).
 MAX_PAGES = 10
 HTTP_HINTS: Mapping[int, str] = {
     401: "the token in GITHUB_TOKEN/GH_TOKEN was rejected",
-    403: "the token lacks read access to repository security advisories, or you are rate limited",
+    403: (
+        "the token lacks read access to repository security advisories, or you are rate "
+        "limited (anonymous requests for published advisories share a small hourly limit; "
+        "set GITHUB_TOKEN to raise it)"
+    ),
     404: "repository not found, or its advisories are not visible to this token",
     429: "rate limited; try again later",
 }
@@ -84,6 +90,19 @@ def token_from_env(env: Mapping[str, str] | None = None) -> str:
         "no GitHub token: export GITHUB_TOKEN (or GH_TOKEN) with read access to repository "
         "security advisories (nothing was requested)"
     )
+
+
+def _optional_token(state: str, env: Mapping[str, str] | None) -> str | None:
+    """The token, or ``None`` for an anonymous request.
+
+    Published advisories are public, and GitHub serves them without authentication (at the
+    anonymous rate limit), so ``state=published`` works without a token. Every other state is
+    private and still refuses before any request when no token is set.
+    """
+    source = os.environ if env is None else env
+    if state == PUBLIC_STATE and not any(source.get(name, "") for name in ENV_TOKENS):
+        return None
+    return token_from_env(env)
 
 
 def validate_owner_repo(text: str) -> tuple[str, str]:
@@ -296,16 +315,18 @@ def fetch_advisories(
     token: str | None = None,
     env: Mapping[str, str] | None = None,
 ) -> FetchedAdvisories:
-    """List advisories. Refuses (without any request) unless online and authenticated."""
+    """List advisories. Refuses (without any request) unless online, and unless authenticated
+    for any state but ``published``."""
     owner, repo = validate_owner_repo(owner_repo)
     wanted = validate_state(state)
     require_online(online, "GitHub")
-    secret = token if token is not None else token_from_env(env)
+    secret = token if token is not None else _optional_token(wanted, env)
     headers = {
-        "Authorization": f"Bearer {secret}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": API_VERSION,
     }
+    if secret is not None:
+        headers["Authorization"] = f"Bearer {secret}"
     url: str | None = (
         f"{API_BASE}{owner}/{repo}/security-advisories?state={wanted}&per_page={PER_PAGE}"
     )
@@ -381,7 +402,8 @@ def register(app: typer.Typer) -> None:
         """List a repository's private vulnerability reports (read-only) as Markdown.
 
         The token comes from GITHUB_TOKEN (or GH_TOKEN); --online is required, and nothing is
-        requested without both. Results are processed locally only and never written back to
+        requested without both (--state published alone may run anonymously: those advisories
+        are public). Results are processed locally only and never written back to
         GitHub. With --check, each advisory is fact-checked against the repository (the
         GitHub one unless --repo says otherwise) and the reply Markdown is printed for a
         human to paste.

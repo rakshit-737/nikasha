@@ -480,6 +480,32 @@ INSUFFICIENT 34.
   empty on purpose: each entry (public repo, vulnerable and fixed tags, fix SHA, trigger)
   must be verified by a person. SPEC §9.5 asks for three per format.
 
+## Items 4-8 after v0.1.0 (2026-09-26)
+
+- **M6 data.** S3: all six SQLite CVEs from the JFrog post are REJECTED and blanked in
+  cvelistV5, so they are excluded and documented (`excluded:` in the manifest, SPEC §17.2).
+  S4: excluded, the dataset repository has no license. S1/S2 cannot grow from public data
+  (the slop list has 49 IDs; every HackerOne-linked record in curl's `vuln.json` is in S2).
+  Calibration kept the defaults: 49 fabricated reports is below the 50-per-class rule.
+  *Open for the maintainer:* may S3 use a CVE record's pre-rejection text from cvelistV5's
+  git history?
+- **Repro subset.** Two S6 cases carry a PoC (`examples/vulnlab/pocs/hdr_overflow.txt`):
+  genuine at v1.2.0 (expected REPRODUCED) and already-fixed at v1.3.0 (expected no crash).
+  `tests/sandbox/test_bench_repro_subset.py` checks both in the Sandbox CI job.
+- **LSan/MSan/TSan.** The capture catalogue lists nine already-fixed public bugs (three per
+  format: zstd, lz4, jq, zlib, xz and others), each fix SHA checked upstream. Capture runs
+  only in CI (`sanitizer-fixtures.yml`, manual dispatch); parsers stay unregistered until
+  real fixtures are committed (ADR 0009).
+- **SQLite amalgamation (§11.5).** `code/amalgamation.py` maps `sqlite3.c:<line>` back to
+  the source file with `--online`; checked against the real 3.45.1 amalgamation (255,680
+  lines; 98.5% of mapped lines identical to the `version-3.45.1` tag). In C05 a mismatch
+  after mapping is only NEUTRAL (P4).
+- **M7 network paths.** Run live against cvelistV5 and the GitHub API; five bugs fixed
+  (e.g. empty CVE ranges such as CVE-2023-38545's `8.4.0 <= v < 8.4.0` are skipped, and
+  `changes[]` ranges such as Log4j's are split rather than collapsed). Live network tests
+  in `tests/integration/test_m7_network.py` run in Nightly. Not verified: the HackerOne API
+  (needs credentials), anonymous GitHub at scale, cloud LLM providers (no keys).
+
 ## Carry-overs to later milestones
 
 - **M3:**
