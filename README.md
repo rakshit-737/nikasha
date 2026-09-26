@@ -30,7 +30,7 @@ is no "AI detection" anywhere in it.
 
 | Verdict | Meaning | Exit code |
 |---|---|---|
-| **REPRODUCED** | The proof of concept ran in the sandbox and produced the claimed crash signature. `nikasha check` has no `--repro` option yet, so a `check` run cannot reach this verdict today; the sandbox itself (`nikasha repro`, M5) is built but not yet verified in CI. | 0 |
+| **REPRODUCED** | The proof of concept ran in the sandbox and produced the claimed crash signature. `nikasha check` has no `--repro` option yet, so a `check` run cannot reach this verdict today; the sandbox itself (`nikasha repro`, M5) is verified in CI. | 0 |
 | **GROUNDED** | A high grounding score and no substantial refutation anywhere. | 0 |
 | **MIXED** | Evidence on both sides, or findings that fit a *different* version than the report names (a wrong version header is a question, never an accusation). | 10 |
 | **UNGROUNDED** | The hardest verdict to reach: a low score *and* a core file, symbol, quoted line, snippet or option that never existed in the repository's history, corroborated by a second independent group of evidence (or strong refutations from three independent groups). | 20 |
@@ -196,7 +196,7 @@ pass it.
 |---|---|
 | M0 Bootstrap · M1 Models, intake, extraction · M2 Resolution and code intelligence · M3 Checks, fusion, CLI outputs · M4 HTML report | **done** (measurements in [`PROGRESS.md`](PROGRESS.md) and [ADR 0004](docs/adr/0004-timeline.md)) |
 | M3.5 Early real-world gate (curl corpus vs. slopcheck) | **not started**: needs network access and a check of HackerOne's terms for the disclosed-report endpoint before any report is fetched |
-| M5 Sandbox reproduction | **built, not done**: done when the sandbox workflow is green in CI with the real recipe image |
+| M5 Sandbox reproduction | **sandbox CI green with the real recipe image**; curl/sqlite/libxml2 recipes unverified end-to-end |
 | M6 NikashaBench and calibration | **machinery done**; the real-report splits wait on M3.5 corpus access |
 | M7 Integrations | **done** (a GitHub Action, `nikasha lint`, the MCP server, the web UI, the optional model layer; network paths tested with stubs only) |
 | M8 Launch polish and v0.1.0 | **tooling done, not published**: a release is a public, irreversible action that waits for the maintainer's approval |
