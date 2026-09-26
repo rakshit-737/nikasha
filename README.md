@@ -7,27 +7,81 @@ SPDX-License-Identifier: CC-BY-4.0
 
 **Proof, not prose.**
 
-Nikasha (निकष, *touchstone*: the stone used to assay gold) shows which claims in a
-vulnerability report the source code supports, at the exact version the report names, and
-can reproduce the crash in a hardened sandbox. It runs offline against a git repository, is
-deterministic (the same report and the same commit give byte-identical JSON, with no LLM
-involved), and every finding carries the evidence behind it (the repository, commit, path
-and lines where there is code, and the git command with output hashes where one was run).
-Claims the code does not support become neutral questions for the reporter, never
-accusations. It judges claims, never people: it is not a "slop" or AI detector
+Nikasha (निकष, *touchstone*: the stone used to assay gold) checks which claims in a
+vulnerability report are supported by source code at the exact version the report names,
+and can reproduce the crash in a hardened sandbox. It runs offline against a git
+repository, is deterministic (the same report and commit produce byte-identical JSON,
+with no LLM involved), and emits line-by-line evidence (repository, commit, file, lines,
+and hashed command outputs where commands ran).
+
+It judges claims, never people: unsupported claims become neutral follow-up questions for
+reporters. Nikasha is a grounding/reproduction tool, not an AI/slop detector
 ([ADR 0012](docs/adr/0012-reposition-after-m35.md)).
 
+> [!IMPORTANT]
+> **Status: first release (`0.1.0`).** Screenshots on this page are real runs against the
+> bundled **vulnlab demo** (a fictional C library with a deliberately introduced heap
+> overflow). The only numbers on real reports are the transparent M3.5 gate below: one
+> corpus (curl), 175 reports, no calibration yet.
+
+## Try it in 60 seconds
+
+```sh
+git clone https://github.com/rakshit-737/nikasha && cd nikasha
+uv tool install .          # or: pipx install .   (or: uv sync && uv run nikasha ...)
+nikasha doctor             # Python, git, cache directory, container engines; no network
+python scripts/build_vulnlab.py ~/vulnlab.git
+nikasha check examples/reports/fabricated_hdr_overflow.md --repo ~/vulnlab.git
+```
+
+Expected first result: `UNGROUNDED` (exit 20) on the intentionally fabricated fixture.
+
+<details>
+<summary>More quickstart commands (explain, markdown/html/json outputs)</summary>
+
+```sh
+nikasha check examples/reports/genuine_hdr_overflow.md --repo ~/vulnlab.git --explain
+nikasha check examples/reports/mixed_wrong_version.md  --repo ~/vulnlab.git --format markdown -o reply.md
+nikasha check examples/reports/genuine_hdr_overflow.md --repo ~/vulnlab.git --format html -o report.html
+nikasha check examples/reports/genuine_hdr_overflow.md --repo ~/vulnlab.git --format json -o result.json
+nikasha explain result.json
+```
+
+`--format` accepts `terminal` (default), `json`, `markdown`, or `html`.
+`--explain` appends the full log-odds ledger. `--quiet` prints only the verdict line.
+`--ascii` avoids non-ASCII symbols on legacy consoles. `https://` repositories are cloned
+only with `--online`; local paths never touch the network.
+Markdown output stays under GitHub's comment limit and escapes report/code-derived text.
+HTML output is a self-contained report that makes no network request, enforced by CSP with
+its single inline script pinned by hash.
+</details>
+
+Optional extras add integrations: `web` (local UI), `mcp` (MCP server), `llm`
+(Anthropic/OpenAI clients for `--llm`), and `bench` (NikashaBench plots):
+`uv tool install '.[web,mcp]'`.
+
+`scripts/build_vulnlab.py` replays a fixed commit plan into a new bare repository with
+`git fast-import`, so tags `v1.0.0` to `v1.3.0` resolve to the same commit SHAs on every
+machine ([`examples/vulnlab/README.md`](examples/vulnlab/README.md)).
+
+<figure>
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/terminal-check-ungrounded-dark.svg">
   <img alt="nikasha check on the fabricated_hdr_overflow demo fixture: verdict UNGROUNDED, grounding 0/100, the evidence table, and six questions for the reporter" src="docs/assets/terminal-check-ungrounded-light.svg" width="100%">
 </picture>
+</figure>
 
-> **Status: first release (`0.1.0`).** The screenshots on this page are real runs against
-> the bundled **vulnlab demo** (a fictional C library with a deliberately introduced heap
-> overflow). The only numbers on real reports are the M3.5 gate below: one corpus (curl),
-> 175 reports, no calibration yet.
+## At a glance
 
-## The five verdicts
+| What you get | Why it matters |
+|---|---|
+| Deterministic verdicts and evidence | Repeatable checks suitable for CI and review workflows |
+| Version-accurate grounding | Claims are tested at the report's named tag/commit, not just HEAD |
+| Conservative refutation gate | "Fabricated" is intentionally hard to assert; uncertainty stays explicit |
+| Sandbox-first reproduction model | PoCs are treated as hostile and never run on host by default |
+| Reporter-friendly outputs | Neutral questions and explainable ledgers instead of accusations |
+
+## Verdicts and exit codes
 
 | Verdict | Meaning | Exit code |
 |---|---|---|
@@ -39,51 +93,8 @@ accusations. It judges claims, never people: it is not a "slop" or AI detector
 
 Errors exit 1. `--fail-on VERDICT` moves the non-zero line for CI.
 
-## Quickstart
-
-You need Python 3.11 or newer and git. Install from a checkout with
-[uv](https://docs.astral.sh/uv/) or pipx:
-
-```sh
-git clone https://github.com/rakshit-737/nikasha && cd nikasha
-uv tool install .          # or: pipx install .   (or: uv sync && uv run nikasha ...)
-nikasha doctor             # Python, git, cache directory, container engines; no network
-```
-
-Optional extras add the integrations: `web` (local web UI), `mcp` (MCP server), `llm`
-(Anthropic and OpenAI clients for `--llm`) and `bench` (NikashaBench plots), for example
-`uv tool install '.[web,mcp]'`.
-
-Build the demo repository. `scripts/build_vulnlab.py` replays a fixed commit plan into a
-new bare repository with `git fast-import`, so the five tags (`v1.0.0` to `v1.3.0`) land on
-the same commit SHAs on every machine ([`examples/vulnlab/README.md`](examples/vulnlab/README.md)):
-
-```sh
-python scripts/build_vulnlab.py ~/vulnlab.git
-```
-
-Then check the fixture reports against it, entirely offline:
-
-```sh
-nikasha check examples/reports/fabricated_hdr_overflow.md --repo ~/vulnlab.git            # UNGROUNDED, exit 20
-nikasha check examples/reports/genuine_hdr_overflow.md    --repo ~/vulnlab.git --explain  # GROUNDED, with the ledger
-nikasha check examples/reports/mixed_wrong_version.md     --repo ~/vulnlab.git --format markdown -o reply.md
-nikasha check examples/reports/genuine_hdr_overflow.md    --repo ~/vulnlab.git --format html -o report.html
-nikasha check examples/reports/genuine_hdr_overflow.md    --repo ~/vulnlab.git --format json -o result.json
-nikasha explain result.json
-```
-
-`--format` takes `terminal` (default), `json`, `markdown` or `html`. The Markdown reply
-stays under GitHub's comment limit and escapes everything that came from the report or the
-code. The HTML report is one self-contained file that makes no network request, enforced by
-a Content-Security-Policy that pins its single inline script by hash, with light, dark and
-print themes and a JSON download. `--explain` appends the log-odds ledger behind the score;
-`nikasha explain` prints the ledger from a saved JSON result. `--quiet` prints only the
-verdict line and `--ascii` avoids non-ASCII symbols on legacy consoles. A `https://`
-repository is cloned only with `--online`; a local path never touches the network.
-
 <details>
-<summary>The other two demo fixtures: GROUNDED and MIXED</summary>
+<summary>More screenshots from the demo fixtures</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/terminal-check-grounded-dark.svg">
@@ -94,122 +105,108 @@ repository is cloned only with `--online`; a local path never touches the networ
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/terminal-check-mixed-dark.svg">
   <img alt="nikasha check on the mixed_wrong_version demo fixture: verdict MIXED, grounding 100/100, three questions for the reporter" src="docs/assets/terminal-check-mixed-light.svg" width="100%">
 </picture>
-</details>
-
-<details>
-<summary><code>nikasha extract</code>: every claim the report makes, before any check runs</summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/terminal-extract-dark.svg">
   <img alt="nikasha extract on the fabricated_hdr_overflow demo fixture: the report with each claim highlighted by kind, then the claim list with role and scope" src="docs/assets/terminal-extract-light.svg" width="100%">
 </picture>
-</details>
-
-Other commands: `nikasha extract` (the claims, with `--json`), `nikasha index`,
-`nikasha timeline SYMBOL` (in which releases a symbol is defined, with "did you mean"
-suggestions), `nikasha trace` (a stack trace against the code), `nikasha lint` (check a
-draft report before submitting it, no verdict), `nikasha cve` (a CVE JSON 5.x record),
-`nikasha repro` and `nikasha recipes` (sandboxed reproduction), `nikasha bench`,
-`nikasha mcp`, `nikasha serve` (local web UI), and the read-only fetchers `nikasha h1` and
-`nikasha gh-advisories`. `nikasha --help` lists them all.
-
-## What it checks
-
-The pipeline is ingest → extract → resolve → code intelligence → checks → fusion → render
-([ADR 0001](docs/adr/0001-architecture.md)). Intake reads Markdown, text and HTML with an
-exact map back to the source; extraction produces 12 claim kinds; resolution pins the
-report to a tag or commit and never guesses silently; tree-sitter parses C, C++, Python,
-JavaScript, TypeScript/TSX, Go, Rust, Java, PHP and Ruby; and nine trace formats are parsed
-(ASan, UBSan, valgrind, gdb, Python, Java, Go, Rust, Node), each tested against real
-captured output. The 19 deterministic checks, C01 to C18 and C21, are catalogued with their
-strengths in [`docs/checks.md`](docs/checks.md), generated from the code:
-
-| Group | Checks | The question each answers about the code at the resolved commit |
-|---|---|---|
-| version | C01, C16 | Does the named version resolve to a tag or commit? Does the claimed affected range fit the core symbol's timeline across releases? |
-| locus | C02, C03, C14 | Do the cited file, symbol and option exist here, and if not, did they ever exist in the history? |
-| lines | C04, C05 | Is the line number inside the file, and inside the function it is said to be in? |
-| code quotes | C06, C07 | Does the quoted line match the file? Where does the quoted snippet come from (winnowing fingerprints)? |
-| trace | C08, C09, C10 | Do the frames fit the code, can each caller reach each callee in the call graph, and which release fits the trace best? |
-| trace meta | C11 | Is the sanitizer output consistent with itself: PIDs, frame numbering, addresses, region arithmetic, SUMMARY line, access size? |
-| patch | C12 | Does the proposed diff apply at this commit, or was it already applied? |
-| refs, meta, behavior | C15, C17, C18 | Do cited commits, links, CVE and CWE records check out? Does the CVSS vector recompute to the stated score? Does the named function really call the API? |
-| info | C13, C21 | Which later commits touch the reported locus? What is the report missing (version, PoC, trace, location)? |
-
-Two more checks sit outside that count. **C19** (reproduction) scores a sandboxed PoC run
-and produces nothing without one; `nikasha check` does not start the sandbox yet. **C20** (`LLM_REVIEW`) is on disk but inert unless you name a model
-with `--llm` or in `nikasha.toml`: it may only tilt a score, because its strength is capped
-at |0.5| in `lr_defaults.yaml`, below every verdict threshold, and a model that cannot be
-reached yields an error at strength 0, never a refutation.
-
-## How the verdict is computed
-
-Every check emits evidence with a natural-log likelihood ratio taken from
-[`lr_defaults.yaml`](src/nikasha/checks/lr_defaults.yaml) (no float literal is ever used as a strength),
-and within each evidence group the findings are ranked by strength and weighted 1, ½, ¼, …,
-so ten correlated findings cannot outweigh a few independent ones; the damped sum is the
-log-odds behind the 0–100 grounding score. An ordered verdict ladder (SPEC §14.3,
-[`fuse/verdict.py`](src/nikasha/fuse/verdict.py)) then decides, first match wins: a
-reproduced crash; too little to check; UNGROUNDED only for a low score plus a
-never-existed refutation corroborated across groups; a version mismatch capped at MIXED;
-GROUNDED for a high score with no substantial refutation; otherwise MIXED or INSUFFICIENT.
-Before any of that, the refutation gate of [ADR 0003](docs/adr/0003-differentiation-vs-slopcheck.md)
-lets only claims the reporter attributed to the project, and did not negate, be refuted at
-all: a finding about the reporter's own PoC code or a third-party API is still shown, with
-the strength it would have had, but counts for nothing.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/terminal-explain-dark.svg">
   <img alt="nikasha check --explain on the fabricated_hdr_overflow demo fixture: the verdict, then the ledger with every strength, damping weight, contribution and running total, ending in UNGROUNDED with high confidence" src="docs/assets/terminal-explain-light.svg" width="100%">
 </picture>
+</details>
+
+## What it checks
+
+Pipeline: ingest → extract → resolve → code intelligence → checks → fusion → render
+([ADR 0001](docs/adr/0001-architecture.md)).
+
+- Intake reads Markdown, text, and HTML with exact source maps.
+- Extraction emits 12 claim kinds.
+- Resolution pins to a tag/commit and never silently guesses.
+- Tree-sitter parses C, C++, Python, JavaScript, TypeScript/TSX, Go, Rust, Java, PHP,
+  and Ruby.
+- Nine trace formats are parsed (ASan, UBSan, valgrind, gdb, Python, Java, Go, Rust,
+  Node), each tested on real captured output.
+
+The 19 deterministic checks (C01–C18 and C21) are catalogued in
+[`docs/checks.md`](docs/checks.md):
+
+| Group | Checks | Core question |
+|---|---|---|
+| version | C01, C16 | Does the named version resolve? Does the affected range fit symbol timelines across releases? |
+| locus | C02, C03, C14 | Do cited file/symbol/option exist now, and did they ever exist historically? |
+| lines | C04, C05 | Is the line in file, and in the claimed function? |
+| code quotes | C06, C07 | Does a quoted line/snippet map to real code (winnowing fingerprints)? |
+| trace | C08, C09, C10 | Do frames fit code, can callers reach callees, which release fits best? |
+| trace meta | C11 | Is sanitizer output internally consistent (frames, PIDs, addresses, arithmetic, SUMMARY)? |
+| patch | C12 | Does the diff apply here, or is it already applied? |
+| refs, meta, behavior | C15, C17, C18 | Do cited commits/links/CVE/CWE/CVSS and call claims check out? |
+| info | C13, C21 | What later commits touch locus, and what report prerequisites are missing? |
+
+Two checks are intentionally outside that deterministic count:
+
+- **C19 (reproduction):** scores sandboxed PoC runs; `nikasha check` does not start the
+  sandbox yet.
+- **C20 (`LLM_REVIEW`):** inert unless `--llm` or `nikasha.toml` names a model. Its
+  strength is capped at |0.5| in `lr_defaults.yaml` (below verdict thresholds), and
+  unreachable models fail at strength 0 (no refutation).
+
+## Why the verdict is trustworthy
+
+Every finding carries a natural-log likelihood ratio from
+[`lr_defaults.yaml`](src/nikasha/checks/lr_defaults.yaml) (no float literal strengths),
+then each evidence group is damped by rank (1, 1/2, 1/4, …) to avoid correlated evidence
+swamping independent findings.
+
+Verdicts are chosen by an ordered ladder (SPEC §14.3,
+[`fuse/verdict.py`](src/nikasha/fuse/verdict.py)): reproduced crash; insufficient evidence;
+strict UNGROUNDED gate; version-mismatch cap at MIXED; high-score GROUNDED with no
+substantial refutation; otherwise MIXED/INSUFFICIENT.
+
+Before any refutation counts, [ADR 0003](docs/adr/0003-differentiation-vs-slopcheck.md)
+requires project-attributed, non-negated claims. Findings about reporter PoC code or
+third-party APIs may be displayed, but contribute zero refutation strength.
 
 ## Principles
 
 1. **Evidence, not AI detection.** Wording targets claims, never people.
-2. **Deterministic core.** Byte-identical JSON for identical inputs; the LLM is optional,
-   off by default and never decisive.
-3. **Confidential by default.** Offline unless `--online`, no telemetry, cloud models only
-   with `llm.allow_cloud = true` in a config file.
-4. **Conservative about "fabricated".** The target is at most 1% false UNGROUNDED on genuine
-   reports; when in doubt, MIXED or INSUFFICIENT, and ask.
-5. **PoCs are hostile.** They run only in the sandbox, never on the host.
-6. **Every line is explainable** down to a repository, commit, path, lines and command.
-7. **Input is an attack.** Report text, repositories and traces are treated as hostile
-   (XSS, ReDoS, path traversal, git config tricks, prompt injection).
-8. **Useful to reporters too** (`nikasha lint`).
+2. **Deterministic core.** Byte-identical JSON for identical inputs; optional LLM,
+   off-by-default and never decisive.
+3. **Confidential by default.** Offline unless `--online`; no telemetry; cloud models only
+   with `llm.allow_cloud = true`.
+4. **Conservative about "fabricated".** Target ≤1% false UNGROUNDED on genuine reports;
+   default to MIXED/INSUFFICIENT when uncertain.
+5. **PoCs are hostile.** Run only in sandbox, never on host.
+6. **Every line is explainable.** Repository, commit, path, lines, and command evidence.
+7. **Input is an attack.** Report text/repos/traces are treated as hostile.
+8. **Useful to reporters too.** `nikasha lint` helps before submission.
 
 When principles conflict, safety wins: P4 first, then P5, then P3.
 
-## Where this stands
-
-A static "does this function exist?" check alone is not enough.
-[slopcheck](https://github.com/GaganGanesh98/SlopCheck) measured six static existence checks
-on 557 publicly disclosed curl reports, all scored against HEAD, and published a careful
-negative result: its checks flagged confirmed, genuine reports about as often as slop.
-Nikasha targeted those failure modes (version pinning, claim scoping, negation, line binding,
-structural trace and patch checks) and then ran the same kind of gate (M3.5).
-
-### Real-world results (M3.5, 2026-09-26)
+## Real-world gate (M3.5, 2026-09-26): transparent outcomes and caveats
 
 175 labelled curl reports from slopcheck's index (126 confirmed genuine, 49 from curl's
-AI-slop list), each checked at the version it names. Full numbers and reading in
-[`PROGRESS.md`](PROGRESS.md) and [ADR 0012](docs/adr/0012-reposition-after-m35.md).
+AI-slop list), each checked at the version named in the report. Full detail in
+[`PROGRESS.md`](PROGRESS.md) and
+[ADR 0012](docs/adr/0012-reposition-after-m35.md).
 
-- **No false UNGROUNDED:** 0 of 126 genuine reports. With n=126 the Wilson 95% upper bound
-  is 2.96%, so this does *not* yet show the ≤1% target.
-- **Refutations do not separate slop from genuine reports.** At least one REFUTES finding
-  on 20.6% of genuine and 20.4% of slop reports (J about 0, no better than slopcheck).
-  Nikasha never said UNGROUNDED on this corpus, and MIXED was as common on genuine reports
-  as on slop.
-- **Support carries the only signal.** GROUNDED on 25% of genuine reports against 10% of
-  slop. The best threshold on the grounding score reaches J 0.249 against 0.103 for a
-  seeded random score, but that threshold was chosen after the fact, so it is optimistic.
-- Still open: hand-checked precision of 40 random refutations.
+- **No false UNGROUNDED:** 0/126 genuine reports. Wilson 95% upper bound is 2.96%, so this
+  does **not** yet prove the ≤1% target.
+- **Refutations did not separate slop from genuine reports.** At least one REFUTES finding
+  on 20.6% of genuine and 20.4% of slop reports (J≈0). Nikasha never said UNGROUNDED on
+  this corpus; MIXED appeared similarly in both groups.
+- **Support carried the signal.** GROUNDED on 25% of genuine vs 10% of slop. Best observed
+  grounding-score threshold reaches J 0.249 vs 0.103 for seeded random, but was chosen
+  post hoc (optimistic).
+- **Still open:** hand-checked precision of 40 random refutations.
 
-So Nikasha is positioned as a **grounding and reproduction** tool: it shows what the code
-supports and can reproduce crashes. Refutations stay gated and conservative and are shown
-as questions, not as a fabrication detector. No threshold or strength was changed after
-the gate.
+So Nikasha is positioned as a **grounding and reproduction** tool. Refutations remain gated
+and conservative, rendered as questions, not as a fabrication detector. No thresholds or
+strengths were changed after the gate.
+
+## Roadmap status
 
 | Milestone | Status |
 |---|---|
@@ -221,18 +218,21 @@ the gate.
 | M8 Launch polish and v0.1.0 | **done**: v0.1.0 released 2026-09-26 on PyPI, GHCR and GitHub Releases |
 | M9 Stretch | not started |
 
-## More
+## Commands and docs
 
-- [`CONTRIBUTING.md`](CONTRIBUTING.md): setup, standards, and the guides for adding a
-  check, a trace format, a reproduction recipe or a language.
-- [`SECURITY.md`](SECURITY.md): private reporting and what is in scope. [`SUPPORT.md`](SUPPORT.md) for help.
-- [`docs/checks.md`](docs/checks.md): the checks catalogue. [`docs/action.md`](docs/action.md): the GitHub Action.
-- [`docs/adr/`](docs/adr/): the decisions, including the
-  [rename](docs/adr/0000-rename.md) ([`SPEC.md`](SPEC.md) still says "Pramaan"),
+- Primary CLI: `nikasha check`; support commands: `extract`, `index`, `timeline`, `trace`,
+  `lint`, `cve`, `repro`, `recipes`, `bench`, `mcp`, `serve`, `h1`, `gh-advisories`.
+- [`examples/vulnlab/README.md`](examples/vulnlab/README.md): deterministic demo repo details.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md): setup, standards, and extension guides.
+- [`SECURITY.md`](SECURITY.md): private reporting scope. [`SUPPORT.md`](SUPPORT.md): help.
+- [`docs/checks.md`](docs/checks.md): checks catalogue. [`docs/action.md`](docs/action.md):
+  GitHub Action.
+- [`docs/adr/`](docs/adr/): decisions including
+  [rename](docs/adr/0000-rename.md) (`SPEC.md` still says "Pramaan"),
   [dependencies](docs/adr/0002-dependencies.md),
-  [repository access](docs/adr/0006-repository-access.md) and the
+  [repository access](docs/adr/0006-repository-access.md), and
   [fusion decisions](docs/adr/0007-fusion-decisions.md).
-- [`PROGRESS.md`](PROGRESS.md) and [`CHANGELOG.md`](CHANGELOG.md): what is done, with numbers.
+- [`PROGRESS.md`](PROGRESS.md), [`CHANGELOG.md`](CHANGELOG.md), [`SPEC.md`](SPEC.md).
 
 ## License
 
